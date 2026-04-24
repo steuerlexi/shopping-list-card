@@ -1,24 +1,34 @@
 # Shopping List Card
 
-A Home Assistant Lovelace custom card for managing multiple shopping lists natively inside Home Assistant — no external app needed.
+A Home Assistant Lovelace custom card for managing shopping lists natively inside Home Assistant — no external app needed.
 
-Inspired by KitchenOwl and Bring!, but built entirely on HA's native `todo` platform.
+Built entirely on HA's native `todo` platform.
 
 ---
 
 ## Features
 
-- Multiple lists on one card (e.g. Aldi, REWE, Drogerie)
-- Add, check off, and delete items directly from the card
-- Collapsible "done" section per list
-- "Clear all done" button
-- Live counters for open items
-- Fully themed with Home Assistant colors
-- Mobile-optimized
+- **Tile grid view** — Items displayed as responsive tiles with auto-mapped MDI icons
+- **Auto-categorization** — Items sorted into categories (Obst & Gemüse, Milch & Eier, Fleisch & Fisch, Trockenwaren, Getränke, etc.)
+- **30+ intelligent icon mappings** — "Milch" gets a cheese icon, "Brot" a bread slice, "Eier" an egg, etc.
+- **Search bar** — Live filter across all items
+- **Green active tiles** with white icons; gray tiles for completed items
+- **Colorful slim category headers** with dot indicators
+- **Inline add-tile** — Tap to add new items with category selection
+- **Long-press edit** — Hold a tile to edit description (e.g. "20 Stück")
+- **Collapsible done section**
+- **Fully themed** with Home Assistant CSS variables
+- **Mobile-optimized**
 
 ---
 
 ## Installation
+
+### HACS
+
+1. Add this repository as a custom repository in HACS
+2. Search for "Shopping List Card" and install
+3. Add the resource to your dashboard
 
 ### Manual
 
@@ -31,21 +41,16 @@ Inspired by KitchenOwl and Bring!, but built entirely on HA's native `todo` plat
 
 ---
 
-## Prerequisites: Create Todo Lists
+## Prerequisites
 
-Go to **Settings → Devices & Services → Helpers → Create Helper → To-do List**.
+Create a todo list helper:
 
-Create one list per shop/category, e.g.:
-- `todo.aldi`
-- `todo.rewe`
-- `todo.drogerie`
+**Settings → Devices & Services → Helpers → Create Helper → To-do List**
 
-You can also add them via YAML:
+Or via YAML:
 ```yaml
 todo:
-  - Aldi
-  - REWE
-  - Drogerie
+  - Einkaufen
 ```
 
 ---
@@ -54,72 +59,50 @@ todo:
 
 ```yaml
 type: custom:shopping-list-card
+entity: todo.einkaufen
 title: "Einkaufen"
-lists:
-  - entity: todo.aldi
-    name: "Aldi"
-    icon: "mdi:cart"
-    color: "#e30613"
-  - entity: todo.rewe
-    name: "REWE"
-    icon: "mdi:store"
-    color: "#cc0000"
-  - entity: todo.drogerie
-    name: "Drogerie"
-    icon: "mdi:spray-bottle"
-    color: "#005eb8"
+icon_map:
+  "Spezialartikel": "mdi:star"
 ```
 
 ### Options
 
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
+| `entity` | string | **required** | Todo entity ID |
 | `title` | string | `"Einkaufen"` | Card title |
-| `lists` | array | **required** | Array of list configs |
-| `lists[].entity` | string | **required** | Todo entity ID |
-| `lists[].name` | string | entity ID | Display name |
-| `lists[].icon` | string | `mdi:cart` | MDI icon |
-| `lists[].color` | string | primary color | Hex color for accent |
-| `show_delete_always` | boolean | `false` | Always show delete buttons (good for touch) |
+| `icon_map` | object | `{}` | Override icons for specific items |
+| `show_delete_always` | boolean | `false` | Always show delete button on tiles |
+
+### Icon Map Example
+
+```yaml
+icon_map:
+  "Milch": "mdi:cup-water"
+  "Brot": "mdi:bread-slice"
+  "Spezialartikel": "mdi:star"
+```
 
 ---
 
 ## Dashboard YAML Example
 
 ```yaml
-title: Einkaufen
-views:
-  - title: Einkaufen
-    cards:
-      - type: custom:shopping-list-card
-        title: "Einkaufen"
-        show_delete_always: true
-        lists:
-          - entity: todo.aldi
-            name: "Aldi"
-            icon: "mdi:cart"
-            color: "#e30613"
-          - entity: todo.rewe
-            name: "REWE"
-            icon: "mdi:store"
-            color: "#cc0000"
-          - entity: todo.drogerie
-            name: "Drogerie"
-            icon: "mdi:spray-bottle"
-            color: "#005eb8"
-          - entity: todo.baumarkt
-            name: "Baumarkt"
-            icon: "mdi:hammer-screwdriver"
-            color: "#f57c00"
+type: custom:shopping-list-card
+entity: todo.einkaufen
+title: "Einkaufen"
+icon_map:
+  "Spezialartikel": "mdi:star"
 ```
 
 ---
 
 ## Tips
 
-- The card uses HA's native `todo` services (`todo.add_item`, `todo.update_item`, `todo.remove_item`), so everything syncs automatically across dashboards and the HA mobile app.
-- You can add items via voice using Assist: "Füge Milch zur Aldi-Liste hinzu"
-- Items checked off in the card are immediately synced to the native todo entity.
+- Uses HA's native `todo` services (`todo.add_item`, `todo.update_item`, `todo.remove_item`)
+- Syncs automatically across dashboards and the HA mobile app
+- Add items via voice using Assist: "Füge Milch zur Einkaufsliste hinzu"
+- Completed items are immediately synced to the native todo entity
 
 ---
 
