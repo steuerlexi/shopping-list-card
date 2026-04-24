@@ -2,8 +2,7 @@
   "name": "Shopping List Card",
   "render_readme": true,
   "filename": "shopping-list-card.js",
-  "content_in_root": false,
+  "content_in_root": true,
   "country": ["DE"],
-  "homeassistant": "2024.1.0",
-  "iot_class": "Local Polling"
+  "homeassistant": "2024.1.0"
 }
