@@ -426,10 +426,10 @@ class ShoppingListCard extends HTMLElement {
       const order = ["obst_gemuese","brot_backwaren","milch_eier","fleisch_fisch","trockenwaren","tiefkuehlprodukte","getraenke","haushalt_hygiene","sonstiges"].filter(k => groups[k]?.length > 0);
       for (const k of Object.keys(groups)) if (!order.includes(k)) order.push(k);
 
-      for (const cat of order) {
-        const catItems = groups[cat];
-        const todo = catItems.filter(i => i.status === "needs_action");
-        const done = catItems.filter(i => i.status === "completed");
+      // --- Active categories (needs_action only) ---
+      const activeOrder = order.filter(k => groups[k].some(i => i.status === "needs_action"));
+      for (const cat of activeOrder) {
+        const catItems = groups[cat].filter(i => i.status === "needs_action");
         const catWrap = document.createElement("div");
         catWrap.style.marginBottom = "16px";
 
@@ -446,7 +446,7 @@ class ShoppingListCard extends HTMLElement {
         header.appendChild(catName);
         const count = document.createElement("div");
         count.style.cssText = "font-size:12px;color:#999;font-weight:400;";
-        count.textContent = todo.length;
+        count.textContent = catItems.length;
         header.appendChild(count);
         const chevron = document.createElement("ha-icon");
         chevron.setAttribute("icon", "mdi:chevron-down");
@@ -461,11 +461,10 @@ class ShoppingListCard extends HTMLElement {
         header.addEventListener("click", () => {
           collapsed = !collapsed;
           grid.style.display = collapsed ? "none" : "grid";
-          clearDone.style.display = collapsed ? "none" : (done.length > 0 ? "block" : "none");
           chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
         });
 
-        for (const item of [...todo, ...done]) grid.appendChild(this._renderTile(item, list.entity, color));
+        for (const item of catItems) grid.appendChild(this._renderTile(item, list.entity, color));
 
         // Add tile
         const addTile = document.createElement("div");
@@ -524,14 +523,79 @@ class ShoppingListCard extends HTMLElement {
         });
         grid.appendChild(addTile);
         catWrap.appendChild(grid);
-
-        // Clear done
-        const clearDone = document.createElement("div");
-        clearDone.textContent = "✓ erledigte entfernen (" + done.length + ")";
-        clearDone.style.cssText = "font-size:11px;color:#aaa;padding:6px 4px;cursor:pointer;text-align:center;border-top:1px solid #f0f0f0;display:" + (done.length > 0 ? "block" : "none");
-        clearDone.addEventListener("click", () => this._clearDone(list.entity));
-        catWrap.appendChild(clearDone);
         card.appendChild(catWrap);
+      }
+
+      // --- Completed mirror section ---
+      const doneByCat = {};
+      let totalDone = 0;
+      for (const cat of order) {
+        const done = groups[cat].filter(i => i.status === "completed");
+        if (done.length) {
+          doneByCat[cat] = done;
+          totalDone += done.length;
+        }
+      }
+      if (totalDone > 0) {
+        const mirrorWrap = document.createElement("div");
+        mirrorWrap.style.cssText = "margin-top:24px;padding-top:16px;border-top:2px dashed #ccc;";
+
+        const mirrorTitle = document.createElement("div");
+        mirrorTitle.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:0 4px;";
+        const checkIcon = document.createElement("ha-icon");
+        checkIcon.setAttribute("icon", "mdi:check-circle");
+        checkIcon.style.cssText = "color:#aaa;width:20px;height:20px;";
+        mirrorTitle.appendChild(checkIcon);
+        const mt = document.createElement("div");
+        mt.style.cssText = "font-weight:600;font-size:14px;color:#999;flex:1;";
+        mt.textContent = "Erledigt (" + totalDone + ")";
+        mirrorTitle.appendChild(mt);
+        const clearAll = document.createElement("div");
+        clearAll.textContent = "alle entfernen";
+        clearAll.style.cssText = "font-size:11px;color:#aaa;cursor:pointer;";
+        clearAll.addEventListener("click", () => this._clearDone(list.entity));
+        mirrorTitle.appendChild(clearAll);
+        mirrorWrap.appendChild(mirrorTitle);
+
+        for (const cat of order) {
+          if (!doneByCat[cat]) continue;
+          const doneItems = doneByCat[cat];
+          const catWrap = document.createElement("div");
+          catWrap.style.marginBottom = "12px";
+
+          const header = document.createElement("div");
+          header.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;user-select:none;";
+          const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 16);
+          catIcon.style.filter = "grayscale(100%) opacity(0.6)";
+          header.appendChild(catIcon);
+          const catName = document.createElement("div");
+          catName.style.cssText = "font-weight:500;font-size:12px;flex:1;color:#bbb;";
+          catName.textContent = this._getCategoryName(cat);
+          header.appendChild(catName);
+          const count = document.createElement("div");
+          count.style.cssText = "font-size:11px;color:#ccc;font-weight:400;";
+          count.textContent = doneItems.length;
+          header.appendChild(count);
+          const chevron = document.createElement("ha-icon");
+          chevron.setAttribute("icon", "mdi:chevron-down");
+          chevron.style.cssText = "color:#ddd;width:16px;height:16px;";
+          header.appendChild(chevron);
+          catWrap.appendChild(header);
+
+          const grid = document.createElement("div");
+          grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:8px;padding:8px;transition:max-height 0.3s ease;";
+          let collapsed = !1;
+          header.addEventListener("click", () => {
+            collapsed = !collapsed;
+            grid.style.display = collapsed ? "none" : "grid";
+            chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
+          });
+
+          for (const item of doneItems) grid.appendChild(this._renderTile(item, list.entity, color));
+          catWrap.appendChild(grid);
+          mirrorWrap.appendChild(catWrap);
+        }
+        card.appendChild(mirrorWrap);
       }
     }
     this.appendChild(card);
