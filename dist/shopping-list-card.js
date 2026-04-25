@@ -1,1 +1,653 @@
-class e extends HTMLElement{constructor(){super(),this._itemsByList={},this._unsub=null,this._debounceTimer=null}setConfig(e){let t;if(e.entity)t=[{entity:e.entity,name:e.name||e.entity,icon:e.icon||"mdi:cart",color:e.color||"#43A047"}];else{if(!e.lists||!Array.isArray(e.lists))throw new Error('You need to define either "entity" or a "lists" array');t=e.lists}this.config={title:"Einkaufen",icon_map:{},...e,lists:t},this._hass&&this._fetchAndRender()}set hass(e){const t=this._hass;this._hass=e;if(!t)this._subscribeChanges();if(!t||this._shouldRender(t,e))this._fetchAndRender()}async _fetchAndRender(){this._debounceTimer&&clearTimeout(this._debounceTimer),this._debounceTimer=setTimeout(async()=>{this._debounceTimer=null,await this._updateItems(this._hass),this._render()},100)}async _updateItems(e){if(e&&this.config?.lists)for(const t of this.config.lists){const s=t.entity;try{const t=e.states[s];if(t?.attributes?.todo_items){this._itemsByList[s]=t.attributes.todo_items;continue}const i=await e.callWS({type:"call_service",domain:"todo",service:"get_items",service_data:{entity_id:s,status:["needs_action","completed"]},return_response:!0}),n=i?.result?.response||i?.response,o=n?.[s]?.items||[];this._itemsByList[s]=o}catch(e){console.warn("Shopping List Card: Failed to fetch items for",s,e),this._itemsByList[s]=[]}}}_shouldRender(e,t){if(!this.config?.lists)return!1;for(const s of this.config.lists){const i=s.entity,n=e.states[i],o=t.states[i];if(!n||!o)return!0;if(n.last_changed!==o.last_changed)return!0;if(n.last_updated!==o.last_updated)return!0;if(JSON.stringify(n.attributes)!==JSON.stringify(o.attributes))return!0}return!1}_getItemIcon(e){const t=e.toLowerCase(),s=this.config.icon_map||{};if(s[e])return s[e];const i=[{keys:["eier","ei"],icon:"mdi:egg-outline"},{keys:["apfel","äpfel"],icon:"mdi:food-apple"},{keys:["banane","bananen"],icon:"mdi:fruit-cherries"},{keys:["traube","trauben"],icon:"mdi:fruit-grapes"},{keys:["zitrone","limette","limette"],icon:"mdi:fruit-citrus"},{keys:["melone"],icon:"mdi:fruit-watermelon"},{keys:["ananas"],icon:"mdi:fruit-pineapple"},{keys:["kaffee","espresso","cappuccino"],icon:"mdi:coffee"},{keys:["tee"],icon:"mdi:tea"},{keys:["bier"],icon:"mdi:beer"},{keys:["wein","weißwein","rotwein"],icon:"mdi:glass-wine"},{keys:["wasser"],icon:"mdi:water"},{keys:["cola","limonade","sprite","fanta","apfelschorle"],icon:"mdi:bottle-soda-classic"},{keys:["saft","orangensaft"],icon:"mdi:cup-water"},{keys:["fisch","lachs","thunfisch","forelle","scholle","makrele"],icon:"mdi:fish"},{keys:["garnelen","krabben"],icon:"mdi:shrimp"},{keys:["pizza","tiefkühlpizza"],icon:"mdi:pizza"},{keys:["eis","eiskrem"],icon:"mdi:ice-cream"},{keys:["toilettenpapier"],icon:"mdi:paper-roll"},{keys:["waschmittel"],icon:"mdi:washing-machine"},{keys:["spülmittel","spüli"],icon:"mdi:dishwasher"},{keys:["zahnpasta","zahnbürste"],icon:"mdi:tooth"},{keys:["küchenrolle"],icon:"mdi:paper-roll"},{keys:["shampoo","duschgel"],icon:"mdi:shower-head"},{keys:["seife"],icon:"mdi:hand-wash"},{keys:["deodorant"],icon:"mdi:spray"},{keys:["rasierer"],icon:"mdi:razor-double-edge"},{keys:["croissant"],icon:"mdi:bread-slice"},{keys:["butter"],icon:"mdi:cheese"},{keys:["milch"],icon:"mdi:cow"},{keys:["joghurt"],icon:"mdi:cup-water"},{keys:["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne"],icon:"mdi:noodles"},{keys:["reis"],icon:"mdi:rice"},{keys:["mehl"],icon:"mdi:barley"},{keys:["zucker","salz","pfeffer"],icon:"mdi:shaker"},{keys:["öl","olivenöl"],icon:"mdi:oil"},{keys:["honig"],icon:"mdi:jar"},{keys:["marmelade","nutella","aufstrich"],icon:"mdi:jar"},{keys:["ketchup","mayo","mayonnaise","senf","soße"],icon:"mdi:bottle-tonic-outline"},{keys:["kaffee","kapseln","kakao"],icon:"mdi:coffee"},{keys:["wurst","salami","mettwurst"],icon:"mdi:food-hot-dog"},{keys:["schinken","speck"],icon:"mdi:sausage"}],n=[{keys:["apfel","banane","birne","kiwi","orange","mandarine","traube","kirsche","erdbeere","himbeere","heidelbeere","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht"],icon:"mdi:fruit-cherries"},{keys:["tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado"],icon:"mdi:carrot"},{keys:["brot","brötchen","toast","semmel","baguette","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel"],icon:"mdi:bread-slice"},{keys:["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar"],icon:"mdi:cheese"},{keys:["fleisch","steak","hähnchen","pute","ente","schinken","speck","wurst","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","soja","vegan","vegetarisch"],icon:"mdi:food-drumstick"},{keys:["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","öl","olivenöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti"],icon:"mdi:package-variant"},{keys:["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem"],icon:"mdi:snowflake"},{keys:["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino"],icon:"mdi:cup-water"},{keys:["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli"],icon:"mdi:spray-bottle"}];for(const e of[...i,...n])for(const s of e.keys)if(t.includes(s))return e.icon;return"mdi:basket"}_getItemCategory(e){const t=e.toLowerCase(),s=[{key:"obst_gemuese",keys:["apfel","banane","birne","kiwi","orange","mandarine","traube","kirsche","erdbeere","himbeere","heidelbeere","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado"]},{key:"brot_backwaren",keys:["brot","brötchen","toast","semmel","baguette","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel"]},{key:"milch_eier",keys:["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar"]},{key:"fleisch_fisch",keys:["fleisch","steak","hähnchen","pute","ente","schinken","speck","wurst","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","soja","vegan","vegetarisch"]},{key:"trockenwaren",keys:["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","öl","olivenöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti"]},{key:"tiefkuehlprodukte",keys:["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem"]},{key:"getraenke",keys:["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino"]},{key:"haushalt_hygiene",keys:["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli"]}];for(const e of s)for(const s of e.keys)if(t.includes(s))return e.key;return"sonstiges"}_getCategoryName(e){return{obst_gemuese:"Obst & Gemüse",brot_backwaren:"Brot & Backwaren",milch_eier:"Milchprodukte & Eier",fleisch_fisch:"Fleisch, Fisch & Alternativen",trockenwaren:"Trockenwaren & Vorräte",tiefkuehlprodukte:"Tiefkühlprodukte",getraenke:"Getränke",haushalt_hygiene:"Haushalt & Hygiene",sonstiges:"Sonstiges"}[e]||e}_getCategoryIcon(e){return{obst_gemuese:"mdi:carrot",brot_backwaren:"mdi:bread-slice",milch_eier:"mdi:cheese",fleisch_fisch:"mdi:food-drumstick",trockenwaren:"mdi:package-variant",tiefkuehlprodukte:"mdi:snowflake",getraenke:"mdi:cup-water",haushalt_hygiene:"mdi:spray-bottle",sonstiges:"mdi:basket"}[e]||"mdi:basket"}_getCategoryEmoji(e){return{obst_gemuese:"🥕",brot_backwaren:"🥖",milch_eier:"🧀",fleisch_fisch:"🍗",trockenwaren:"📦",tiefkuehlprodukte:"❄️",getraenke:"🥤",haushalt_hygiene:"🧴",sonstiges:"🛒"}[e]||"🛒"}_getCategoryColor(e){return{obst_gemuese:"#E67E22",brot_backwaren:"#D35400",milch_eier:"#F39C12",fleisch_fisch:"#E74C3C",trockenwaren:"#8E44AD",tiefkuehlprodukte:"#3498DB",getraenke:"#1ABC9C",haushalt_hygiene:"#9B59B6",sonstiges:"#7F8C8D"}[e]||"#7F8C8D"}_getAutocompleteItems(){return["Apfel","Banane","Birne","Kiwi","Orange","Mandarine","Trauben","Kirschen","Erdbeeren","Himbeeren","Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika","Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln","Knoblauch","Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Croissants","Milch","Joghurt","Sahne","Butter","Käse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen","Hackfleisch","Schnitzel","Wurst","Schinken","Fisch","Lachs","Garnelen","Tofu","Nudeln","Spaghetti","Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig","Ketchup","Mayonnaise","Senf","Honig","Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Wein","Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo","Duschgel","Seife","Zahnpasta","Waschmittel","Weichspüler","Spülmittel","Schinken","Wurst","Mehl","Zucker","Salz","Pfeffer","Essig","Schokolade","Kekse","Chips","Nüsse","Mandeln","Cola","Tee","Tiefkühlpizza","Eis","Pommes","TK-Gemüse","Küchenrolle","Waschmittel","Shampoo","Duschgel","Seife","Zahnpasta","Müllbeutel"]}_itemExists(e,t){const s=this._itemsByList[e]||[];return s.some(e=>e.summary.toLowerCase()===t.toLowerCase())}_showToast(e){const t=document.createElement("div");t.textContent=e,t.style.position="fixed",t.style.bottom="80px",t.style.left="50%",t.style.transform="translateX(-50%)",t.style.background="#333",t.style.color="#fff",t.style.padding="10px 18px",t.style.borderRadius="24px",t.style.fontSize="14px",t.style.zIndex="10000",t.style.opacity="0",t.style.transition="opacity 0.3s ease",document.body.appendChild(t),requestAnimationFrame(()=>{t.style.opacity="1"}),setTimeout(()=>{t.style.opacity="0",setTimeout(()=>t.remove(),300)},2000)}_addItem(e,t){const s=t.trim();if(!s||!this._hass)return;if(this._itemExists(e,s)){this._showToast("'"+s+"' ist bereits auf der Liste");return}this._hass.callService("todo","add_item",{entity_id:e,item:s})}_toggleItem(e,t){if(!this._hass)return;const s="completed"===t.status?"needs_action":"completed";this._hass.callService("todo","update_item",{entity_id:e,item:t.summary,status:s})}_removeItem(e,t){this._hass&&this._hass.callService("todo","remove_item",{entity_id:e,item:t.summary})}_clearDone(e){this._hass&&this._hass.callService("todo","remove_completed_items",{entity_id:e})}_updateDescription(e,t,s){this._hass&&this._hass.callService("todo","update_item",{entity_id:e,item:t.summary,description:s})}_subscribeChanges(){if(this._unsub||!this._hass||!this.isConnected)return;const e=this.config?.lists?.map(e=>e.entity)||[];this._unsub=this._hass.connection.subscribeEvents(t=>{e.includes(t.data.entity_id)&&this._fetchAndRender()},"state_changed")}catch(t){console.warn("Shopping List Card: WebSocket subscription failed",t)}connectedCallback(){this._subscribeChanges()}disconnectedCallback(){this._unsub&&(this._unsub(),this._unsub=null)}_render(){this.innerHTML="";const e=document.createElement("ha-card");e.style.padding="12px",e.style.display="block";const t=document.createElement("div");t.style.fontSize="20px",t.style.fontWeight="600",t.style.marginBottom="16px",t.style.color="#333",t.textContent=this.config.title,e.appendChild(t);for(const t of this.config.lists){const s=this._itemsByList[t.entity]||[],i=t.color||"#43A047",n=document.createElement("div");n.style.marginBottom="14px",n.style.position="relative";const o=document.createElement("div");o.style.display="flex",o.style.alignItems="center",o.style.background="#fafafa",o.style.borderRadius="12px",o.style.padding="0 12px",o.style.border="1px solid #e8e8e8";const r=document.createElement("ha-icon");r.setAttribute("icon","mdi:magnify"),r.style.color="#aaa",r.style.width="20px",r.style.height="20px",r.style.marginRight="8px",o.appendChild(r);const a=document.createElement("input");a.type="text",a.placeholder="Artikel suchen oder hinzufügen...",a.style.flex="1",a.style.border="none",a.style.background="transparent",a.style.fontSize="16px",a.style.padding="12px 0",a.style.outline="none",a.style.color="#333",o.appendChild(a);const l=document.createElement("button");l.textContent="+",l.style.background="transparent",l.style.color="#888",l.style.border="none",l.style.borderRadius="50%",l.style.width="32px",l.style.height="32px",l.style.fontSize="22px",l.style.fontWeight="300",l.style.cursor="pointer",l.style.display="flex",l.style.alignItems="center",l.style.justifyContent="center",l.style.flexShrink="0",o.appendChild(l),n.appendChild(o);const c=document.createElement("div");c.style.position="absolute",c.style.top="100%",c.style.left="0",c.style.right="0",c.style.background="#fff",c.style.borderRadius="0 0 12px 12px",c.style.boxShadow="0 4px 12px rgba(0,0,0,0.15)",c.style.zIndex="100",c.style.maxHeight="200px",c.style.overflowY="auto",c.style.display="none",n.appendChild(c);const d=this._getAutocompleteItems();a.addEventListener("input",()=>{const e=a.value.toLowerCase().trim();if(c.innerHTML="",!e)return void(c.style.display="none");const s=d.filter(s=>s.toLowerCase().includes(e)&&!this._itemExists(t.entity,s)).slice(0,8);0!==s.length?(s.forEach(e=>{const s=document.createElement("div");s.style.padding="10px 16px",s.style.cursor="pointer",s.style.fontSize="15px",s.style.color="#333",s.style.borderBottom="1px solid #e0e0e0",s.textContent=e,s.addEventListener("mouseenter",()=>{s.style.background="#e8f5e9"}),s.addEventListener("mouseleave",()=>{s.style.background="#fff"}),s.addEventListener("click",()=>{this._addItem(t.entity,e),a.value="",c.style.display="none"}),c.appendChild(s)}),c.style.display="block"):c.style.display="none"});const h=()=>{a.value.trim()&&(this._addItem(t.entity,a.value),a.value="",c.style.display="none")};l.addEventListener("click",h),a.addEventListener("keydown",e=>{"Enter"===e.key&&h()}),a.addEventListener("blur",()=>{setTimeout(()=>{c.style.display="none"},200)}),a.addEventListener("focus",()=>{a.value.trim()&&a.dispatchEvent(new Event("input"))}),e.appendChild(n);const p={};for(const e of s){const t=this._getItemCategory(e.summary);p[t]||(p[t]=[]),p[t].push(e)}const m=["obst_gemuese","brot_backwaren","milch_eier","fleisch_fisch","trockenwaren","tiefkuehlprodukte","getraenke","haushalt_hygiene","sonstiges"].filter(e=>p[e]&&p[e].length>0);for(const e of Object.keys(p))m.includes(e)||m.push(e);for(const s of m){const n=p[s],o=n.filter(e=>"needs_action"===e.status),r=n.filter(e=>"completed"===e.status),a=document.createElement("div");a.style.marginBottom="16px";const l=document.createElement("div");l.style.display="flex",l.style.alignItems="center",l.style.gap="8px",l.style.padding="8px 4px",l.style.borderBottom="1px solid #e8e8e8",l.style.cursor="pointer",l.style.userSelect="none";const c=this._getCategoryColor(s),d=document.createElement("ha-icon");d.setAttribute("icon",this._getCategoryIcon(s)),d.style.color=c,d.style.width="20px",d.style.height="20px",d.style.flexShrink="0",l.appendChild(d);const h=document.createElement("div");h.style.fontWeight="500",h.style.fontSize="14px",h.style.flex="1",h.style.color=c,h.textContent=this._getCategoryName(s),l.appendChild(h);const m=document.createElement("div");m.style.fontSize="12px",m.style.color="#999",m.style.fontWeight="400",m.textContent=o.length,l.appendChild(m);const u=document.createElement("ha-icon");u.setAttribute("icon","mdi:chevron-down"),u.style.color="#bbb",u.style.width="18px",u.style.height="18px",l.appendChild(u),a.appendChild(l);const y=document.createElement("div");y.style.display="grid",y.style.gridTemplateColumns="repeat(auto-fill, minmax(100px, 1fr))",y.style.gap="12px",y.style.padding="12px",y.style.transition="max-height 0.3s ease";let f=!1;l.addEventListener("click",()=>{f=!f,y.style.display=f?"none":"grid",x.style.display=f?"none":r.length>0?"block":"none",u.setAttribute("icon",f?"mdi:chevron-right":"mdi:chevron-down")});for(const e of [...o,...r])y.appendChild(this._renderTile(e,t.entity,i));const k=document.createElement("div");k.style.display="flex",k.style.flexDirection="column",k.style.alignItems="center",k.style.justifyContent="center",k.style.padding="8px",k.style.borderRadius="12px",k.style.border="2px dashed "+i+"60",k.style.background="#fff",k.style.cursor="pointer",k.style.minHeight="90px",k.style.transition="all 0.15s",k.style.position="relative";const g=document.createElement("ha-icon");g.setAttribute("icon","mdi:plus"),g.style.color=i,g.style.width="28px",g.style.height="28px",k.appendChild(g),k.addEventListener("mouseenter",()=>{k.style.background="#e8f5e9",k.style.borderColor=i}),k.addEventListener("mouseleave",()=>{k.style.background="#fff",k.style.borderColor=i+"60"});let b=null;k.addEventListener("click",()=>{if(!b){k.innerHTML="";const ac=document.createElement("div");ac.style.position="absolute",ac.style.top="100%",ac.style.left="-25px",ac.style.width="150px",ac.style.background="#fff",ac.style.borderRadius="8px",ac.style.boxShadow="0 4px 12px rgba(0,0,0,0.15)",ac.style.zIndex="200",ac.style.maxHeight="160px",ac.style.overflowY="auto",ac.style.display="none";b=document.createElement("input"),b.type="text",b.placeholder="...",b.style.width="100%",b.style.border="none",b.style.background="transparent",b.style.color="#333",b.style.fontSize="13px",b.style.textAlign="center",b.style.outline="none";const items=this._getAutocompleteItems();const resetTile=()=>{k.innerHTML="";const e=document.createElement("ha-icon");e.setAttribute("icon","mdi:plus"),e.style.color=i,e.style.width="28px",e.style.height="28px",k.appendChild(e),b=null};b.addEventListener("input",()=>{const v=b.value.toLowerCase().trim();ac.innerHTML="";if(!v){ac.style.display="none";return}const matches=items.filter(s=>s.toLowerCase().includes(v)&&!this._itemExists(t.entity,s)).slice(0,6);if(matches.length){matches.forEach(m=>{const row=document.createElement("div");row.style.padding="8px 12px",row.style.cursor="pointer",row.style.fontSize="13px",row.style.color="#333",row.style.borderBottom="1px solid #e0e0e0",row.textContent=m,row.addEventListener("mouseenter",()=>row.style.background="#e8f5e9"),row.addEventListener("mouseleave",()=>row.style.background="#fff"),row.addEventListener("click",()=>{this._addItem(t.entity,m),resetTile()}),ac.appendChild(row)}),ac.style.display="block"}else{ac.style.display="none"}}),b.addEventListener("keydown",e=>{"Enter"===e.key&&(this._addItem(t.entity,b.value),resetTile())}),b.addEventListener("blur",()=>{setTimeout(()=>{b&&resetTile()},300)}),k.appendChild(b),k.appendChild(ac),b.focus()}}),y.appendChild(k),a.appendChild(y);const x=document.createElement("div");x.textContent="✓ erledigte entfernen ("+r.length+")",x.style.fontSize="11px",x.style.color="#aaa",x.style.padding="6px 4px",x.style.cursor="pointer",x.style.textAlign="center",x.style.borderTop="1px solid #f0f0f0",x.style.display=r.length>0?"block":"none",x.addEventListener("click",()=>this._clearDone(t.entity)),a.appendChild(x),e.appendChild(a)}}this.appendChild(e)}_renderTile(e,t,s){const i="completed"===e.status,n=document.createElement("div");n.style.display="flex",n.style.flexDirection="column",n.style.alignItems="center",n.style.justifyContent="center",n.style.gap="2px",n.style.padding="10px 6px 8px",n.style.borderRadius="12px",n.style.background=i?"#e0e0e0":s,n.style.border=i?"2px solid #bbb":"none",n.style.opacity=i?"0.55":"1",n.style.cursor="pointer",n.style.minHeight="90px",n.style.position="relative",n.style.transition="all 0.15s",n.style.userSelect="none",n.addEventListener("mouseenter",()=>{i||(n.style.background="#388E3C")}),n.addEventListener("mouseleave",()=>{n.style.background=i?"#e0e0e0":s});const o=document.createElement("div");o.style.display="flex",o.style.alignItems="center",o.style.justifyContent="center",o.style.width="52px",o.style.height="52px",o.style.flexShrink="0",n.appendChild(o);const r=document.createElement("ha-icon");r.setAttribute("icon",this._getItemIcon(e.summary)),r.style.color=i?"#999":"#fff",r.style.width="48px",r.style.height="48px",r.style.setProperty("--mdc-icon-size","48px"),r.style.flexShrink="0",o.appendChild(r);const a=document.createElement("div");if(a.style.fontSize="12px",a.style.fontWeight="500",a.style.textAlign="center",a.style.color=i?"#999":"#fff",a.style.textDecoration=i?"line-through":"none",a.style.maxWidth="100%",a.style.overflow="hidden",a.style.textOverflow="ellipsis",a.style.display="-webkit-box",a.style.webkitLineClamp="2",a.style.webkitBoxOrient="vertical",a.style.lineHeight="1.3",a.textContent=e.summary,n.appendChild(a),e.description){const t=document.createElement("div");t.style.fontSize="10px",t.style.color=i?"#999":"rgba(255,255,255,0.75)",t.style.textAlign="center",t.style.maxWidth="100%",t.style.overflow="hidden",t.style.textOverflow="ellipsis",t.style.whiteSpace="nowrap",t.textContent=e.description,n.appendChild(t)}let l,c=!1;const d=()=>{c=!1,l=setTimeout(()=>{c=!0,this._showEditModal(e,t)},600)},h=()=>{clearTimeout(l)};return n.addEventListener("touchstart",d,{passive:!0}),n.addEventListener("touchend",h),n.addEventListener("touchmove",h),n.addEventListener("mousedown",d),n.addEventListener("mouseup",h),n.addEventListener("mouseleave",h),n.addEventListener("click",()=>{c||this._toggleItem(t,e)}),n}_showEditModal(e,t){const s=this.querySelector(".shopping-list-modal");s&&s.remove();const i=document.createElement("div");i.className="shopping-list-modal",i.style.cssText="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;";const n=document.createElement("div");n.style.cssText="background:#fff;border-radius:16px;padding:20px;width:300px;max-width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.3);";const o=document.createElement("div");o.style.cssText="font-size:17px;font-weight:600;margin-bottom:12px;color:#2e7d32;",o.textContent=e.summary,n.appendChild(o);const r=document.createElement("div");r.style.cssText="font-size:13px;color:#666;margin-bottom:8px;",r.textContent="Anmerkung (z.B. 20 Bio, Frische)",n.appendChild(r);const a=document.createElement("input");a.type="text",a.value=e.description||"",a.style.cssText="width:100%;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:#f1f8e9;color:#333;font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;",n.appendChild(a);const l=document.createElement("div");l.style.cssText="display:flex;gap:8px;";const c=document.createElement("button");c.textContent="Speichern",c.style.cssText="flex:1;padding:10px;border-radius:8px;border:none;background:#43A047;color:#fff;font-size:15px;font-weight:600;cursor:pointer;",c.addEventListener("click",()=>{this._updateDescription(t,e,a.value.trim()),i.remove()}),l.appendChild(c);const d=document.createElement("button");d.textContent="Abbrechen",d.style.cssText="flex:1;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:transparent;color:#333;font-size:15px;cursor:pointer;",d.addEventListener("click",()=>i.remove()),l.appendChild(d),n.appendChild(l);const h=document.createElement("button");h.textContent="Löschen",h.style.cssText="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #ef5350;background:transparent;color:#ef5350;font-size:13px;cursor:pointer;",h.addEventListener("click",()=>{this._removeItem(t,e),i.remove()}),n.appendChild(h),i.appendChild(n),i.addEventListener("click",e=>{e.target===i&&i.remove()}),this.appendChild(i),a.focus()}static getConfigForm(){return{schema:[{name:"title",required:true,selector:{text:{}}},{name:"entity",selector:{entity:{domain:"todo"}}}]}}static getStubConfig(){return{title:"Einkaufen",entity:"todo.einkaufen"}}getCardSize(){return 4}}customElements.define("shopping-list-card",e),window.customCards=window.customCards||[],window.customCards.push({type:"shopping-list-card",name:"Shopping List",description:"Multi-list shopping card with todo integration",preview:true});
+class ShoppingListCard extends HTMLElement {
+  constructor() {
+    super();
+    this._itemsByList = {};
+    this._unsub = null;
+    this._debounceTimer = null;
+  }
+
+  setConfig(config) {
+    let lists;
+    if (config.entity) {
+      lists = [{
+        entity: config.entity,
+        name: config.name || config.entity,
+        icon: config.icon || "mdi:cart",
+        color: config.color || "#43A047"
+      }];
+    } else {
+      if (!config.lists || !Array.isArray(config.lists)) {
+        throw new Error('You need to define either "entity" or a "lists" array');
+      }
+      lists = config.lists;
+    }
+    this.config = {
+      title: "Einkaufen",
+      icon_map: {},
+      ...config,
+      lists: lists
+    };
+    if (this._hass) this._fetchAndRender();
+  }
+
+  set hass(hass) {
+    const oldHass = this._hass;
+    this._hass = hass;
+    if (!oldHass) this._subscribeChanges();
+    if (!oldHass || this._shouldRender(oldHass, hass)) this._fetchAndRender();
+  }
+
+  async _fetchAndRender() {
+    this._debounceTimer && clearTimeout(this._debounceTimer);
+    this._debounceTimer = setTimeout(async () => {
+      this._debounceTimer = null;
+      await this._updateItems(this._hass);
+      this._render();
+    }, 100);
+  }
+
+  async _updateItems(hass) {
+    if (!hass || !this.config?.lists) return;
+    for (const list of this.config.lists) {
+      const entityId = list.entity;
+      try {
+        const state = hass.states[entityId];
+        if (state?.attributes?.todo_items) {
+          this._itemsByList[entityId] = state.attributes.todo_items;
+          continue;
+        }
+        const res = await hass.callWS({
+          type: "call_service",
+          domain: "todo",
+          service: "get_items",
+          service_data: { entity_id: entityId, status: ["needs_action", "completed"] },
+          return_response: !0
+        });
+        const resp = res?.result?.response || res?.response;
+        const items = resp?.[entityId]?.items || [];
+        this._itemsByList[entityId] = items;
+      } catch (e) {
+        console.warn("Shopping List Card: Failed to fetch items for", entityId, e);
+        this._itemsByList[entityId] = [];
+      }
+    }
+  }
+
+  _shouldRender(oldHass, newHass) {
+    if (!this.config?.lists) return !1;
+    for (const list of this.config.lists) {
+      const id = list.entity;
+      const oldState = oldHass.states[id];
+      const newState = newHass.states[id];
+      if (!oldState || !newState) return !0;
+      if (oldState.last_changed !== newState.last_changed) return !0;
+      if (oldState.last_updated !== newState.last_updated) return !0;
+      if (JSON.stringify(oldState.attributes) !== JSON.stringify(newState.attributes)) return !0;
+    }
+    return !1;
+  }
+
+  _getOpenmojiUrl(hex) {
+    return `https://cdn.jsdelivr.net/npm/openmoji@latest/color/svg/${hex}.svg`;
+  }
+
+  _createOpenmojiImg(hex, size) {
+    const img = document.createElement("img");
+    img.src = this._getOpenmojiUrl(hex);
+    img.style.width = size + "px";
+    img.style.height = size + "px";
+    img.style.flexShrink = "0";
+    img.style.objectFit = "contain";
+    img.alt = "";
+    return img;
+  }
+
+  _getItemIcon(text) {
+    const t = text.toLowerCase();
+    const map = this.config.icon_map || {};
+    if (map[text]) return map[text];
+
+    const iconMap = {
+      "eier": "1F95A", "ei": "1F95A",
+      "apfel": "1F34E", "äpfel": "1F34E",
+      "banane": "1F34C", "bananen": "1F34C",
+      "birne": "1F350", "birnen": "1F350",
+      "kiwi": "1F95D",
+      "orange": "1F34A", "orangen": "1F34A",
+      "mandarine": "1F34A",
+      "traube": "1F347", "trauben": "1F347",
+      "kirsche": "1F352", "kirschen": "1F352",
+      "erdbeere": "1F353", "erdbeeren": "1F353",
+      "himbeere": "1F353", "himbeeren": "1F353",
+      "heidelbeere": "1FAD0", "heidelbeeren": "1FAD0",
+      "pfirsich": "1F351", "pflaume": "1F351",
+      "zitrone": "1F34B", "limette": "1F34B",
+      "grapefruit": "1F34A",
+      "melone": "1F348",
+      "ananas": "1F34D",
+      "mango": "1F96D",
+      "avocado": "1F951",
+      "tomate": "1F345", "tomaten": "1F345",
+      "gurke": "1F952",
+      "paprika": "1FAD1",
+      "karotte": "1F955", "karotten": "1F955",
+      "zucchini": "1F955",
+      "aubergine": "1F346",
+      "brokkoli": "1F966", "blumenkohl": "1F966",
+      "spinat": "1F96C", "blattspinat": "1F96C",
+      "salat": "1F96C",
+      "kartoffel": "1F954", "kartoffeln": "1F954",
+      "zwiebel": "1F9C5", "zwiebeln": "1F9C5",
+      "knoblauch": "1F9C4",
+      "lauch": "1F96C", "schnittlauch": "1F96C",
+      "frühlingszwiebel": "1F9C5", "schalotte": "1F9C5",
+      "radieschen": "1F955",
+      "sellerie": "1F96C",
+      "rote bete": "1F345", "rotebete": "1F345",
+      "pilz": "1F344", "champignon": "1F344", "pfifferling": "1F344",
+      "steinpilz": "1F344", "kräuterseitling": "1F344", "austernpilz": "1F344",
+      "pilze": "1F344",
+      "gemüse": "1F955",
+      "obst": "1F353", "frucht": "1F353",
+      "brot": "1F35E", "brötchen": "1F35E",
+      "toast": "1F35E", "semmel": "1F35E",
+      "baguette": "1F35E", "ciabatta": "1F35E",
+      "croissant": "1F950", "schrippe": "1F35E",
+      "weckle": "1F35E", "laugenbrezel": "1F35E", "brezel": "1F35E",
+      "milch": "1F95B", "joghurt": "1FAD9",
+      "sahne": "1F95B", "schmand": "1F95B", "schlagsahne": "1F95B",
+      "butter": "1F9C8",
+      "käse": "1F9C0", "quark": "1FAD9",
+      "frischkäse": "1F9C0", "mozzarella": "1F9C0",
+      "brie": "1F9C0", "gouda": "1F9C0", "emmentaler": "1F9C0",
+      "parmesan": "1F9C0", "cream cheese": "1F9C0", "mascarpone": "1F9C0",
+      "burrata": "1F9C0", "cheddar": "1F9C0",
+      "fleisch": "1F969", "steak": "1F969",
+      "hähnchen": "1F357", "pute": "1F357", "ente": "1F357",
+      "schinken": "1F953", "speck": "1F953",
+      "wurst": "1F354", "salami": "1F354", "mettwurst": "1F354",
+      "schnitzel": "1F357", "hackfleisch": "1F969",
+      "fisch": "1F41F", "lachs": "1F41F", "thunfisch": "1F41F",
+      "forelle": "1F41F", "scholle": "1F41F", "makrele": "1F41F",
+      "garnelen": "1F990", "krabben": "1F990",
+      "tofu": "1F96C", "seitan": "1F969",
+      "vegan": "1F96C", "vegetarisch": "1F96C",
+      "nudeln": "1F35D", "spaghetti": "1F35D",
+      "penne": "1F35D", "rigatoni": "1F35D",
+      "fettuccine": "1F35D", "lasagne": "1F35D",
+      "reis": "1F35A", "couscous": "1F35A", "bulgur": "1F35A",
+      "mehl": "1F33E",
+      "zucker": "1F36C", "salz": "1F9C2", "pfeffer": "1F336",
+      "öl": "1F6E2", "olivenöl": "1F6E2",
+      "essig": "1F9C2",
+      "soße": "1F963", "ketchup": "1F345",
+      "mayo": "1F9C2", "mayonnaise": "1F9C2", "senf": "1F336",
+      "gewürz": "1F336", "gewürze": "1F336",
+      "kräuter": "1F33F", "vanille": "1F33F", "zimt": "1F33F",
+      "honig": "1F36F",
+      "marmelade": "1F36F", "nutella": "1F36F", "aufstrich": "1F36F",
+      "kapern": "1F952", "oliven": "1F95C",
+      "essiggurke": "1F952", "sauerkraut": "1F96C",
+      "peperoni": "1F336", "antipasti": "1F952",
+      "kaffee": "2615", "espresso": "2615", "cappuccino": "2615",
+      "tee": "1FAD6",
+      "bier": "1F37A", "wein": "1F377",
+      "weißwein": "1F377", "rotwein": "1F377",
+      "wasser": "1F4A7", "getränke": "1F964",
+      "cola": "1F964", "limonade": "1F964",
+      "sprite": "1F964", "fanta": "1F964", "apfelschorle": "1F964",
+      "saft": "1F9C3", "orangensaft": "1F9C3",
+      "kapseln": "2615", "kakao": "2615",
+      "tiefkühl": "2744", "tiefkühlpizza": "1F355",
+      "pizza": "1F355", "frikassee": "1F963",
+      "fischstäbchen": "1F41F", "pommes": "1F35F",
+      "eis": "1F366", "eiskrem": "1F366",
+      "toilettenpapier": "1F9FB", "küchenrolle": "1F9FB",
+      "papier": "1F4C4", "taschentuch": "1F9FB",
+      "waschmittel": "1F9FC", "spülmittel": "1FAE7", "spüli": "1FAE7",
+      "zahnpasta": "1FAE5", "zahnbürste": "1FAE5",
+      "shampoo": "1F9FC", "duschgel": "1F9FC",
+      "seife": "1F9FC",
+      "deodorant": "1F9F4", "rasierer": "1FA92",
+      "dusch": "1F6BF", "bad": "1F6BF",
+      "weichspüler": "1F9FC", "reiniger": "1F9F9", "tabs": "1F9FC",
+      "schokolade": "1F36B", "kekse": "1F36A",
+      "chips": "1F35F", "nüsse": "1F330", "mandeln": "1F330",
+      "müllbeutel": "1F5D1"
+    };
+
+    for (const [key, hex] of Object.entries(iconMap)) {
+      if (t.includes(key)) return hex;
+    }
+    return "1F6D2";
+  }
+
+  _getItemCategory(text) {
+    const t = text.toLowerCase();
+    const cats = [
+      { key: "obst_gemuese", keys: ["apfel","banane","birne","kiwi","orange","mandarine","traube","kirsche","erdbeere","himbeere","heidelbeere","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado"] },
+      { key: "brot_backwaren", keys: ["brot","brötchen","toast","semmel","baguette","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel"] },
+      { key: "milch_eier", keys: ["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar"] },
+      { key: "fleisch_fisch", keys: ["fleisch","steak","hähnchen","pute","ente","schinken","speck","wurst","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch"] },
+      { key: "trockenwaren", keys: ["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","öl","olivenöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti"] },
+      { key: "tiefkuehlprodukte", keys: ["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem"] },
+      { key: "getraenke", keys: ["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino"] },
+      { key: "haushalt_hygiene", keys: ["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli"] }
+    ];
+    for (const cat of cats) {
+      for (const key of cat.keys) {
+        if (t.includes(key)) return cat.key;
+      }
+    }
+    return "sonstiges";
+  }
+
+  _getCategoryName(key) {
+    return {
+      obst_gemuese: "Obst & Gemüse",
+      brot_backwaren: "Brot & Backwaren",
+      milch_eier: "Milchprodukte & Eier",
+      fleisch_fisch: "Fleisch, Fisch & Alternativen",
+      trockenwaren: "Trockenwaren & Vorräte",
+      tiefkuehlprodukte: "Tiefkühlprodukte",
+      getraenke: "Getränke",
+      haushalt_hygiene: "Haushalt & Hygiene",
+      sonstiges: "Sonstiges"
+    }[key] || key;
+  }
+
+  _getCategoryIcon(key) {
+    return {
+      obst_gemuese: "1F955",
+      brot_backwaren: "1F35E",
+      milch_eier: "1F9C0",
+      fleisch_fisch: "1F357",
+      trockenwaren: "1F4E6",
+      tiefkuehlprodukte: "2744",
+      getraenke: "1F964",
+      haushalt_hygiene: "1F9F9",
+      sonstiges: "1F6D2"
+    }[key] || "1F6D2";
+  }
+
+  _getCategoryColor(key) {
+    return {
+      obst_gemuese: "#E67E22",
+      brot_backwaren: "#D35400",
+      milch_eier: "#F39C12",
+      fleisch_fisch: "#E74C3C",
+      trockenwaren: "#8E44AD",
+      tiefkuehlprodukte: "#3498DB",
+      getraenke: "#1ABC9C",
+      haushalt_hygiene: "#9B59B6",
+      sonstiges: "#7F8C8D"
+    }[key] || "#7F8C8D";
+  }
+
+  _getAutocompleteItems() {
+    return ["Apfel","Banane","Birne","Kiwi","Orange","Mandarine","Trauben","Kirschen","Erdbeeren","Himbeeren","Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika","Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln","Knoblauch","Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Croissants","Milch","Joghurt","Sahne","Butter","Käse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen","Hackfleisch","Schnitzel","Wurst","Schinken","Fisch","Lachs","Garnelen","Tofu","Nudeln","Spaghetti","Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig","Ketchup","Mayonnaise","Senf","Honig","Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Wein","Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo","Duschgel","Seife","Zahnpasta","Waschmittel","Weichspüler","Spülmittel","Schinken","Wurst","Mehl","Zucker","Salz","Pfeffer","Essig","Schokolade","Kekse","Chips","Nüsse","Mandeln","Cola","Tee","Tiefkühlpizza","Eis","Pommes","TK-Gemüse","Küchenrolle","Waschmittel","Shampoo","Duschgel","Seife","Zahnpasta","Müllbeutel"];
+  }
+
+  _itemExists(entityId, text) {
+    const items = this._itemsByList[entityId] || [];
+    return items.some(item => item.summary.toLowerCase() === text.toLowerCase());
+  }
+
+  _showToast(msg) {
+    const toast = document.createElement("div");
+    toast.textContent = msg;
+    toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;z-index:10000;opacity:0;transition:opacity 0.3s ease;";
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.style.opacity = "1");
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      setTimeout(() => toast.remove(), 300);
+    }, 2000);
+  }
+
+  _addItem(entityId, text) {
+    const val = text.trim();
+    if (!val || !this._hass) return;
+    if (this._itemExists(entityId, val)) {
+      this._showToast("'" + val + "' ist bereits auf der Liste");
+      return;
+    }
+    this._hass.callService("todo", "add_item", { entity_id: entityId, item: val });
+  }
+
+  _toggleItem(entityId, item) {
+    if (!this._hass) return;
+    const status = item.status === "completed" ? "needs_action" : "completed";
+    this._hass.callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status });
+  }
+
+  _removeItem(entityId, item) {
+    this._hass && this._hass.callService("todo", "remove_item", { entity_id: entityId, item: item.summary });
+  }
+
+  _clearDone(entityId) {
+    this._hass && this._hass.callService("todo", "remove_completed_items", { entity_id: entityId });
+  }
+
+  _updateDescription(entityId, item, desc) {
+    this._hass && this._hass.callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc });
+  }
+
+  _subscribeChanges() {
+    if (this._unsub || !this._hass || !this.isConnected) return;
+    const entities = this.config?.lists?.map(l => l.entity) || [];
+    this._unsub = this._hass.connection.subscribeEvents(ev => {
+      if (entities.includes(ev.data.entity_id)) this._fetchAndRender();
+    }, "state_changed");
+  }
+
+  connectedCallback() { this._subscribeChanges(); }
+  disconnectedCallback() { this._unsub && (this._unsub(), this._unsub = null); }
+
+  _render() {
+    this.innerHTML = "";
+    const card = document.createElement("ha-card");
+    card.style.cssText = "padding:12px;display:block;";
+
+    const title = document.createElement("div");
+    title.style.cssText = "font-size:20px;font-weight:600;margin-bottom:16px;color:#333;";
+    title.textContent = this.config.title;
+    card.appendChild(title);
+
+    for (const list of this.config.lists) {
+      const items = this._itemsByList[list.entity] || [];
+      const color = list.color || "#43A047";
+      const listWrap = document.createElement("div");
+      listWrap.style.cssText = "margin-bottom:14px;position:relative;";
+
+      // Search bar
+      const searchWrap = document.createElement("div");
+      searchWrap.style.cssText = "display:flex;align-items:center;background:#fafafa;border-radius:12px;padding:0 12px;border:1px solid #e8e8e8;";
+      const searchIcon = document.createElement("ha-icon");
+      searchIcon.setAttribute("icon", "mdi:magnify");
+      searchIcon.style.cssText = "color:#aaa;width:20px;height:20px;margin-right:8px;";
+      searchWrap.appendChild(searchIcon);
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "Artikel suchen oder hinzufügen...";
+      input.style.cssText = "flex:1;border:none;background:transparent;font-size:16px;padding:12px 0;outline:none;color:#333;";
+      searchWrap.appendChild(input);
+      const addBtn = document.createElement("button");
+      addBtn.textContent = "+";
+      addBtn.style.cssText = "background:transparent;color:#888;border:none;border-radius:50%;width:32px;height:32px;font-size:22px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+      searchWrap.appendChild(addBtn);
+      listWrap.appendChild(searchWrap);
+
+      // Autocomplete dropdown
+      const acDropdown = document.createElement("div");
+      acDropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:#fff;border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;max-height:200px;overflow-y:auto;display:none;";
+      listWrap.appendChild(acDropdown);
+
+      const acItems = this._getAutocompleteItems();
+      input.addEventListener("input", () => {
+        const val = input.value.toLowerCase().trim();
+        acDropdown.innerHTML = "";
+        if (!val) { acDropdown.style.display = "none"; return; }
+        const matches = acItems.filter(it => it.toLowerCase().includes(val) && !this._itemExists(list.entity, it)).slice(0, 8);
+        if (matches.length) {
+          matches.forEach(m => {
+            const row = document.createElement("div");
+            row.style.cssText = "padding:10px 16px;cursor:pointer;font-size:15px;color:#333;border-bottom:1px solid #e0e0e0;";
+            row.textContent = m;
+            row.addEventListener("mouseenter", () => row.style.background = "#e8f5e9");
+            row.addEventListener("mouseleave", () => row.style.background = "#fff");
+            row.addEventListener("click", () => { this._addItem(list.entity, m); input.value = ""; acDropdown.style.display = "none"; });
+            acDropdown.appendChild(row);
+          });
+          acDropdown.style.display = "block";
+        } else {
+          acDropdown.style.display = "none";
+        }
+      });
+
+      const doAdd = () => {
+        if (input.value.trim()) { this._addItem(list.entity, input.value); input.value = ""; acDropdown.style.display = "none"; }
+      };
+      addBtn.addEventListener("click", doAdd);
+      input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
+      input.addEventListener("blur", () => { setTimeout(() => acDropdown.style.display = "none", 200); });
+      input.addEventListener("focus", () => { if (input.value.trim()) input.dispatchEvent(new Event("input")); });
+      card.appendChild(listWrap);
+
+      // Group by category
+      const groups = {};
+      for (const item of items) {
+        const cat = this._getItemCategory(item.summary);
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(item);
+      }
+
+      const order = ["obst_gemuese","brot_backwaren","milch_eier","fleisch_fisch","trockenwaren","tiefkuehlprodukte","getraenke","haushalt_hygiene","sonstiges"].filter(k => groups[k]?.length > 0);
+      for (const k of Object.keys(groups)) if (!order.includes(k)) order.push(k);
+
+      for (const cat of order) {
+        const catItems = groups[cat];
+        const todo = catItems.filter(i => i.status === "needs_action");
+        const done = catItems.filter(i => i.status === "completed");
+        const catWrap = document.createElement("div");
+        catWrap.style.marginBottom = "16px";
+
+        // Category header
+        const header = document.createElement("div");
+        header.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #e8e8e8;cursor:pointer;user-select:none;";
+        const catColor = this._getCategoryColor(cat);
+        const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 20);
+        catIcon.style.filter = "drop-shadow(0 0 1px rgba(0,0,0,0.2))";
+        header.appendChild(catIcon);
+        const catName = document.createElement("div");
+        catName.style.cssText = "font-weight:500;font-size:14px;flex:1;color:" + catColor;
+        catName.textContent = this._getCategoryName(cat);
+        header.appendChild(catName);
+        const count = document.createElement("div");
+        count.style.cssText = "font-size:12px;color:#999;font-weight:400;";
+        count.textContent = todo.length;
+        header.appendChild(count);
+        const chevron = document.createElement("ha-icon");
+        chevron.setAttribute("icon", "mdi:chevron-down");
+        chevron.style.cssText = "color:#bbb;width:18px;height:18px;";
+        header.appendChild(chevron);
+        catWrap.appendChild(header);
+
+        // Grid
+        const grid = document.createElement("div");
+        grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:12px;padding:12px;transition:max-height 0.3s ease;";
+        let collapsed = !1;
+        header.addEventListener("click", () => {
+          collapsed = !collapsed;
+          grid.style.display = collapsed ? "none" : "grid";
+          clearDone.style.display = collapsed ? "none" : (done.length > 0 ? "block" : "none");
+          chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
+        });
+
+        for (const item of [...todo, ...done]) grid.appendChild(this._renderTile(item, list.entity, color));
+
+        // Add tile
+        const addTile = document.createElement("div");
+        addTile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:12px;border:2px dashed " + color + "60;background:#fff;cursor:pointer;min-height:90px;transition:all 0.15s;position:relative;";
+        const plusIcon = document.createElement("ha-icon");
+        plusIcon.setAttribute("icon", "mdi:plus");
+        plusIcon.style.cssText = "color:" + color + ";width:28px;height:28px;";
+        addTile.appendChild(plusIcon);
+        addTile.addEventListener("mouseenter", () => { addTile.style.background = "#e8f5e9"; addTile.style.borderColor = color; });
+        addTile.addEventListener("mouseleave", () => { addTile.style.background = "#fff"; addTile.style.borderColor = color + "60"; });
+        let tileInput = null;
+        addTile.addEventListener("click", () => {
+          if (!tileInput) {
+            addTile.innerHTML = "";
+            const tileAc = document.createElement("div");
+            tileAc.style.cssText = "position:absolute;top:100%;left:-25px;width:150px;background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:200;max-height:160px;overflow-y:auto;display:none;";
+            tileInput = document.createElement("input");
+            tileInput.type = "text";
+            tileInput.placeholder = "...";
+            tileInput.style.cssText = "width:100%;border:none;background:transparent;color:#333;font-size:13px;text-align:center;outline:none;";
+            const allItems = this._getAutocompleteItems();
+            const resetTile = () => {
+              addTile.innerHTML = "";
+              const pi = document.createElement("ha-icon");
+              pi.setAttribute("icon", "mdi:plus");
+              pi.style.cssText = "color:" + color + ";width:28px;height:28px;";
+              addTile.appendChild(pi);
+              tileInput = null;
+            };
+            tileInput.addEventListener("input", () => {
+              const v = tileInput.value.toLowerCase().trim();
+              tileAc.innerHTML = "";
+              if (!v) { tileAc.style.display = "none"; return; }
+              const matches = allItems.filter(it => it.toLowerCase().includes(v) && !this._itemExists(list.entity, it)).slice(0, 6);
+              if (matches.length) {
+                matches.forEach(m => {
+                  const row = document.createElement("div");
+                  row.style.cssText = "padding:8px 12px;cursor:pointer;font-size:13px;color:#333;border-bottom:1px solid #e0e0e0;";
+                  row.textContent = m;
+                  row.addEventListener("mouseenter", () => row.style.background = "#e8f5e9");
+                  row.addEventListener("mouseleave", () => row.style.background = "#fff");
+                  row.addEventListener("click", () => { this._addItem(list.entity, m); resetTile(); });
+                  tileAc.appendChild(row);
+                });
+                tileAc.style.display = "block";
+              } else {
+                tileAc.style.display = "none";
+              }
+            });
+            tileInput.addEventListener("keydown", e => { if (e.key === "Enter") { this._addItem(list.entity, tileInput.value); resetTile(); } });
+            tileInput.addEventListener("blur", () => { setTimeout(() => tileInput && resetTile(), 300); });
+            addTile.appendChild(tileInput);
+            addTile.appendChild(tileAc);
+            tileInput.focus();
+          }
+        });
+        grid.appendChild(addTile);
+        catWrap.appendChild(grid);
+
+        // Clear done
+        const clearDone = document.createElement("div");
+        clearDone.textContent = "✓ erledigte entfernen (" + done.length + ")";
+        clearDone.style.cssText = "font-size:11px;color:#aaa;padding:6px 4px;cursor:pointer;text-align:center;border-top:1px solid #f0f0f0;display:" + (done.length > 0 ? "block" : "none");
+        clearDone.addEventListener("click", () => this._clearDone(list.entity));
+        catWrap.appendChild(clearDone);
+        card.appendChild(catWrap);
+      }
+    }
+    this.appendChild(card);
+  }
+
+  _renderTile(item, entityId, color) {
+    const isDone = item.status === "completed";
+    const tile = document.createElement("div");
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:10px 6px 8px;border-radius:12px;background:" + (isDone ? "#e0e0e0" : color) + ";border:" + (isDone ? "2px solid #bbb" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:90px;position:relative;transition:all 0.15s;user-select:none;";
+    tile.addEventListener("mouseenter", () => { if (!isDone) tile.style.background = "#388E3C"; });
+    tile.addEventListener("mouseleave", () => { tile.style.background = isDone ? "#e0e0e0" : color; });
+
+    const iconWrap = document.createElement("div");
+    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:52px;height:52px;flex-shrink:0;";
+    const icon = this._createOpenmojiImg(this._getItemIcon(item.summary), 44);
+    iconWrap.appendChild(icon);
+    tile.appendChild(iconWrap);
+
+    const label = document.createElement("div");
+    label.style.cssText = "font-size:12px;font-weight:500;text-align:center;color:" + (isDone ? "#999" : "#fff") + ";text-decoration:" + (isDone ? "line-through" : "none") + ";max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
+    label.textContent = item.summary;
+    tile.appendChild(label);
+
+    if (item.description) {
+      const desc = document.createElement("div");
+      desc.style.cssText = "font-size:10px;color:" + (isDone ? "#999" : "rgba(255,255,255,0.75)") + ";text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+      desc.textContent = item.description;
+      tile.appendChild(desc);
+    }
+
+    let pressTimer, longPress = !1;
+    const startPress = () => { longPress = !1; pressTimer = setTimeout(() => { longPress = !0; this._showEditModal(item, entityId); }, 600); };
+    const endPress = () => { clearTimeout(pressTimer); };
+    tile.addEventListener("touchstart", startPress, { passive: !0 });
+    tile.addEventListener("touchend", endPress);
+    tile.addEventListener("touchmove", endPress);
+    tile.addEventListener("mousedown", startPress);
+    tile.addEventListener("mouseup", endPress);
+    tile.addEventListener("mouseleave", endPress);
+    tile.addEventListener("click", () => { if (!longPress) this._toggleItem(entityId, item); });
+    return tile;
+  }
+
+  _showEditModal(item, entityId) {
+    const existing = this.querySelector(".shopping-list-modal");
+    existing && existing.remove();
+    const overlay = document.createElement("div");
+    overlay.className = "shopping-list-modal";
+    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;";
+    const box = document.createElement("div");
+    box.style.cssText = "background:#fff;border-radius:16px;padding:20px;width:300px;max-width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.3);";
+
+    const title = document.createElement("div");
+    title.style.cssText = "font-size:17px;font-weight:600;margin-bottom:12px;color:#2e7d32;";
+    title.textContent = item.summary;
+    box.appendChild(title);
+
+    const hint = document.createElement("div");
+    hint.style.cssText = "font-size:13px;color:#666;margin-bottom:8px;";
+    hint.textContent = "Anmerkung (z.B. 20 Bio, Frische)";
+    box.appendChild(hint);
+
+    const descInput = document.createElement("input");
+    descInput.type = "text";
+    descInput.value = item.description || "";
+    descInput.style.cssText = "width:100%;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:#f1f8e9;color:#333;font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;";
+    box.appendChild(descInput);
+
+    const btns = document.createElement("div");
+    btns.style.cssText = "display:flex;gap:8px;";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.textContent = "Speichern";
+    saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:#43A047;color:#fff;font-size:15px;font-weight:600;cursor:pointer;";
+    saveBtn.addEventListener("click", () => { this._updateDescription(entityId, item, descInput.value.trim()); overlay.remove(); });
+    btns.appendChild(saveBtn);
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Abbrechen";
+    cancelBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:transparent;color:#333;font-size:15px;cursor:pointer;";
+    cancelBtn.addEventListener("click", () => overlay.remove());
+    btns.appendChild(cancelBtn);
+    box.appendChild(btns);
+
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "Löschen";
+    delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #ef5350;background:transparent;color:#ef5350;font-size:13px;cursor:pointer;";
+    delBtn.addEventListener("click", () => { this._removeItem(entityId, item); overlay.remove(); });
+    box.appendChild(delBtn);
+
+    overlay.appendChild(box);
+    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+    this.appendChild(overlay);
+    descInput.focus();
+  }
+
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: "title", required: true, selector: { text: {} } },
+        { name: "entity", selector: { entity: { domain: "todo" } } }
+      ]
+    };
+  }
+
+  static getStubConfig() {
+    return { title: "Einkaufen", entity: "todo.einkaufen" };
+  }
+
+  getCardSize() { return 4; }
+}
+
+customElements.define("shopping-list-card", ShoppingListCard);
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: "shopping-list-card",
+  name: "Shopping List",
+  description: "Multi-list shopping card with todo integration",
+  preview: true
+});
