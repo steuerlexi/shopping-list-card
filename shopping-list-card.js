@@ -306,32 +306,45 @@ class ShoppingListCard extends HTMLElement {
     }, 2000);
   }
 
+  _haptic(ms = 50) {
+    if (navigator.vibrate) navigator.vibrate(ms);
+  }
+
   _addItem(entityId, text) {
     const val = text.trim();
     if (!val || !this._hass) return;
     if (this._itemExists(entityId, val)) {
       this._showToast("'" + val + "' ist bereits auf der Liste");
+      this._haptic(30);
       return;
     }
     this._hass.callService("todo", "add_item", { entity_id: entityId, item: val });
+    this._haptic(60);
   }
 
   _toggleItem(entityId, item) {
     if (!this._hass) return;
     const status = item.status === "completed" ? "needs_action" : "completed";
     this._hass.callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status });
+    this._haptic(status === "needs_action" ? 40 : 60);
   }
 
   _removeItem(entityId, item) {
-    this._hass && this._hass.callService("todo", "remove_item", { entity_id: entityId, item: item.summary });
+    if (!this._hass) return;
+    this._hass.callService("todo", "remove_item", { entity_id: entityId, item: item.summary });
+    this._haptic(40);
   }
 
   _clearDone(entityId) {
-    this._hass && this._hass.callService("todo", "remove_completed_items", { entity_id: entityId });
+    if (!this._hass) return;
+    this._hass.callService("todo", "remove_completed_items", { entity_id: entityId });
+    this._haptic(80);
   }
 
   _updateDescription(entityId, item, desc) {
-    this._hass && this._hass.callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc });
+    if (!this._hass) return;
+    this._hass.callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc });
+    this._haptic(40);
   }
 
   _subscribeChanges() {
