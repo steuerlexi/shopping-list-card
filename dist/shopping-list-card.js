@@ -4,6 +4,10 @@ class ShoppingListCard extends HTMLElement {
     this._itemsByList = {};
     this._unsub = null;
     this._debounceTimer = null;
+    this._autocompleteItems = null;
+    this._iconMap = null;
+    this._catMap = null;
+    this._renderedHash = "";
   }
 
   setConfig(config) {
@@ -27,7 +31,151 @@ class ShoppingListCard extends HTMLElement {
       ...config,
       lists: lists
     };
+    this._initCaches();
     if (this._hass) this._fetchAndRender();
+  }
+
+  _initCaches() {
+    this._autocompleteItems = [...new Set([
+      "Apfel","Banane","Birne","Kiwi","Orange","Mandarine","Trauben","Kirschen","Erdbeeren","Himbeeren",
+      "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
+      "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln",
+      "Knoblauch","Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Croissants",
+      "Milch","Joghurt","Sahne","Butter","Käse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen",
+      "Hackfleisch","Schnitzel","Wurst","Schinken","Fisch","Lachs","Garnelen","Tofu","Nudeln","Spaghetti",
+      "Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig","Ketchup","Mayonnaise","Senf","Honig",
+      "Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Wein",
+      "Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo","Duschgel","Seife","Zahnpasta","Waschmittel",
+      "Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse","Mandeln","TK-Gemüse","Müllbeutel",
+      "Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel","Heidelbeeren",
+      "Holunder","Johannisbeeren","Klementine","Mandarine","Nektarine","Pampelmuse","Preiselbeeren",
+      "Rote Bete","Stachelbeeren","Wassermelone","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat",
+      "Kürbis","Lauch","Mais","Mangold","Pak Choi","Pastinake","Peperoni","Petersilie","Porree",
+      "Rettich","Rosenkohl","Rotkohl","Rucola","Spargel","Süßkartoffel","Topinambur","Weißkohl",
+      "Buttermilch","Camembert","Creme fraiche","Feta","Griechischer Joghurt","Kefir","Kochkäse",
+      "Leerdammer","Milchreis","Ricotta","Calamari","Ente","Hähnchenbrust","Hähnchenkeule",
+      "Kalbfleisch","Kassler","Lamm","Leber","Lunge","Putenbrust","Putenschnitzel","Rinderfilet",
+      "Rinderhack","Rinderroulade","Rollmops","Sülze","Zander","Backpulver","Balsamico","Brühe",
+      "Gnocchi","Haferflocken","Kartoffelstärke","Kichererbsen","Kidneybohnen","Linsen","Oliven",
+      "Paniermehl","Pesto","Polenta","Rosinen","Sahnesteif","Sojasoße","Sonnenblumenöl","Soßenbinder",
+      "Vanillezucker","Worcestersauce","Apfelschorle","Energydrink","Granatapfelsaft","Hugo",
+      "Mineralwasser","Prosecco","Radler","Sekt","Smoothie","Sprudelwasser","Traubensaft",
+      "Aufbackbrötchen","Blätterteig","Gemüsepfanne","Knödel","Kuchen","Lasagne","Maultaschen",
+      "Nuggets","Paniertes","Piroggen","Ravioli","Reibekuchen","Schaschlik","Tortellini","Waffeln",
+      "Wraps","Abwaschbürste","Alufolie","Backpapier","Bonbons","Deo","Desinfektionsmittel",
+      "Drano","Feuchttücher","Frischhaltefolie","Geschirrtabs","Glühbirne","Haargel","Handcreme",
+      "Handschuhe","Hustensaft","Insektenspray","Kerze","Kerzen","Klorollen","Kondome","Körperöl",
+      "Küchentücher","Leinöl","Lotion","Lufterfrischer","Make-up","Mascara","Medikamente",
+      "Milchreiniger","Mülltüten","Mundspülung","Nasenspray","Orangenschalen","Papiertüten",
+      "Parfüm","Pfefferkörner","Pflaster","Rasierklingen","Rasierschaum","Räucherstäbchen",
+      "Salbei","Sekt","Spülbürste","Staubsaugerbeutel","Streichhölzer","Taschentücher",
+      "Teebaumöl","Toilettenreiniger","Zahnbürste","Zitronenmelisse","Zündhölzer","Bubblegum",
+      "Gummibärchen","Kaugummi","Knuspermüsli","Lebkuchen","Lutscher","Marshmallow","Nougat",
+      "Pralinen","Salzstangen","Studentenfutter","Trockenobst","Weinbrand"
+    ])];
+
+    this._iconMap = {
+      eier:"1F95A", ei:"1F95A", apfel:"1F34E", äpfel:"1F34E", banane:"1F34C", bananen:"1F34C",
+      birne:"1F350", birnen:"1F350", kiwi:"1F95D", orange:"1F34A", orangen:"1F34A",
+      mandarine:"1F34A", traube:"1F347", trauben:"1F347", kirsche:"1F352", kirschen:"1F352",
+      erdbeere:"1F353", erdbeeren:"1F353", himbeere:"1F353", himbeeren:"1F353",
+      heidelbeere:"1FAD0", heidelbeeren:"1FAD0", pfirsich:"1F351", pflaume:"1F351",
+      zitrone:"1F34B", limette:"1F34B", grapefruit:"1F34A", melone:"1F348", ananas:"1F34D",
+      mango:"1F96D", avocado:"1F951", tomate:"1F345", tomaten:"1F345", gurke:"1F952",
+      paprika:"1FAD1", karotte:"1F955", karotten:"1F955", zucchini:"1F955", aubergine:"1F346",
+      brokkoli:"1F966", blumenkohl:"1F966", spinat:"1F96C", blattspinat:"1F96C", salat:"1F96C",
+      kartoffel:"1F954", kartoffeln:"1F954", zwiebel:"1F9C5", zwiebeln:"1F9C5", knoblauch:"1F9C4",
+      lauch:"1F96C", schnittlauch:"1F96C", frühlingszwiebel:"1F9C5", schalotte:"1F9C5",
+      radieschen:"1F955", sellerie:"1F96C", "rote bete":"1F345", rotebete:"1F345", pilz:"1F344",
+      champignon:"1F344", pfifferling:"1F344", steinpilz:"1F344", kräuterseitling:"1F344",
+      austernpilz:"1F344", pilze:"1F344", gemüse:"1F955", obst:"1F353", frucht:"1F353",
+      brot:"1F35E", brötchen:"1F35E", toast:"1F35E", semmel:"1F35E", baguette:"1F35E",
+      ciabatta:"1F35E", croissant:"1F950", schrippe:"1F35E", weckle:"1F35E",
+      laugenbrezel:"1F35E", brezel:"1F35E", milch:"1F95B", joghurt:"1FAD9", sahne:"1F95B",
+      schmand:"1F95B", schlagsahne:"1F95B", butter:"1F9C8", käse:"1F9C0", quark:"1FAD9",
+      frischkäse:"1F9C0", mozzarella:"1F9C0", brie:"1F9C0", gouda:"1F9C0", emmentaler:"1F9C0",
+      parmesan:"1F9C0", "cream cheese":"1F9C0", mascarpone:"1F9C0", burrata:"1F9C0",
+      cheddar:"1F9C0", fleisch:"1F969", steak:"1F969", hähnchen:"1F357", pute:"1F357",
+      ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"1F354", salami:"1F354",
+      mettwurst:"1F354", schnitzel:"1F357", hackfleisch:"1F969", fisch:"1F41F", lachs:"1F41F",
+      thunfisch:"1F41F", forelle:"1F41F", scholle:"1F41F", makrele:"1F41F", garnelen:"1F990",
+      krabben:"1F990", tofu:"1F96C", seitan:"1F969", vegan:"1F96C", vegetarisch:"1F96C",
+      nudeln:"1F35D", spaghetti:"1F35D", penne:"1F35D", rigatoni:"1F35D", fettuccine:"1F35D",
+      lasagne:"1F35D", reis:"1F35A", couscous:"1F35A", bulgur:"1F35A", mehl:"1F33E",
+      zucker:"1F36C", salz:"1F9C2", pfeffer:"1F336", öl:"1F6E2", olivenöl:"1F6E2",
+      essig:"1F9C2", soße:"1F963", ketchup:"1F345", mayo:"1F9C2", mayonnaise:"1F9C2",
+      senf:"1F336", gewürz:"1F336", gewürze:"1F336", kräuter:"1F33F", vanille:"1F33F",
+      zimt:"1F33F", honig:"1F36F", marmelade:"1F36F", nutella:"1F36F", aufstrich:"1F36F",
+      kapern:"1F952", oliven:"1F95C", essiggurke:"1F952", sauerkraut:"1F96C",
+      peperoni:"1F336", antipasti:"1F952", kaffee:"2615", espresso:"2615", cappuccino:"2615",
+      tee:"1FAD6", bier:"1F37A", wein:"1F377", weißwein:"1F377", rotwein:"1F377",
+      wasser:"1F4A7", getränke:"1F964", cola:"1F964", limonade:"1F964", sprite:"1F964",
+      fanta:"1F964", apfelschorle:"1F964", saft:"1F9C3", orangensaft:"1F9C3", kapseln:"2615",
+      kakao:"2615", tiefkühl:"2744", tiefkühlpizza:"1F355", pizza:"1F355", frikassee:"1F963",
+      fischstäbchen:"1F41F", pommes:"1F35F", eis:"1F366", eiskrem:"1F366",
+      toilettenpapier:"1F9FB", küchenrolle:"1F9FB", papier:"1F4C4", taschentuch:"1F9FB",
+      waschmittel:"1F9FC", spülmittel:"1FAE7", spüli:"1FAE7", zahnpasta:"1FAE5",
+      zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"1F9FC",
+      deodorant:"1F9F4", rasierer:"1FA92", dusch:"1F6BF", bad:"1F6BF", weichspüler:"1F9FC",
+      reiniger:"1F9F9", tabs:"1F9FC", schokolade:"1F36B", kekse:"1F36A", chips:"1F35F",
+      nüsse:"1F330", mandeln:"1F330", müllbeutel:"1F5D1", aprikose:"1F351",
+      brombeeren:"1F347", clementine:"1F34A", klementine:"1F34A", cranberry:"1F347",
+      datteln:"1F36C", feige:"1F34A", granatapfel:"1F347", johannisbeeren:"1F353",
+      nektarine:"1F351", pampelmuse:"1F34A", preiselbeeren:"1F353", stachelbeeren:"1F353",
+      wassermelone:"1F349", chinakohl:"1F96C", eisbergsalat:"1F96C", feldsalat:"1F96C",
+      kürbis:"1F383", lauch:"1F96C", mais:"1F33D", mangold:"1F96C", "pak choi":"1F96C",
+      pastinake:"1F955", petersilie:"1F33F", porree:"1F96C", rettich:"1F955",
+      rosenkohl:"1F966", rotkohl:"1F966", rucola:"1F96C", spargel:"1F966",
+      süßkartoffel:"1F360", topinambur:"1F954", weißkohl:"1F966", buttermilch:"1F95B",
+      camembert:"1F9C0", "creme fraiche":"1F95B", feta:"1F9C0",
+      "griechischer joghurt":"1FAD9", kefir:"1F95B", kochkäse:"1F9C0", leerdammer:"1F9C0",
+      milchreis:"1F35A", ricotta:"1F9C0", calamari:"1F991", ente:"1F357",
+      hähnchenbrust:"1F357", hähnchenkeule:"1F357", kalbfleisch:"1F969", kassler:"1F953",
+      lamm:"1F411", leber:"1F969", lunge:"1F969", putenbrust:"1F357",
+      putenschnitzel:"1F357", rinderfilet:"1F969", rinderhack:"1F969",
+      rinderroulade:"1F969", rollmops:"1F41F", sülze:"1F963", zander:"1F41F",
+      backpulver:"1F9C2", balsamico:"1F9C2", brühe:"1F963", gnocchi:"1F35D",
+      haferflocken:"1F33E", kartoffelstärke:"1F33E", kichererbsen:"1F96C",
+      kidneybohnen:"1F96C", linsen:"1F96C", paniermehl:"1F33E", pesto:"1F33F",
+      polenta:"1F35A", rosinen:"1F347", sahnesteif:"1F9C2", sojasoße:"1F963",
+      sonnenblumenöl:"1F6E2", soßenbinder:"1F9C2", vanillezucker:"1F36C",
+      worcestersauce:"1F9C2", energydrink:"1F964", granatapfelsaft:"1F9C3",
+      hugo:"1F377", mineralwasser:"1F4A7", prosecco:"1F377", radler:"1F37A",
+      sekt:"1F37E", smoothie:"1F964", sprudelwasser:"1F4A7", traubensaft:"1F9C3",
+      aufbackbrötchen:"1F35E", blätterteig:"1F35E", gemüsepfanne:"1F966",
+      knödel:"1F35D", kuchen:"1F370", lasagne:"1F35D", maultaschen:"1F35D",
+      nuggets:"1F357", paniertes:"1F357", piroggen:"1F35D", ravioli:"1F35D",
+      reibekuchen:"1F35F", schaschlik:"1F357", tortellini:"1F35D", waffeln:"1F367",
+      wraps:"1F35D", abwaschbürste:"1FAE7", alufolie:"1F4E6", backpapier:"1F4C4",
+      bonbons:"1F36C", deo:"1F9F4", desinfektionsmittel:"1F9F9", drano:"1F9F9",
+      feuchttücher:"1F9FB", frischhaltefolie:"1F4E6", geschirrtabs:"1F9FC",
+      glühbirne:"1F4A1", haargel:"1F9FC", handcreme:"1F9F5", handschuhe:"1F9E4",
+      hustensaft:"1F9EA", insektenspray:"1F9F4", kerze:"1F56F", kerzen:"1F56F",
+      klorollen:"1F9FB", kondome:"1F9F4", körperöl:"1F9F7", küchentücher:"1F9FB",
+      leinöl:"1F6E2", lotion:"1F9F5", lufterfrischer:"1F33F", "make-up":"1F484",
+      mascara:"1F484", medikamente:"1F48A", milchreiniger:"1F9FC", mülltüten:"1F5D1",
+      mundspülung:"1F9F4", nasenspray:"1F9EA", orangenschalen:"1F34A",
+      papiertüten:"1F4E6", parfüm:"1F484", pfefferkörner:"1F336", pflaster:"1F48A",
+      rasierklingen:"1FA92", rasierschaum:"1FAE6", räucherstäbchen:"1F56F",
+      salbei:"1F33F", spülbürste:"1FAE7", staubsaugerbeutel:"1F9F9",
+      streichhölzer:"1F522", taschentücher:"1F9FB", teebaumöl:"1F33F",
+      toilettenreiniger:"1F9F9", zahnbürste:"1FAE5", zitronenmelisse:"1F34B",
+      zündhölzer:"1F522", bubblegum:"1F36C", gummibärchen:"1F36C", kaugummi:"1F36C",
+      knuspermüsli:"1F33E", lebkuchen:"1F36A", lutscher:"1F36D", marshmallow:"1F36C",
+      nougat:"1F36B", pralinen:"1F36B", salzstangen:"1F35F", studentenfutter:"1F330",
+      trockenobst:"1F347", weinbrand:"1F377"
+    };
+
+    this._catMap = [
+      { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","mandarine","traube","trauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl"]) },
+      { key: "brot_backwaren", keys: new Set(["brot","brötchen","toast","semmel","baguette","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","lasagne","maultaschen","nuggets","paniertes","piroggen","ravioli","reibekuchen","tortellini","waffeln","wraps"]) },
+      { key: "milch_eier", keys: new Set(["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta"]) },
+      { key: "fleisch_fisch", keys: new Set(["fleisch","steak","hähnchen","pute","ente","schinken","speck","wurst","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"]) },
+      { key: "trockenwaren", keys: new Set(["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","öl","olivenöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","sonnenblumenöl","soßenbinder","vanillezucker","worcestersauce"]) },
+      { key: "tiefkuehlprodukte", keys: new Set(["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem","gemüsepfanne","knödel","nuggets","paniertes","piroggen","ravioli","reibekuchen","schaschlik","tortellini","waffeln"]) },
+      { key: "getraenke", keys: new Set(["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"]) },
+      { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","bonbons","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","mundspülung","nasenspray","orangenschalen","papiertüten","parfüm","pfefferkörner","pflaster","rasierklingen","rasierschaum","räucherstäbchen","salbei","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zahnbürste","zitronenmelisse","zündhölzer"]) }
+    ];
   }
 
   set hass(hass) {
@@ -82,14 +230,12 @@ class ShoppingListCard extends HTMLElement {
       if (!oldState || !newState) return true;
       if (oldState.last_changed !== newState.last_changed) return true;
       if (oldState.last_updated !== newState.last_updated) return true;
-      const oldItems = oldState.attributes?.todo_items;
-      const newItems = newState.attributes?.todo_items;
-      if (oldItems?.length !== newItems?.length) return true;
-      if ((oldItems?.length || 0) > 0 && (newItems?.length || 0) > 0) {
-        const oldLast = oldItems[oldItems.length - 1].last_updated || 0;
-        const newLast = newItems[newItems.length - 1].last_updated || 0;
-        if (oldLast !== newLast) return true;
-      }
+      const oldItems = oldState.attributes?.todo_items || [];
+      const newItems = newState.attributes?.todo_items || [];
+      if (oldItems.length !== newItems.length) return true;
+      const oldHash = oldItems.map(i => i.summary + i.status).join("|");
+      const newHash = newItems.map(i => i.summary + i.status).join("|");
+      if (oldHash !== newHash) return true;
     }
     return false;
   }
@@ -137,181 +283,7 @@ class ShoppingListCard extends HTMLElement {
     const t = text.toLowerCase();
     const map = this.config.icon_map || {};
     if (map[text]) return map[text];
-
-    const iconMap = {
-      "eier": "1F95A", "ei": "1F95A",
-      "apfel": "1F34E", "äpfel": "1F34E",
-      "banane": "1F34C", "bananen": "1F34C",
-      "birne": "1F350", "birnen": "1F350",
-      "kiwi": "1F95D",
-      "orange": "1F34A", "orangen": "1F34A",
-      "mandarine": "1F34A",
-      "traube": "1F347", "trauben": "1F347",
-      "kirsche": "1F352", "kirschen": "1F352",
-      "erdbeere": "1F353", "erdbeeren": "1F353",
-      "himbeere": "1F353", "himbeeren": "1F353",
-      "heidelbeere": "1FAD0", "heidelbeeren": "1FAD0",
-      "pfirsich": "1F351", "pflaume": "1F351",
-      "zitrone": "1F34B", "limette": "1F34B",
-      "grapefruit": "1F34A",
-      "melone": "1F348",
-      "ananas": "1F34D",
-      "mango": "1F96D",
-      "avocado": "1F951",
-      "tomate": "1F345", "tomaten": "1F345",
-      "gurke": "1F952",
-      "paprika": "1FAD1",
-      "karotte": "1F955", "karotten": "1F955",
-      "zucchini": "1F955",
-      "aubergine": "1F346",
-      "brokkoli": "1F966", "blumenkohl": "1F966",
-      "spinat": "1F96C", "blattspinat": "1F96C",
-      "salat": "1F96C",
-      "kartoffel": "1F954", "kartoffeln": "1F954",
-      "zwiebel": "1F9C5", "zwiebeln": "1F9C5",
-      "knoblauch": "1F9C4",
-      "lauch": "1F96C", "schnittlauch": "1F96C",
-      "frühlingszwiebel": "1F9C5", "schalotte": "1F9C5",
-      "radieschen": "1F955",
-      "sellerie": "1F96C",
-      "rote bete": "1F345", "rotebete": "1F345",
-      "pilz": "1F344", "champignon": "1F344", "pfifferling": "1F344",
-      "steinpilz": "1F344", "kräuterseitling": "1F344", "austernpilz": "1F344",
-      "pilze": "1F344",
-      "gemüse": "1F955",
-      "obst": "1F353", "frucht": "1F353",
-      "brot": "1F35E", "brötchen": "1F35E",
-      "toast": "1F35E", "semmel": "1F35E",
-      "baguette": "1F35E", "ciabatta": "1F35E",
-      "croissant": "1F950", "schrippe": "1F35E",
-      "weckle": "1F35E", "laugenbrezel": "1F35E", "brezel": "1F35E",
-      "milch": "1F95B", "joghurt": "1FAD9",
-      "sahne": "1F95B", "schmand": "1F95B", "schlagsahne": "1F95B",
-      "butter": "1F9C8",
-      "käse": "1F9C0", "quark": "1FAD9",
-      "frischkäse": "1F9C0", "mozzarella": "1F9C0",
-      "brie": "1F9C0", "gouda": "1F9C0", "emmentaler": "1F9C0",
-      "parmesan": "1F9C0", "cream cheese": "1F9C0", "mascarpone": "1F9C0",
-      "burrata": "1F9C0", "cheddar": "1F9C0",
-      "fleisch": "1F969", "steak": "1F969",
-      "hähnchen": "1F357", "pute": "1F357", "ente": "1F357",
-      "schinken": "1F953", "speck": "1F953",
-      "wurst": "1F354", "salami": "1F354", "mettwurst": "1F354",
-      "schnitzel": "1F357", "hackfleisch": "1F969",
-      "fisch": "1F41F", "lachs": "1F41F", "thunfisch": "1F41F",
-      "forelle": "1F41F", "scholle": "1F41F", "makrele": "1F41F",
-      "garnelen": "1F990", "krabben": "1F990",
-      "tofu": "1F96C", "seitan": "1F969",
-      "vegan": "1F96C", "vegetarisch": "1F96C",
-      "nudeln": "1F35D", "spaghetti": "1F35D",
-      "penne": "1F35D", "rigatoni": "1F35D",
-      "fettuccine": "1F35D", "lasagne": "1F35D",
-      "reis": "1F35A", "couscous": "1F35A", "bulgur": "1F35A",
-      "mehl": "1F33E",
-      "zucker": "1F36C", "salz": "1F9C2", "pfeffer": "1F336",
-      "öl": "1F6E2", "olivenöl": "1F6E2",
-      "essig": "1F9C2",
-      "soße": "1F963", "ketchup": "1F345",
-      "mayo": "1F9C2", "mayonnaise": "1F9C2", "senf": "1F336",
-      "gewürz": "1F336", "gewürze": "1F336",
-      "kräuter": "1F33F", "vanille": "1F33F", "zimt": "1F33F",
-      "honig": "1F36F",
-      "marmelade": "1F36F", "nutella": "1F36F", "aufstrich": "1F36F",
-      "kapern": "1F952", "oliven": "1F95C",
-      "essiggurke": "1F952", "sauerkraut": "1F96C",
-      "peperoni": "1F336", "antipasti": "1F952",
-      "kaffee": "2615", "espresso": "2615", "cappuccino": "2615",
-      "tee": "1FAD6",
-      "bier": "1F37A", "wein": "1F377",
-      "weißwein": "1F377", "rotwein": "1F377",
-      "wasser": "1F4A7", "getränke": "1F964",
-      "cola": "1F964", "limonade": "1F964",
-      "sprite": "1F964", "fanta": "1F964", "apfelschorle": "1F964",
-      "saft": "1F9C3", "orangensaft": "1F9C3",
-      "kapseln": "2615", "kakao": "2615",
-      "tiefkühl": "2744", "tiefkühlpizza": "1F355",
-      "pizza": "1F355", "frikassee": "1F963",
-      "fischstäbchen": "1F41F", "pommes": "1F35F",
-      "eis": "1F366", "eiskrem": "1F366",
-      "toilettenpapier": "1F9FB", "küchenrolle": "1F9FB",
-      "papier": "1F4C4", "taschentuch": "1F9FB",
-      "waschmittel": "1F9FC", "spülmittel": "1FAE7", "spüli": "1FAE7",
-      "zahnpasta": "1FAE5", "zahnbürste": "1FAE5",
-      "shampoo": "1F9FC", "duschgel": "1F9FC",
-      "seife": "1F9FC",
-      "deodorant": "1F9F4", "rasierer": "1FA92",
-      "dusch": "1F6BF", "bad": "1F6BF",
-      "weichspüler": "1F9FC", "reiniger": "1F9F9", "tabs": "1F9FC",
-      "schokolade": "1F36B", "kekse": "1F36A",
-      "chips": "1F35F", "nüsse": "1F330", "mandeln": "1F330",
-      "müllbeutel": "1F5D1",
-      "aprikose": "1F351", "brombeeren": "1F347",
-      "clementine": "1F34A", "klementine": "1F34A",
-      "cranberry": "1F347", "datteln": "1F36C", "feige": "1F34A",
-      "granatapfel": "1F347", "johannisbeeren": "1F353",
-      "nektarine": "1F351", "pampelmuse": "1F34A",
-      "preiselbeeren": "1F353", "stachelbeeren": "1F353",
-      "wassermelone": "1F349",
-      "chinakohl": "1F96C", "eisbergsalat": "1F96C", "feldsalat": "1F96C",
-      "kürbis": "1F383", "lauch": "1F96C", "mais": "1F33D",
-      "mangold": "1F96C", "pak choi": "1F96C", "pastinake": "1F955",
-      "petersilie": "1F33F", "porree": "1F96C", "rettich": "1F955",
-      "rosenkohl": "1F966", "rotkohl": "1F966", "rucola": "1F96C",
-      "spargel": "1F966", "süßkartoffel": "1F360", "topinambur": "1F954",
-      "weißkohl": "1F966",
-      "buttermilch": "1F95B", "camembert": "1F9C0", "creme fraiche": "1F95B",
-      "feta": "1F9C0", "griechischer joghurt": "1FAD9", "kefir": "1F95B",
-      "kochkäse": "1F9C0", "leerdammer": "1F9C0", "milchreis": "1F35A",
-      "ricotta": "1F9C0",
-      "calamari": "1F991", "ente": "1F357", "hähnchenbrust": "1F357",
-      "hähnchenkeule": "1F357", "kalbfleisch": "1F969", "kassler": "1F953",
-      "lamm": "1F411", "leber": "1F969", "lunge": "1F969",
-      "putenbrust": "1F357", "putenschnitzel": "1F357", "rinderfilet": "1F969",
-      "rinderhack": "1F969", "rinderroulade": "1F969", "rollmops": "1F41F",
-      "sülze": "1F963", "zander": "1F41F",
-      "backpulver": "1F9C2", "balsamico": "1F9C2", "brühe": "1F963",
-      "gnocchi": "1F35D", "haferflocken": "1F33E", "kartoffelstärke": "1F33E",
-      "kichererbsen": "1F96C", "kidneybohnen": "1F96C", "linsen": "1F96C",
-      "paniermehl": "1F33E", "pesto": "1F33F", "polenta": "1F35A",
-      "rosinen": "1F347", "sahnesteif": "1F9C2", "sojasoße": "1F963",
-      "sonnenblumenöl": "1F6E2", "soßenbinder": "1F9C2",
-      "vanillezucker": "1F36C", "worcestersauce": "1F9C2",
-      "apfelschorle": "1F964", "energydrink": "1F964", "granatapfelsaft": "1F9C3",
-      "hugo": "1F377", "mineralwasser": "1F4A7", "prosecco": "1F377",
-      "radler": "1F37A", "sekt": "1F37E", "smoothie": "1F964",
-      "sprudelwasser": "1F4A7", "traubensaft": "1F9C3",
-      "aufbackbrötchen": "1F35E", "blätterteig": "1F35E", "gemüsepfanne": "1F966",
-      "knödel": "1F35D", "kuchen": "1F370", "lasagne": "1F35D",
-      "maultaschen": "1F35D", "nuggets": "1F357", "paniertes": "1F357",
-      "piroggen": "1F35D", "ravioli": "1F35D", "reibekuchen": "1F35F",
-      "schaschlik": "1F357", "tortellini": "1F35D", "waffeln": "1F367",
-      "wraps": "1F35D",
-      "abwaschbürste": "1FAE7", "alufolie": "1F4E6", "backpapier": "1F4C4",
-      "bonbons": "1F36C", "deo": "1F9F4", "desinfektionsmittel": "1F9F9",
-      "drano": "1F9F9", "feuchttücher": "1F9FB", "frischhaltefolie": "1F4E6",
-      "geschirrtabs": "1F9FC", "glühbirne": "1F4A1", "haargel": "1F9FC",
-      "handcreme": "1F9F5", "handschuhe": "1F9E4", "hustensaft": "1F9EA",
-      "insektenspray": "1F9F4", "kerze": "1F56F", "kerzen": "1F56F",
-      "klorollen": "1F9FB", "kondome": "1F9F4", "körperöl": "1F9F7",
-      "küchentücher": "1F9FB", "leinöl": "1F6E2", "lotion": "1F9F5",
-      "lufterfrischer": "1F33F", "make-up": "1F484", "mascara": "1F484",
-      "medikamente": "1F48A", "milchreiniger": "1F9FC", "mülltüten": "1F5D1",
-      "mundspülung": "1F9F4", "nasenspray": "1F9EA", "orangenschalen": "1F34A",
-      "papiertüten": "1F4E6", "parfüm": "1F484", "pfefferkörner": "1F336",
-      "pflaster": "1F48A", "rasierklingen": "1FA92", "rasierschaum": "1FAE6",
-      "räucherstäbchen": "1F56F", "salbei": "1F33F", "spülbürste": "1FAE7",
-      "staubsaugerbeutel": "1F9F9", "streichhölzer": "1F522",
-      "taschentücher": "1F9FB", "teebaumöl": "1F33F",
-      "toilettenreiniger": "1F9F9", "zahnbürste": "1FAE5",
-      "zitronenmelisse": "1F34B", "zündhölzer": "1F522",
-      "bubblegum": "1F36C", "gummibärchen": "1F36C", "kaugummi": "1F36C",
-      "knuspermüsli": "1F33E", "lebkuchen": "1F36A", "lutscher": "1F36D",
-      "marshmallow": "1F36C", "nougat": "1F36B", "pralinen": "1F36B",
-      "salzstangen": "1F35F", "studentenfutter": "1F330", "trockenobst": "1F347",
-      "weinbrand": "1F377"
-    };
-
-    for (const [key, hex] of Object.entries(iconMap)) {
+    for (const [key, hex] of Object.entries(this._iconMap)) {
       if (t.includes(key)) return hex;
     }
     return "1F6D2";
@@ -319,17 +291,7 @@ class ShoppingListCard extends HTMLElement {
 
   _getItemCategory(text) {
     const t = text.toLowerCase();
-    const cats = [
-      { key: "obst_gemuese", keys: ["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","mandarine","traube","trauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl"] },
-      { key: "brot_backwaren", keys: ["brot","brötchen","toast","semmel","baguette","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","lasagne","maultaschen","nuggets","paniertes","piroggen","ravioli","reibekuchen","tortellini","waffeln","wraps"] },
-      { key: "milch_eier", keys: ["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta"] },
-      { key: "fleisch_fisch", keys: ["fleisch","steak","hähnchen","pute","ente","schinken","speck","wurst","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"] },
-      { key: "trockenwaren", keys: ["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","öl","olivenöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","sonnenblumenöl","soßenbinder","vanillezucker","worcestersauce"] },
-      { key: "tiefkuehlprodukte", keys: ["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem","gemüsepfanne","knödel","nuggets","paniertes","piroggen","ravioli","reibekuchen","schaschlik","tortellini","waffeln"] },
-      { key: "getraenke", keys: ["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"] },
-      { key: "haushalt_hygiene", keys: ["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","bonbons","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","mundspülung","nasenspray","orangenschalen","papiertüten","parfüm","pfefferkörner","pflaster","rasierklingen","rasierschaum","räucherstäbchen","salbei","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zahnbürste","zitronenmelisse","zündhölzer"] }
-    ];
-    for (const cat of cats) {
+    for (const cat of this._catMap) {
       for (const key of cat.keys) {
         if (t.includes(key)) return cat.key;
       }
@@ -380,44 +342,7 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _getAutocompleteItems() {
-    const items = [
-      "Apfel","Banane","Birne","Kiwi","Orange","Mandarine","Trauben","Kirschen","Erdbeeren","Himbeeren",
-      "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
-      "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln",
-      "Knoblauch","Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Croissants",
-      "Milch","Joghurt","Sahne","Butter","Käse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen",
-      "Hackfleisch","Schnitzel","Wurst","Schinken","Fisch","Lachs","Garnelen","Tofu","Nudeln","Spaghetti",
-      "Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig","Ketchup","Mayonnaise","Senf","Honig",
-      "Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Wein",
-      "Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo","Duschgel","Seife","Zahnpasta","Waschmittel",
-      "Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse","Mandeln","TK-Gemüse","Müllbeutel",
-      "Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel","Heidelbeeren",
-      "Holunder","Johannisbeeren","Klementine","Mandarine","Nektarine","Pampelmuse","Preiselbeeren",
-      "Rote Bete","Stachelbeeren","Wassermelone","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat",
-      "Kürbis","Lauch","Mais","Mangold","Pak Choi","Pastinake","Peperoni","Petersilie","Porree",
-      "Rettich","Rosenkohl","Rotkohl","Rucola","Spargel","Süßkartoffel","Topinambur","Weißkohl",
-      "Buttermilch","Camembert","Creme fraiche","Feta","Griechischer Joghurt","Kefir","Kochkäse",
-      "Leerdammer","Milchreis","Ricotta","Calamari","Ente","Hähnchenbrust","Hähnchenkeule",
-      "Kalbfleisch","Kassler","Lamm","Leber","Lunge","Putenbrust","Putenschnitzel","Rinderfilet",
-      "Rinderhack","Rinderroulade","Rollmops","Sülze","Zander","Backpulver","Balsamico","Brühe",
-      "Gnocchi","Haferflocken","Kartoffelstärke","Kichererbsen","Kidneybohnen","Linsen","Oliven",
-      "Paniermehl","Pesto","Polenta","Rosinen","Sahnesteif","Sojasoße","Sonnenblumenöl","Soßenbinder",
-      "Vanillezucker","Worcestersauce","Apfelschorle","Energydrink","Granatapfelsaft","Hugo",
-      "Mineralwasser","Prosecco","Radler","Sekt","Smoothie","Sprudelwasser","Traubensaft",
-      "Aufbackbrötchen","Blätterteig","Gemüsepfanne","Knödel","Kuchen","Lasagne","Maultaschen",
-      "Nuggets","Paniertes","Piroggen","Ravioli","Reibekuchen","Schaschlik","Tortellini","Waffeln",
-      "Wraps","Abwaschbürste","Alufolie","Backpapier","Bonbons","Deo","Desinfektionsmittel",
-      "Drano","Feuchttücher","Frischhaltefolie","Geschirrtabs","Glühbirne","Haargel","Handcreme",
-      "Handschuhe","Hustensaft","Insektenspray","Kerze","Kerzen","Klorollen","Kondome","Körperöl",
-      "Küchentücher","Leinöl","Lotion","Lufterfrischer","Make-up","Mascara","Medikamente",
-      "Milchreiniger","Mülltüten","Mundspülung","Nasenspray","Orangenschalen","Papiertüten",
-      "Parfüm","Pfefferkörner","Pflaster","Rasierklingen","Rasierschaum","Räucherstäbchen",
-      "Salbei","Sekt","Spülbürste","Staubsaugerbeutel","Streichhölzer","Taschentücher",
-      "Teebaumöl","Toilettenreiniger","Zahnbürste","Zitronenmelisse","Zündhölzer","Bubblegum",
-      "Gummibärchen","Kaugummi","Knuspermüsli","Lebkuchen","Lutscher","Marshmallow","Nougat",
-      "Pralinen","Salzstangen","Studentenfutter","Trockenobst","Weinbrand"
-    ];
-    return [...new Set(items)];
+    return this._autocompleteItems;
   }
 
   _itemExists(entityId, text) {
@@ -489,7 +414,84 @@ class ShoppingListCard extends HTMLElement {
   connectedCallback() { this._subscribeChanges(); }
   disconnectedCallback() { this._unsub && (this._unsub(), this._unsub = null); }
 
+  _lightUpdate() {
+    for (const list of this.config.lists) {
+      const items = this._itemsByList[list.entity] || [];
+      const itemMap = new Map();
+      for (const item of items) itemMap.set(item.summary.toLowerCase(), item);
+      const color = list.color || "#43A047";
+
+      const tiles = this.querySelectorAll(`[data-entity="${list.entity}"].sl-tile`);
+      for (const tile of tiles) {
+        const summary = tile.dataset.summary;
+        const item = itemMap.get(summary);
+        if (!item) continue;
+        if (tile.dataset.status === item.status) continue;
+
+        const isDone = item.status === "completed";
+        tile.dataset.status = item.status;
+        tile.style.background = isDone ? "#e0e0e0" : color;
+        tile.style.border = isDone ? "2px solid #bbb" : "none";
+        tile.style.opacity = isDone ? "0.55" : "1";
+
+        const label = tile.querySelector(".sl-label");
+        if (label) {
+          label.style.color = isDone ? "#999" : "#fff";
+          label.style.textDecoration = isDone ? "line-through" : "none";
+        }
+
+        const badge = tile.querySelector(".sl-badge");
+        if (badge) {
+          badge.style.background = isDone ? "#ccc" : "rgba(255,255,255,0.25)";
+          badge.style.color = isDone ? "#666" : "#fff";
+        }
+      }
+    }
+
+    const cats = this.querySelectorAll(".sl-cat");
+    for (const cat of cats) {
+      const header = cat.querySelector(".sl-header");
+      const grid = cat.querySelector(".sl-grid");
+      if (!header || !grid) continue;
+      const countEl = header.querySelector(".sl-count");
+      if (!countEl) continue;
+      const visible = grid.querySelectorAll('.sl-tile:not(.sl-ghost)[data-status="needs_action"]').length;
+      countEl.textContent = visible;
+    }
+  }
+
   _render() {
+    const currentSummaries = [];
+    for (const list of this.config.lists) {
+      const items = this._itemsByList[list.entity] || [];
+      for (const item of items) currentSummaries.push(list.entity + "|" + item.summary);
+    }
+    currentSummaries.sort();
+    const structHash = currentSummaries.join(";");
+
+    const existingCard = this.querySelector("ha-card");
+    if (existingCard && structHash === this._lastStructHash) {
+      let sectionChanged = false;
+      for (const list of this.config.lists) {
+        const items = this._itemsByList[list.entity] || [];
+        const itemMap = new Map();
+        for (const item of items) itemMap.set(item.summary.toLowerCase(), item);
+        const tiles = existingCard.querySelectorAll(`[data-entity="${list.entity}"].sl-tile:not(.sl-ghost)`);
+        for (const tile of tiles) {
+          const item = itemMap.get(tile.dataset.summary);
+          if (!item) continue;
+          const expected = item.status === "needs_action" ? "active" : "mirror";
+          if (tile.dataset.section !== expected) { sectionChanged = true; break; }
+        }
+        if (sectionChanged) break;
+      }
+      if (!sectionChanged) {
+        this._lightUpdate();
+        return;
+      }
+    }
+    this._lastStructHash = structHash;
+
     this.innerHTML = "";
     const card = document.createElement("ha-card");
     card.style.cssText = "padding:12px;display:block;";
@@ -587,6 +589,7 @@ class ShoppingListCard extends HTMLElement {
         catName.textContent = this._getCategoryName(cat);
         header.appendChild(catName);
         const count = document.createElement("div");
+        count.className = "sl-count";
         count.style.cssText = "font-size:12px;color:#999;font-weight:400;";
         count.textContent = catItems.length;
         header.appendChild(count);
@@ -608,7 +611,11 @@ class ShoppingListCard extends HTMLElement {
           chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
         });
 
-        for (const item of catItems) grid.appendChild(this._renderTile(item, list.entity, color));
+        for (const item of catItems) {
+          const tile = this._renderTile(item, list.entity, color);
+          tile.dataset.section = "active";
+          grid.appendChild(tile);
+        }
 
         // Add tile
         const addTile = document.createElement("div");
@@ -721,6 +728,7 @@ class ShoppingListCard extends HTMLElement {
           catName.textContent = this._getCategoryName(cat);
           header.appendChild(catName);
           const count = document.createElement("div");
+          count.className = "sl-count";
           count.style.cssText = "font-size:11px;color:#ccc;font-weight:400;";
           count.textContent = catTexts.length;
           header.appendChild(count);
@@ -747,7 +755,9 @@ class ShoppingListCard extends HTMLElement {
             if (shown >= batchSize) break;
             const existing = items.find(i => i.summary.toLowerCase() === text.toLowerCase());
             if (existing) {
-              grid.appendChild(this._renderTile(existing, list.entity, color));
+              const tile = this._renderTile(existing, list.entity, color);
+              tile.dataset.section = "mirror";
+              grid.appendChild(tile);
             } else {
               grid.appendChild(this._renderGhostTile(text, list.entity, color));
             }
@@ -770,7 +780,9 @@ class ShoppingListCard extends HTMLElement {
                 const text = catTexts[i];
                 const existing = items.find(it => it.summary.toLowerCase() === text.toLowerCase());
                 if (existing) {
-                  grid.appendChild(this._renderTile(existing, list.entity, color));
+                  const tile = this._renderTile(existing, list.entity, color);
+                  tile.dataset.section = "mirror";
+                  grid.appendChild(tile);
                 } else {
                   grid.appendChild(this._renderGhostTile(text, list.entity, color));
                 }
@@ -790,10 +802,13 @@ class ShoppingListCard extends HTMLElement {
   _renderTile(item, entityId, color) {
     const isDone = item.status === "completed";
     const tile = document.createElement("div");
+    tile.className = "sl-tile";
     tile.dataset.summary = item.summary.toLowerCase();
+    tile.dataset.entity = entityId;
+    tile.dataset.status = item.status;
     tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:" + (isDone ? "#e0e0e0" : color) + ";border:" + (isDone ? "2px solid #bbb" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;";
-    tile.addEventListener("mouseenter", () => { if (!isDone) tile.style.background = "#388E3C"; });
-    tile.addEventListener("mouseleave", () => { tile.style.background = isDone ? "#e0e0e0" : color; });
+    tile.addEventListener("mouseenter", () => { if (tile.dataset.status !== "completed") tile.style.background = "#388E3C"; });
+    tile.addEventListener("mouseleave", () => { tile.style.background = tile.dataset.status === "completed" ? "#e0e0e0" : color; });
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
@@ -802,19 +817,29 @@ class ShoppingListCard extends HTMLElement {
     tile.appendChild(iconWrap);
 
     const label = document.createElement("div");
+    label.className = "sl-label";
     label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:" + (isDone ? "#999" : "#fff") + ";text-decoration:" + (isDone ? "line-through" : "none") + ";max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
     label.textContent = item.summary;
     tile.appendChild(label);
 
     if (item.description) {
       const badge = document.createElement("div");
+      badge.className = "sl-badge";
       badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "#ccc" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "#666" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
       badge.textContent = item.description;
       tile.appendChild(badge);
     }
 
-    let pressTimer, longPress = false;
-    const startPress = () => { longPress = false; pressTimer = setTimeout(() => { longPress = true; this._showEditModal(item, entityId); }, 600); };
+    let pressTimer;
+    const startPress = () => {
+      tile.dataset.longPress = "";
+      pressTimer = setTimeout(() => {
+        tile.dataset.longPress = "1";
+        const items = this._itemsByList[entityId] || [];
+        const currentItem = items.find(i => i.summary.toLowerCase() === tile.dataset.summary);
+        if (currentItem) this._showEditModal(currentItem, entityId);
+      }, 600);
+    };
     const endPress = () => { clearTimeout(pressTimer); };
     tile.addEventListener("touchstart", startPress, { passive: true });
     tile.addEventListener("touchend", endPress);
@@ -822,13 +847,22 @@ class ShoppingListCard extends HTMLElement {
     tile.addEventListener("mousedown", startPress);
     tile.addEventListener("mouseup", endPress);
     tile.addEventListener("mouseleave", endPress);
-    tile.addEventListener("click", () => { if (!longPress) this._toggleItem(entityId, item); });
+    tile.addEventListener("click", () => {
+      if (tile.dataset.longPress !== "1") {
+        const items = this._itemsByList[entityId] || [];
+        const currentItem = items.find(i => i.summary.toLowerCase() === tile.dataset.summary);
+        if (currentItem) this._toggleItem(entityId, currentItem);
+      }
+    });
     return tile;
   }
 
   _renderGhostTile(text, entityId, color) {
     const tile = document.createElement("div");
+    tile.className = "sl-tile sl-ghost";
     tile.dataset.summary = text.toLowerCase();
+    tile.dataset.entity = entityId;
+    tile.dataset.status = "ghost";
     tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:#f5f5f5;border:2px dashed #ddd;opacity:0.65;cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;";
     tile.addEventListener("mouseenter", () => { tile.style.background = "#e8f5e9"; tile.style.borderColor = color; tile.style.opacity = "0.9"; });
     tile.addEventListener("mouseleave", () => { tile.style.background = "#f5f5f5"; tile.style.borderColor = "#ddd"; tile.style.opacity = "0.65"; });
@@ -840,6 +874,7 @@ class ShoppingListCard extends HTMLElement {
     tile.appendChild(iconWrap);
 
     const label = document.createElement("div");
+    label.className = "sl-label";
     label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:#999;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
     label.textContent = text;
     tile.appendChild(label);
