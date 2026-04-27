@@ -367,16 +367,16 @@ class ShoppingListCard extends HTMLElement {
 
   _getCategoryColor(key) {
     return {
-      obst_gemuese: "#E67E22",
-      brot_backwaren: "#D35400",
-      milch_eier: "#F39C12",
-      fleisch_fisch: "#E74C3C",
-      trockenwaren: "#8E44AD",
-      tiefkuehlprodukte: "#3498DB",
-      getraenke: "#1ABC9C",
-      haushalt_hygiene: "#9B59B6",
-      sonstiges: "#7F8C8D"
-    }[key] || "#7F8C8D";
+      obst_gemuese: "var(--shopping-list-cat-obst, #E67E22)",
+      brot_backwaren: "var(--shopping-list-cat-brot, #D35400)",
+      milch_eier: "var(--shopping-list-cat-milch, #F39C12)",
+      fleisch_fisch: "var(--shopping-list-cat-fleisch, #E74C3C)",
+      trockenwaren: "var(--shopping-list-cat-trocken, #8E44AD)",
+      tiefkuehlprodukte: "var(--shopping-list-cat-tiefkuehl, #3498DB)",
+      getraenke: "var(--shopping-list-cat-getraenke, #1ABC9C)",
+      haushalt_hygiene: "var(--shopping-list-cat-haushalt, #9B59B6)",
+      sonstiges: "var(--shopping-list-cat-sonstiges, #7F8C8D)"
+    }[key] || "var(--shopping-list-cat-sonstiges, #7F8C8D)";
   }
 
   _getAutocompleteItems() {
