@@ -697,7 +697,7 @@ class ShoppingListCard extends HTMLElement {
         mt.textContent = "Verfügbar (" + totalAvail + ")";
         mirrorTitle.appendChild(mt);
         const clearAll = document.createElement("div");
-        clearAll.textContent = "alle entfernen";
+        clearAll.textContent = "erledigte löschen";
         clearAll.style.cssText = "font-size:11px;color:#aaa;cursor:pointer;";
         clearAll.addEventListener("click", () => this._clearDone(list.entity));
         mirrorTitle.appendChild(clearAll);
