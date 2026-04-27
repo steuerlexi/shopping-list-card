@@ -82,7 +82,14 @@ class ShoppingListCard extends HTMLElement {
       if (!oldState || !newState) return !0;
       if (oldState.last_changed !== newState.last_changed) return !0;
       if (oldState.last_updated !== newState.last_updated) return !0;
-      if (JSON.stringify(oldState.attributes) !== JSON.stringify(newState.attributes)) return !0;
+      const oldItems = oldState.attributes?.todo_items;
+      const newItems = newState.attributes?.todo_items;
+      if (oldItems?.length !== newItems?.length) return !0;
+      if ((oldItems?.length || 0) > 0 && (newItems?.length || 0) > 0) {
+        const oldLast = oldItems[oldItems.length - 1].last_updated || 0;
+        const newLast = newItems[newItems.length - 1].last_updated || 0;
+        if (oldLast !== newLast) return !0;
+      }
     }
     return !1;
   }
@@ -701,13 +708,42 @@ class ShoppingListCard extends HTMLElement {
             chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
           });
 
+          const batchSize = 50;
+          let shown = 0;
           for (const text of catTexts) {
+            if (shown >= batchSize) break;
             const existing = items.find(i => i.summary.toLowerCase() === text.toLowerCase());
             if (existing) {
               grid.appendChild(this._renderTile(existing, list.entity, color));
             } else {
               grid.appendChild(this._renderGhostTile(text, list.entity, color));
             }
+            shown++;
+          }
+          if (catTexts.length > batchSize) {
+            const loadMore = document.createElement("div");
+            loadMore.style.cssText = "display:flex;align-items:center;justify-content:center;padding:8px;border-radius:12px;background:#fafafa;border:1px dashed #ccc;cursor:pointer;margin-top:4px;grid-column:1 / -1;transition:all 0.15s;";
+            loadMore.textContent = "Mehr laden (" + (catTexts.length - shown) + ")";
+            loadMore.style.fontSize = "12px";
+            loadMore.style.color = "#999";
+            loadMore.addEventListener("mouseenter", () => { loadMore.style.background = "#e8f5e9"; loadMore.style.borderColor = color; });
+            loadMore.addEventListener("mouseleave", () => { loadMore.style.background = "#fafafa"; loadMore.style.borderColor = "#ccc"; });
+            let expanded = !1;
+            loadMore.addEventListener("click", () => {
+              if (expanded) return;
+              expanded = !0;
+              loadMore.remove();
+              for (let i = batchSize; i < catTexts.length; i++) {
+                const text = catTexts[i];
+                const existing = items.find(it => it.summary.toLowerCase() === text.toLowerCase());
+                if (existing) {
+                  grid.appendChild(this._renderTile(existing, list.entity, color));
+                } else {
+                  grid.appendChild(this._renderGhostTile(text, list.entity, color));
+                }
+              }
+            });
+            grid.appendChild(loadMore);
           }
           catWrap.appendChild(grid);
           mirrorWrap.appendChild(catWrap);
