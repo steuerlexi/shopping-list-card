@@ -807,10 +807,10 @@ class ShoppingListCard extends HTMLElement {
     tile.appendChild(label);
 
     if (item.description) {
-      const desc = document.createElement("div");
-      desc.style.cssText = "font-size:8px;color:" + (isDone ? "#999" : "rgba(255,255,255,0.75)") + ";text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
-      desc.textContent = item.description;
-      tile.appendChild(desc);
+      const badge = document.createElement("div");
+      badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "#ccc" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "#666" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
+      badge.textContent = item.description;
+      tile.appendChild(badge);
     }
 
     let pressTimer, longPress = false;
@@ -864,7 +864,7 @@ class ShoppingListCard extends HTMLElement {
 
     const hint = document.createElement("div");
     hint.style.cssText = "font-size:13px;color:#666;margin-bottom:8px;";
-    hint.textContent = "Anmerkung (z.B. 20 Bio, Frische)";
+    hint.textContent = "Anmerkungen (z.B. 20 Bio, Frische)";
     box.appendChild(hint);
 
     const descInput = document.createElement("input");
