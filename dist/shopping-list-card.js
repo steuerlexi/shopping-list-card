@@ -481,10 +481,10 @@ class ShoppingListCard extends HTMLElement {
 
         // Add tile
         const addTile = document.createElement("div");
-        addTile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:12px;border:2px dashed " + color + "60;background:#fff;cursor:pointer;min-height:90px;transition:all 0.15s;position:relative;";
+        addTile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:12px;border:2px dashed " + color + "60;background:#fff;cursor:pointer;min-height:72px;transition:all 0.15s;position:relative;";
         const plusIcon = document.createElement("ha-icon");
         plusIcon.setAttribute("icon", "mdi:plus");
-        plusIcon.style.cssText = "color:" + color + ";width:28px;height:28px;";
+        plusIcon.style.cssText = "color:" + color + ";width:22px;height:22px;";
         addTile.appendChild(plusIcon);
         addTile.addEventListener("mouseenter", () => { addTile.style.background = "#e8f5e9"; addTile.style.borderColor = color; });
         addTile.addEventListener("mouseleave", () => { addTile.style.background = "#fff"; addTile.style.borderColor = color + "60"; });
@@ -503,7 +503,7 @@ class ShoppingListCard extends HTMLElement {
               addTile.innerHTML = "";
               const pi = document.createElement("ha-icon");
               pi.setAttribute("icon", "mdi:plus");
-              pi.style.cssText = "color:" + color + ";width:28px;height:28px;";
+              pi.style.cssText = "color:" + color + ";width:22px;height:22px;";
               addTile.appendChild(pi);
               tileInput = null;
             };
@@ -617,24 +617,24 @@ class ShoppingListCard extends HTMLElement {
   _renderTile(item, entityId, color) {
     const isDone = item.status === "completed";
     const tile = document.createElement("div");
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:10px 6px 8px;border-radius:12px;background:" + (isDone ? "#e0e0e0" : color) + ";border:" + (isDone ? "2px solid #bbb" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:90px;position:relative;transition:all 0.15s;user-select:none;";
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:" + (isDone ? "#e0e0e0" : color) + ";border:" + (isDone ? "2px solid #bbb" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;";
     tile.addEventListener("mouseenter", () => { if (!isDone) tile.style.background = "#388E3C"; });
     tile.addEventListener("mouseleave", () => { tile.style.background = isDone ? "#e0e0e0" : color; });
 
     const iconWrap = document.createElement("div");
-    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:52px;height:52px;flex-shrink:0;";
-    const icon = this._createOpenmojiImg(this._getItemIcon(item.summary), 44);
+    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
+    const icon = this._createOpenmojiImg(this._getItemIcon(item.summary), 36);
     iconWrap.appendChild(icon);
     tile.appendChild(iconWrap);
 
     const label = document.createElement("div");
-    label.style.cssText = "font-size:12px;font-weight:500;text-align:center;color:" + (isDone ? "#999" : "#fff") + ";text-decoration:" + (isDone ? "line-through" : "none") + ";max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
+    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:" + (isDone ? "#999" : "#fff") + ";text-decoration:" + (isDone ? "line-through" : "none") + ";max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
     label.textContent = item.summary;
     tile.appendChild(label);
 
     if (item.description) {
       const desc = document.createElement("div");
-      desc.style.cssText = "font-size:10px;color:" + (isDone ? "#999" : "rgba(255,255,255,0.75)") + ";text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+      desc.style.cssText = "font-size:8px;color:" + (isDone ? "#999" : "rgba(255,255,255,0.75)") + ";text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
       desc.textContent = item.description;
       tile.appendChild(desc);
     }
