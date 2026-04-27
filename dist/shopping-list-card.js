@@ -8,6 +8,7 @@ class ShoppingListCard extends HTMLElement {
     this._iconMap = null;
     this._catMap = null;
     this._renderedHash = "";
+    this._mdiIconMap = {};
   }
 
   setConfig(config) {
@@ -176,6 +177,7 @@ class ShoppingListCard extends HTMLElement {
       { key: "getraenke", keys: new Set(["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"]) },
       { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","mundspülung","nasenspray","orangenschalen","papiertüten","parfüm","pfefferkörner","pflaster","rasierklingen","rasierschaum","räucherstäbchen","salbei","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zahnbürste","zitronenmelisse","zündhölzer"]) }
     ];
+    this._loadMdiIcons();
   }
 
   set hass(hass) {
@@ -287,6 +289,49 @@ class ShoppingListCard extends HTMLElement {
       if (t.includes(key)) return hex;
     }
     return "1F6D2";
+  }
+
+  _loadMdiIcons() {
+    try {
+      const raw = localStorage.getItem("shopping-list-card-mdi-icons");
+      if (raw) this._mdiIconMap = JSON.parse(raw);
+    } catch (e) {
+      this._mdiIconMap = {};
+    }
+  }
+
+  _getMdiIcon(text) {
+    const t = text.toLowerCase();
+    if (this._mdiIconMap[t]) return this._mdiIconMap[t];
+    const map = this.config?.icon_map || {};
+    if (map[t] && String(map[t]).startsWith("mdi:")) return map[t];
+    return null;
+  }
+
+  _setMdiIcon(text, icon) {
+    const t = text.toLowerCase();
+    if (!icon) {
+      delete this._mdiIconMap[t];
+    } else {
+      this._mdiIconMap[t] = icon;
+    }
+    try {
+      localStorage.setItem("shopping-list-card-mdi-icons", JSON.stringify(this._mdiIconMap));
+    } catch (e) {}
+  }
+
+  _renderItemIcon(container, text, size) {
+    const mdiIcon = this._getMdiIcon(text);
+    container.innerHTML = "";
+    if (mdiIcon && mdiIcon.startsWith("mdi:")) {
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", mdiIcon);
+      icon.style.cssText = `width:${size}px;height:${size}px;color:inherit;`;
+      container.appendChild(icon);
+    } else {
+      const icon = this._createOpenmojiImg(this._getItemIcon(text), size);
+      container.appendChild(icon);
+    }
   }
 
   _getItemCategory(text) {
@@ -879,8 +924,7 @@ class ShoppingListCard extends HTMLElement {
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
-    const icon = this._createOpenmojiImg(this._getItemIcon(item.summary), 36);
-    iconWrap.appendChild(icon);
+    this._renderItemIcon(iconWrap, item.summary, 36);
     tile.appendChild(iconWrap);
 
     const label = document.createElement("div");
@@ -937,8 +981,7 @@ class ShoppingListCard extends HTMLElement {
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
-    const icon = this._createOpenmojiImg(this._getItemIcon(text), 36);
-    iconWrap.appendChild(icon);
+    this._renderItemIcon(iconWrap, text, 36);
     tile.appendChild(iconWrap);
 
     const label = document.createElement("div");
@@ -994,6 +1037,38 @@ class ShoppingListCard extends HTMLElement {
     }
     box.appendChild(quickWrap);
 
+    const iconWrap = document.createElement("div");
+    iconWrap.style.cssText = "margin-bottom:12px;";
+    const iconLabel = document.createElement("div");
+    iconLabel.style.cssText = "font-size:13px;color:#666;margin-bottom:4px;";
+    iconLabel.textContent = "MDI Icon (optional)";
+    iconWrap.appendChild(iconLabel);
+    const iconRow = document.createElement("div");
+    iconRow.style.cssText = "display:flex;align-items:center;gap:8px;";
+    const iconInput = document.createElement("input");
+    iconInput.type = "text";
+    iconInput.placeholder = "z.B. mdi:food-apple";
+    iconInput.value = this._getMdiIcon(item.summary) || "";
+    iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:#f1f8e9;color:#333;font-size:15px;outline:none;box-sizing:border-box;";
+    const iconPreview = document.createElement("ha-icon");
+    iconPreview.style.cssText = "width:28px;height:28px;color:#666;flex-shrink:0;";
+    const updatePreview = () => {
+      const val = iconInput.value.trim();
+      if (val && val.startsWith("mdi:")) {
+        iconPreview.setAttribute("icon", val);
+        iconPreview.style.color = "#333";
+      } else {
+        iconPreview.setAttribute("icon", "mdi:image-off");
+        iconPreview.style.color = "#ccc";
+      }
+    };
+    updatePreview();
+    iconInput.addEventListener("input", updatePreview);
+    iconRow.appendChild(iconInput);
+    iconRow.appendChild(iconPreview);
+    iconWrap.appendChild(iconRow);
+    box.appendChild(iconWrap);
+
     const descInput = document.createElement("input");
     descInput.type = "text";
     descInput.value = item.description || "";
@@ -1006,7 +1081,19 @@ class ShoppingListCard extends HTMLElement {
     const saveBtn = document.createElement("button");
     saveBtn.textContent = "Speichern";
     saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:#43A047;color:#fff;font-size:15px;font-weight:600;cursor:pointer;";
-    saveBtn.addEventListener("click", () => { this._updateDescription(entityId, item, descInput.value.trim()); overlay.remove(); });
+    saveBtn.addEventListener("click", () => {
+      const mdiVal = iconInput.value.trim();
+      const prevMdi = this._getMdiIcon(item.summary);
+      let iconChanged = false;
+      if (mdiVal && mdiVal.startsWith("mdi:")) {
+        if (prevMdi !== mdiVal) { this._setMdiIcon(item.summary, mdiVal); iconChanged = true; }
+      } else if (prevMdi) {
+        this._setMdiIcon(item.summary, null); iconChanged = true;
+      }
+      this._updateDescription(entityId, item, descInput.value.trim());
+      if (iconChanged) this._render();
+      overlay.remove();
+    });
     btns.appendChild(saveBtn);
 
     const cancelBtn = document.createElement("button");
