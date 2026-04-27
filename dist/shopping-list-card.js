@@ -233,8 +233,8 @@ class ShoppingListCard extends HTMLElement {
       const oldItems = oldState.attributes?.todo_items || [];
       const newItems = newState.attributes?.todo_items || [];
       if (oldItems.length !== newItems.length) return true;
-      const oldHash = oldItems.map(i => i.summary + i.status).join("|");
-      const newHash = newItems.map(i => i.summary + i.status).join("|");
+      const oldHash = oldItems.map(i => i.summary + i.status + (i.description || "")).join("|");
+      const newHash = newItems.map(i => i.summary + i.status + (i.description || "")).join("|");
       if (oldHash !== newHash) return true;
     }
     return false;
@@ -444,6 +444,26 @@ class ShoppingListCard extends HTMLElement {
         if (badge) {
           badge.style.background = isDone ? "#ccc" : "rgba(255,255,255,0.25)";
           badge.style.color = isDone ? "#666" : "#fff";
+        }
+
+        const oldDesc = tile.querySelector(".sl-badge")?.textContent || "";
+        const newDesc = item.description || "";
+        if (oldDesc !== newDesc) {
+          if (!newDesc) {
+            const b = tile.querySelector(".sl-badge");
+            b && b.remove();
+          } else {
+            let b = tile.querySelector(".sl-badge");
+            if (b) {
+              b.textContent = newDesc;
+            } else {
+              b = document.createElement("div");
+              b.className = "sl-badge";
+              b.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "#ccc" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "#666" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
+              b.textContent = newDesc;
+              tile.appendChild(b);
+            }
+          }
         }
       }
     }
@@ -901,6 +921,30 @@ class ShoppingListCard extends HTMLElement {
     hint.style.cssText = "font-size:13px;color:#666;margin-bottom:8px;";
     hint.textContent = "Anmerkungen (z.B. 2 Packungen, Bio)";
     box.appendChild(hint);
+
+    const quickWrap = document.createElement("div");
+    quickWrap.style.cssText = "display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;";
+    for (const qty of ["1x", "2x", "5x", "10x"]) {
+      const btn = document.createElement("button");
+      btn.textContent = "+" + qty;
+      btn.style.cssText = "padding:6px 12px;border-radius:16px;border:1px solid #c8e6c9;background:#e8f5e9;color:#2e7d32;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
+      btn.addEventListener("mouseenter", () => { btn.style.background = "#c8e6c9"; });
+      btn.addEventListener("mouseleave", () => { btn.style.background = "#e8f5e9"; });
+      btn.addEventListener("click", () => {
+        const val = descInput.value.trim();
+        const num = qty.replace("x", "");
+        if (!val) {
+          descInput.value = qty;
+        } else if (/^\d+x?\s*/.test(val)) {
+          descInput.value = qty + " " + val.replace(/^\d+x?\s*/, "");
+        } else {
+          descInput.value = qty + " " + val;
+        }
+        descInput.focus();
+      });
+      quickWrap.appendChild(btn);
+    }
+    box.appendChild(quickWrap);
 
     const descInput = document.createElement("input");
     descInput.type = "text";
