@@ -61,7 +61,7 @@ class ShoppingListCard extends HTMLElement {
           domain: "todo",
           service: "get_items",
           service_data: { entity_id: entityId, status: ["needs_action", "completed"] },
-          return_response: !0
+          return_response: true
         });
         const resp = res?.result?.response || res?.response;
         const items = resp?.[entityId]?.items || [];
@@ -74,24 +74,24 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _shouldRender(oldHass, newHass) {
-    if (!this.config?.lists) return !1;
+    if (!this.config?.lists) return false;
     for (const list of this.config.lists) {
       const id = list.entity;
       const oldState = oldHass.states[id];
       const newState = newHass.states[id];
-      if (!oldState || !newState) return !0;
-      if (oldState.last_changed !== newState.last_changed) return !0;
-      if (oldState.last_updated !== newState.last_updated) return !0;
+      if (!oldState || !newState) return true;
+      if (oldState.last_changed !== newState.last_changed) return true;
+      if (oldState.last_updated !== newState.last_updated) return true;
       const oldItems = oldState.attributes?.todo_items;
       const newItems = newState.attributes?.todo_items;
-      if (oldItems?.length !== newItems?.length) return !0;
+      if (oldItems?.length !== newItems?.length) return true;
       if ((oldItems?.length || 0) > 0 && (newItems?.length || 0) > 0) {
         const oldLast = oldItems[oldItems.length - 1].last_updated || 0;
         const newLast = newItems[newItems.length - 1].last_updated || 0;
-        if (oldLast !== newLast) return !0;
+        if (oldLast !== newLast) return true;
       }
     }
-    return !1;
+    return false;
   }
 
   _filterVisible(listWrap, query) {
@@ -320,13 +320,13 @@ class ShoppingListCard extends HTMLElement {
   _getItemCategory(text) {
     const t = text.toLowerCase();
     const cats = [
-      { key: "obst_gemuese", keys: ["apfel","banane","birne","kiwi","orange","mandarine","traube","kirsche","erdbeere","himbeere","heidelbeere","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl"] },
+      { key: "obst_gemuese", keys: ["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","mandarine","traube","trauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl"] },
       { key: "brot_backwaren", keys: ["brot","brötchen","toast","semmel","baguette","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","lasagne","maultaschen","nuggets","paniertes","piroggen","ravioli","reibekuchen","tortellini","waffeln","wraps"] },
       { key: "milch_eier", keys: ["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta"] },
       { key: "fleisch_fisch", keys: ["fleisch","steak","hähnchen","pute","ente","schinken","speck","wurst","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"] },
       { key: "trockenwaren", keys: ["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","öl","olivenöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","sonnenblumenöl","soßenbinder","vanillezucker","worcestersauce"] },
       { key: "tiefkuehlprodukte", keys: ["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem","gemüsepfanne","knödel","nuggets","paniertes","piroggen","ravioli","reibekuchen","schaschlik","tortellini","waffeln"] },
-      { key: "getraenke", keys: ["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","apfelschorle","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"] },
+      { key: "getraenke", keys: ["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"] },
       { key: "haushalt_hygiene", keys: ["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","bonbons","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","mundspülung","nasenspray","orangenschalen","papiertüten","parfüm","pfefferkörner","pflaster","rasierklingen","rasierschaum","räucherstäbchen","salbei","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zahnbürste","zitronenmelisse","zündhölzer"] }
     ];
     for (const cat of cats) {
@@ -600,7 +600,7 @@ class ShoppingListCard extends HTMLElement {
         const grid = document.createElement("div");
         grid.className = "sl-grid";
         grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:12px;padding:12px;transition:max-height 0.3s ease;";
-        let collapsed = !1;
+        let collapsed = false;
         header.addEventListener("click", () => {
           collapsed = !collapsed;
           grid.style.display = collapsed ? "none" : "grid";
@@ -733,7 +733,7 @@ class ShoppingListCard extends HTMLElement {
           const grid = document.createElement("div");
           grid.className = "sl-grid";
           grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:8px;padding:8px;transition:max-height 0.3s ease;";
-          let collapsed = !1;
+          let collapsed = false;
           header.addEventListener("click", () => {
             collapsed = !collapsed;
             grid.style.display = collapsed ? "none" : "grid";
@@ -761,10 +761,10 @@ class ShoppingListCard extends HTMLElement {
             loadMore.style.color = "#999";
             loadMore.addEventListener("mouseenter", () => { loadMore.style.background = "#e8f5e9"; loadMore.style.borderColor = color; });
             loadMore.addEventListener("mouseleave", () => { loadMore.style.background = "#fafafa"; loadMore.style.borderColor = "#ccc"; });
-            let expanded = !1;
+            let expanded = false;
             loadMore.addEventListener("click", () => {
               if (expanded) return;
-              expanded = !0;
+              expanded = true;
               loadMore.remove();
               for (let i = batchSize; i < catTexts.length; i++) {
                 const text = catTexts[i];
@@ -813,10 +813,10 @@ class ShoppingListCard extends HTMLElement {
       tile.appendChild(desc);
     }
 
-    let pressTimer, longPress = !1;
-    const startPress = () => { longPress = !1; pressTimer = setTimeout(() => { longPress = !0; this._showEditModal(item, entityId); }, 600); };
+    let pressTimer, longPress = false;
+    const startPress = () => { longPress = false; pressTimer = setTimeout(() => { longPress = true; this._showEditModal(item, entityId); }, 600); };
     const endPress = () => { clearTimeout(pressTimer); };
-    tile.addEventListener("touchstart", startPress, { passive: !0 });
+    tile.addEventListener("touchstart", startPress, { passive: true });
     tile.addEventListener("touchend", endPress);
     tile.addEventListener("touchmove", endPress);
     tile.addEventListener("mousedown", startPress);
