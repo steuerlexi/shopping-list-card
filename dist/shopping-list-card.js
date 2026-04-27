@@ -366,6 +366,14 @@ class ShoppingListCard extends HTMLElement {
     if (navigator.vibrate) navigator.vibrate(ms);
   }
 
+  _callService(domain, service, data) {
+    if (!this._hass) return Promise.resolve();
+    return this._hass.callService(domain, service, data).catch(e => {
+      console.warn("Shopping List Card: Service call failed", domain, service, e);
+      this._showToast("Fehler: " + (e.message || "Service-Aufruf fehlgeschlagen"));
+    });
+  }
+
   _addItem(entityId, text) {
     const val = text.trim();
     if (!val || !this._hass) return;
@@ -374,32 +382,32 @@ class ShoppingListCard extends HTMLElement {
       this._haptic(30);
       return;
     }
-    this._hass.callService("todo", "add_item", { entity_id: entityId, item: val });
+    this._callService("todo", "add_item", { entity_id: entityId, item: val });
     this._haptic(60);
   }
 
   _toggleItem(entityId, item) {
     if (!this._hass) return;
     const status = item.status === "completed" ? "needs_action" : "completed";
-    this._hass.callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status });
+    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status });
     this._haptic(status === "needs_action" ? 40 : 60);
   }
 
   _removeItem(entityId, item) {
     if (!this._hass) return;
-    this._hass.callService("todo", "remove_item", { entity_id: entityId, item: item.summary });
+    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary });
     this._haptic(40);
   }
 
   _clearDone(entityId) {
     if (!this._hass) return;
-    this._hass.callService("todo", "remove_completed_items", { entity_id: entityId });
+    this._callService("todo", "remove_completed_items", { entity_id: entityId });
     this._haptic(80);
   }
 
   _updateDescription(entityId, item, desc) {
     if (!this._hass) return;
-    this._hass.callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc });
+    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc });
     this._haptic(40);
   }
 
@@ -478,6 +486,317 @@ class ShoppingListCard extends HTMLElement {
       const visible = grid.querySelectorAll('.sl-tile:not(.sl-ghost)[data-status="needs_action"]').length;
       countEl.textContent = visible;
     }
+
+    const modal = this.querySelector(".shopping-list-modal");
+    if (modal) {
+      const modalTitle = modal.querySelector("div > div:first-child");
+      if (modalTitle) {
+        const summary = modalTitle.textContent.toLowerCase();
+        let found = false;
+        for (const list of this.config.lists) {
+          const items = this._itemsByList[list.entity] || [];
+          if (items.some(i => i.summary.toLowerCase() === summary)) { found = true; break; }
+        }
+        if (!found) modal.remove();
+      }
+    }
+  }
+
+  _renderSearchBar(list) {
+    const listWrap = document.createElement("div");
+    listWrap.style.cssText = "margin-bottom:14px;position:relative;";
+    const color = list.color || "#43A047";
+
+    const searchWrap = document.createElement("div");
+    searchWrap.style.cssText = "display:flex;align-items:center;background:#fafafa;border-radius:12px;padding:0 12px;border:1px solid #e8e8e8;";
+    const searchIcon = document.createElement("ha-icon");
+    searchIcon.setAttribute("icon", "mdi:magnify");
+    searchIcon.style.cssText = "color:#aaa;width:20px;height:20px;margin-right:8px;";
+    searchWrap.appendChild(searchIcon);
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Artikel suchen oder hinzufügen...";
+    input.style.cssText = "flex:1;border:none;background:transparent;font-size:16px;padding:12px 0;outline:none;color:#333;";
+    searchWrap.appendChild(input);
+    const addBtn = document.createElement("button");
+    addBtn.textContent = "+";
+    addBtn.style.cssText = "background:transparent;color:#888;border:none;border-radius:50%;width:32px;height:32px;font-size:22px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+    searchWrap.appendChild(addBtn);
+    listWrap.appendChild(searchWrap);
+
+    const hasItems = (this._itemsByList[list.entity] || []).length > 0;
+    if (!hasItems) {
+      const loadingRow = document.createElement("div");
+      loadingRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:8px 4px;color:#999;font-size:13px;";
+      const spin = document.createElement("ha-icon");
+      spin.setAttribute("icon", "mdi:loading");
+      spin.style.cssText = "width:16px;height:16px;color:#aaa;animation:sl-spin 1s linear infinite;";
+      loadingRow.appendChild(spin);
+      const lt = document.createElement("span");
+      lt.textContent = "Artikel werden geladen...";
+      loadingRow.appendChild(lt);
+      listWrap.appendChild(loadingRow);
+    }
+
+    const acDropdown = document.createElement("div");
+    acDropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:#fff;border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;max-height:200px;overflow-y:auto;display:none;";
+    listWrap.appendChild(acDropdown);
+
+    const acItems = this._getAutocompleteItems();
+    input.addEventListener("input", () => {
+      const val = input.value.toLowerCase().trim();
+      acDropdown.innerHTML = "";
+      this._filterVisible(listWrap, val);
+      if (!val) { acDropdown.style.display = "none"; return; }
+      const matches = acItems.filter(it => it.toLowerCase().includes(val) && !this._itemExists(list.entity, it)).slice(0, 8);
+      if (matches.length) {
+        matches.forEach(m => {
+          const row = document.createElement("div");
+          row.style.cssText = "padding:10px 16px;cursor:pointer;font-size:15px;color:#333;border-bottom:1px solid #e0e0e0;";
+          row.textContent = m;
+          row.addEventListener("mouseenter", () => row.style.background = "#e8f5e9");
+          row.addEventListener("mouseleave", () => row.style.background = "#fff");
+          row.addEventListener("click", () => { this._addItem(list.entity, m); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); });
+          acDropdown.appendChild(row);
+        });
+        acDropdown.style.display = "block";
+      } else {
+        acDropdown.style.display = "none";
+      }
+    });
+
+    const doAdd = () => {
+      if (input.value.trim()) { this._addItem(list.entity, input.value); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); }
+    };
+    addBtn.addEventListener("click", doAdd);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
+    input.addEventListener("blur", () => { setTimeout(() => { acDropdown.style.display = "none"; if (!input.value.trim()) this._filterVisible(listWrap, ""); }, 200); });
+    input.addEventListener("focus", () => { if (input.value.trim()) input.dispatchEvent(new Event("input")); });
+
+    return listWrap;
+  }
+
+  _renderCategory(cat, catItems, list, color) {
+    const catWrap = document.createElement("div");
+    catWrap.className = "sl-cat";
+    catWrap.style.marginBottom = "16px";
+
+    const header = document.createElement("div");
+    header.className = "sl-header";
+    header.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #e8e8e8;cursor:pointer;user-select:none;";
+    const catColor = this._getCategoryColor(cat);
+    const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 20);
+    catIcon.style.filter = "drop-shadow(0 0 1px rgba(0,0,0,0.2))";
+    header.appendChild(catIcon);
+    const catName = document.createElement("div");
+    catName.style.cssText = "font-weight:500;font-size:14px;flex:1;color:" + catColor;
+    catName.textContent = this._getCategoryName(cat);
+    header.appendChild(catName);
+    const count = document.createElement("div");
+    count.className = "sl-count";
+    count.style.cssText = "font-size:12px;color:#999;font-weight:400;";
+    count.textContent = catItems.length;
+    header.appendChild(count);
+    const chevron = document.createElement("ha-icon");
+    chevron.setAttribute("icon", "mdi:chevron-down");
+    chevron.style.cssText = "color:#bbb;width:18px;height:18px;";
+    header.appendChild(chevron);
+    catWrap.appendChild(header);
+
+    const grid = document.createElement("div");
+    grid.className = "sl-grid";
+    grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:12px;padding:12px;transition:max-height 0.3s ease;";
+    let collapsed = false;
+    header.addEventListener("click", () => {
+      collapsed = !collapsed;
+      grid.style.display = collapsed ? "none" : "grid";
+      grid.dataset.collapsed = collapsed ? "true" : "";
+      chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
+    });
+
+    for (const item of catItems) {
+      const tile = this._renderTile(item, list.entity, color);
+      tile.dataset.section = "active";
+      grid.appendChild(tile);
+    }
+
+    const addTile = document.createElement("div");
+    addTile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:12px;border:2px dashed " + color + "60;background:#fff;cursor:pointer;min-height:72px;transition:all 0.15s;position:relative;";
+    const plusIcon = document.createElement("ha-icon");
+    plusIcon.setAttribute("icon", "mdi:plus");
+    plusIcon.style.cssText = "color:" + color + ";width:22px;height:22px;";
+    addTile.appendChild(plusIcon);
+    addTile.addEventListener("mouseenter", () => { addTile.style.background = "#e8f5e9"; addTile.style.borderColor = color; });
+    addTile.addEventListener("mouseleave", () => { addTile.style.background = "#fff"; addTile.style.borderColor = color + "60"; });
+    let tileInput = null;
+    addTile.addEventListener("click", () => {
+      if (!tileInput) {
+        addTile.innerHTML = "";
+        const tileAc = document.createElement("div");
+        tileAc.style.cssText = "position:absolute;top:100%;left:-25px;width:150px;background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:200;max-height:160px;overflow-y:auto;display:none;";
+        tileInput = document.createElement("input");
+        tileInput.type = "text";
+        tileInput.placeholder = "...";
+        tileInput.style.cssText = "width:100%;border:none;background:transparent;color:#333;font-size:13px;text-align:center;outline:none;";
+        const allItems = this._getAutocompleteItems();
+        const resetTile = () => {
+          addTile.innerHTML = "";
+          const pi = document.createElement("ha-icon");
+          pi.setAttribute("icon", "mdi:plus");
+          pi.style.cssText = "color:" + color + ";width:22px;height:22px;";
+          addTile.appendChild(pi);
+          tileInput = null;
+        };
+        tileInput.addEventListener("input", () => {
+          const v = tileInput.value.toLowerCase().trim();
+          tileAc.innerHTML = "";
+          if (!v) { tileAc.style.display = "none"; return; }
+          const matches = allItems.filter(it => it.toLowerCase().includes(v) && !this._itemExists(list.entity, it)).slice(0, 6);
+          if (matches.length) {
+            matches.forEach(m => {
+              const row = document.createElement("div");
+              row.style.cssText = "padding:8px 12px;cursor:pointer;font-size:13px;color:#333;border-bottom:1px solid #e0e0e0;";
+              row.textContent = m;
+              row.addEventListener("mouseenter", () => row.style.background = "#e8f5e9");
+              row.addEventListener("mouseleave", () => row.style.background = "#fff");
+              row.addEventListener("click", () => { this._addItem(list.entity, m); resetTile(); });
+              tileAc.appendChild(row);
+            });
+            tileAc.style.display = "block";
+          } else {
+            tileAc.style.display = "none";
+          }
+        });
+        tileInput.addEventListener("keydown", e => { if (e.key === "Enter") { this._addItem(list.entity, tileInput.value); resetTile(); } });
+        tileInput.addEventListener("blur", () => { setTimeout(() => tileInput && resetTile(), 300); });
+        addTile.appendChild(tileInput);
+        addTile.appendChild(tileAc);
+        tileInput.focus();
+      }
+    });
+    grid.appendChild(addTile);
+    catWrap.appendChild(grid);
+    return catWrap;
+  }
+
+  _renderMirrorSection(list, items, color, order) {
+    const onListSummaries = new Set(items.map(i => i.summary.toLowerCase()));
+    const allArticles = this._getAutocompleteItems();
+    const availByCat = {};
+    let totalAvail = 0;
+    for (const text of allArticles) {
+      if (onListSummaries.has(text.toLowerCase())) continue;
+      const cat = this._getItemCategory(text);
+      if (!availByCat[cat]) availByCat[cat] = [];
+      availByCat[cat].push(text);
+      totalAvail++;
+    }
+    if (totalAvail === 0) return null;
+
+    const mirrorWrap = document.createElement("div");
+    mirrorWrap.style.cssText = "margin-top:24px;padding-top:16px;border-top:2px dashed #ccc;";
+
+    const mirrorTitle = document.createElement("div");
+    mirrorTitle.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:0 4px;";
+    const checkIcon = document.createElement("ha-icon");
+    checkIcon.setAttribute("icon", "mdi:check-circle");
+    checkIcon.style.cssText = "color:#aaa;width:20px;height:20px;";
+    mirrorTitle.appendChild(checkIcon);
+    const mt = document.createElement("div");
+    mt.style.cssText = "font-weight:600;font-size:14px;color:#999;flex:1;";
+    mt.textContent = "Verfügbar (" + totalAvail + ")";
+    mirrorTitle.appendChild(mt);
+    const clearAll = document.createElement("div");
+    clearAll.textContent = "erledigte löschen";
+    clearAll.style.cssText = "font-size:11px;color:#aaa;cursor:pointer;";
+    clearAll.addEventListener("click", () => this._clearDone(list.entity));
+    mirrorTitle.appendChild(clearAll);
+    mirrorWrap.appendChild(mirrorTitle);
+
+    for (const cat of order) {
+      if (!availByCat[cat]) continue;
+      const catTexts = availByCat[cat];
+      const catWrap = document.createElement("div");
+      catWrap.className = "sl-cat";
+      catWrap.style.marginBottom = "12px";
+
+      const header = document.createElement("div");
+      header.className = "sl-header";
+      header.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;user-select:none;";
+      const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 16);
+      catIcon.style.filter = "grayscale(100%) opacity(0.6)";
+      header.appendChild(catIcon);
+      const catName = document.createElement("div");
+      catName.style.cssText = "font-weight:500;font-size:12px;flex:1;color:#bbb;";
+      catName.textContent = this._getCategoryName(cat);
+      header.appendChild(catName);
+      const count = document.createElement("div");
+      count.className = "sl-count";
+      count.style.cssText = "font-size:11px;color:#ccc;font-weight:400;";
+      count.textContent = catTexts.length;
+      header.appendChild(count);
+      const chevron = document.createElement("ha-icon");
+      chevron.setAttribute("icon", "mdi:chevron-down");
+      chevron.style.cssText = "color:#ddd;width:16px;height:16px;";
+      header.appendChild(chevron);
+      catWrap.appendChild(header);
+
+      const grid = document.createElement("div");
+      grid.className = "sl-grid";
+      grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:8px;padding:8px;transition:max-height 0.3s ease;";
+      let collapsed = false;
+      header.addEventListener("click", () => {
+        collapsed = !collapsed;
+        grid.style.display = collapsed ? "none" : "grid";
+        grid.dataset.collapsed = collapsed ? "true" : "";
+        chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
+      });
+
+      const batchSize = 50;
+      let shown = 0;
+      for (const text of catTexts) {
+        if (shown >= batchSize) break;
+        const existing = items.find(i => i.summary.toLowerCase() === text.toLowerCase());
+        if (existing) {
+          const tile = this._renderTile(existing, list.entity, color);
+          tile.dataset.section = "mirror";
+          grid.appendChild(tile);
+        } else {
+          grid.appendChild(this._renderGhostTile(text, list.entity, color));
+        }
+        shown++;
+      }
+      if (catTexts.length > batchSize) {
+        const loadMore = document.createElement("div");
+        loadMore.style.cssText = "display:flex;align-items:center;justify-content:center;padding:8px;border-radius:12px;background:#fafafa;border:1px dashed #ccc;cursor:pointer;margin-top:4px;grid-column:1 / -1;transition:all 0.15s;";
+        loadMore.textContent = "Mehr laden (" + (catTexts.length - shown) + ")";
+        loadMore.style.fontSize = "12px";
+        loadMore.style.color = "#999";
+        loadMore.addEventListener("mouseenter", () => { loadMore.style.background = "#e8f5e9"; loadMore.style.borderColor = color; });
+        loadMore.addEventListener("mouseleave", () => { loadMore.style.background = "#fafafa"; loadMore.style.borderColor = "#ccc"; });
+        let expanded = false;
+        loadMore.addEventListener("click", () => {
+          if (expanded) return;
+          expanded = true;
+          loadMore.remove();
+          for (let i = batchSize; i < catTexts.length; i++) {
+            const text = catTexts[i];
+            const existing = items.find(it => it.summary.toLowerCase() === text.toLowerCase());
+            if (existing) {
+              const tile = this._renderTile(existing, list.entity, color);
+              tile.dataset.section = "mirror";
+              grid.appendChild(tile);
+            } else {
+              grid.appendChild(this._renderGhostTile(text, list.entity, color));
+            }
+          }
+        });
+        grid.appendChild(loadMore);
+      }
+      catWrap.appendChild(grid);
+      mirrorWrap.appendChild(catWrap);
+    }
+    return mirrorWrap;
   }
 
   _render() {
@@ -512,72 +831,19 @@ class ShoppingListCard extends HTMLElement {
     }
     this._lastStructHash = structHash;
 
-    this.innerHTML = "";
     const card = document.createElement("ha-card");
     card.style.cssText = "padding:12px;display:block;";
+    const style = document.createElement("style");
+    style.textContent = "@keyframes sl-spin{to{transform:rotate(360deg)}}";
+    card.appendChild(style);
 
     for (const list of this.config.lists) {
       const items = this._itemsByList[list.entity] || [];
       const color = list.color || "#43A047";
-      const listWrap = document.createElement("div");
-      listWrap.style.cssText = "margin-bottom:14px;position:relative;";
 
-      // Search bar
-      const searchWrap = document.createElement("div");
-      searchWrap.style.cssText = "display:flex;align-items:center;background:#fafafa;border-radius:12px;padding:0 12px;border:1px solid #e8e8e8;";
-      const searchIcon = document.createElement("ha-icon");
-      searchIcon.setAttribute("icon", "mdi:magnify");
-      searchIcon.style.cssText = "color:#aaa;width:20px;height:20px;margin-right:8px;";
-      searchWrap.appendChild(searchIcon);
-      const input = document.createElement("input");
-      input.type = "text";
-      input.placeholder = "Artikel suchen oder hinzufügen...";
-      input.style.cssText = "flex:1;border:none;background:transparent;font-size:16px;padding:12px 0;outline:none;color:#333;";
-      searchWrap.appendChild(input);
-      const addBtn = document.createElement("button");
-      addBtn.textContent = "+";
-      addBtn.style.cssText = "background:transparent;color:#888;border:none;border-radius:50%;width:32px;height:32px;font-size:22px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
-      searchWrap.appendChild(addBtn);
-      listWrap.appendChild(searchWrap);
-
-      // Autocomplete dropdown
-      const acDropdown = document.createElement("div");
-      acDropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:#fff;border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;max-height:200px;overflow-y:auto;display:none;";
-      listWrap.appendChild(acDropdown);
-
-      const acItems = this._getAutocompleteItems();
-      input.addEventListener("input", () => {
-        const val = input.value.toLowerCase().trim();
-        acDropdown.innerHTML = "";
-        this._filterVisible(listWrap, val);
-        if (!val) { acDropdown.style.display = "none"; return; }
-        const matches = acItems.filter(it => it.toLowerCase().includes(val) && !this._itemExists(list.entity, it)).slice(0, 8);
-        if (matches.length) {
-          matches.forEach(m => {
-            const row = document.createElement("div");
-            row.style.cssText = "padding:10px 16px;cursor:pointer;font-size:15px;color:#333;border-bottom:1px solid #e0e0e0;";
-            row.textContent = m;
-            row.addEventListener("mouseenter", () => row.style.background = "#e8f5e9");
-            row.addEventListener("mouseleave", () => row.style.background = "#fff");
-            row.addEventListener("click", () => { this._addItem(list.entity, m); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); });
-            acDropdown.appendChild(row);
-          });
-          acDropdown.style.display = "block";
-        } else {
-          acDropdown.style.display = "none";
-        }
-      });
-
-      const doAdd = () => {
-        if (input.value.trim()) { this._addItem(list.entity, input.value); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); }
-      };
-      addBtn.addEventListener("click", doAdd);
-      input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
-      input.addEventListener("blur", () => { setTimeout(() => { acDropdown.style.display = "none"; if (!input.value.trim()) this._filterVisible(listWrap, ""); }, 200); });
-      input.addEventListener("focus", () => { if (input.value.trim()) input.dispatchEvent(new Event("input")); });
+      const listWrap = this._renderSearchBar(list);
       card.appendChild(listWrap);
 
-      // Group by category
       const groups = {};
       for (const item of items) {
         const cat = this._getItemCategory(item.summary);
@@ -588,235 +854,16 @@ class ShoppingListCard extends HTMLElement {
       const order = ["obst_gemuese","brot_backwaren","milch_eier","fleisch_fisch","trockenwaren","tiefkuehlprodukte","getraenke","haushalt_hygiene","sonstiges"].filter(k => groups[k]?.length > 0);
       for (const k of Object.keys(groups)) if (!order.includes(k)) order.push(k);
 
-      // --- Active categories (needs_action only) ---
       const activeOrder = order.filter(k => groups[k].some(i => i.status === "needs_action"));
       for (const cat of activeOrder) {
         const catItems = groups[cat].filter(i => i.status === "needs_action");
-        const catWrap = document.createElement("div");
-        catWrap.className = "sl-cat";
-        catWrap.style.marginBottom = "16px";
-
-        // Category header
-        const header = document.createElement("div");
-        header.className = "sl-header";
-        header.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #e8e8e8;cursor:pointer;user-select:none;";
-        const catColor = this._getCategoryColor(cat);
-        const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 20);
-        catIcon.style.filter = "drop-shadow(0 0 1px rgba(0,0,0,0.2))";
-        header.appendChild(catIcon);
-        const catName = document.createElement("div");
-        catName.style.cssText = "font-weight:500;font-size:14px;flex:1;color:" + catColor;
-        catName.textContent = this._getCategoryName(cat);
-        header.appendChild(catName);
-        const count = document.createElement("div");
-        count.className = "sl-count";
-        count.style.cssText = "font-size:12px;color:#999;font-weight:400;";
-        count.textContent = catItems.length;
-        header.appendChild(count);
-        const chevron = document.createElement("ha-icon");
-        chevron.setAttribute("icon", "mdi:chevron-down");
-        chevron.style.cssText = "color:#bbb;width:18px;height:18px;";
-        header.appendChild(chevron);
-        catWrap.appendChild(header);
-
-        // Grid
-        const grid = document.createElement("div");
-        grid.className = "sl-grid";
-        grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:12px;padding:12px;transition:max-height 0.3s ease;";
-        let collapsed = false;
-        header.addEventListener("click", () => {
-          collapsed = !collapsed;
-          grid.style.display = collapsed ? "none" : "grid";
-          grid.dataset.collapsed = collapsed ? "true" : "";
-          chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
-        });
-
-        for (const item of catItems) {
-          const tile = this._renderTile(item, list.entity, color);
-          tile.dataset.section = "active";
-          grid.appendChild(tile);
-        }
-
-        // Add tile
-        const addTile = document.createElement("div");
-        addTile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:12px;border:2px dashed " + color + "60;background:#fff;cursor:pointer;min-height:72px;transition:all 0.15s;position:relative;";
-        const plusIcon = document.createElement("ha-icon");
-        plusIcon.setAttribute("icon", "mdi:plus");
-        plusIcon.style.cssText = "color:" + color + ";width:22px;height:22px;";
-        addTile.appendChild(plusIcon);
-        addTile.addEventListener("mouseenter", () => { addTile.style.background = "#e8f5e9"; addTile.style.borderColor = color; });
-        addTile.addEventListener("mouseleave", () => { addTile.style.background = "#fff"; addTile.style.borderColor = color + "60"; });
-        let tileInput = null;
-        addTile.addEventListener("click", () => {
-          if (!tileInput) {
-            addTile.innerHTML = "";
-            const tileAc = document.createElement("div");
-            tileAc.style.cssText = "position:absolute;top:100%;left:-25px;width:150px;background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:200;max-height:160px;overflow-y:auto;display:none;";
-            tileInput = document.createElement("input");
-            tileInput.type = "text";
-            tileInput.placeholder = "...";
-            tileInput.style.cssText = "width:100%;border:none;background:transparent;color:#333;font-size:13px;text-align:center;outline:none;";
-            const allItems = this._getAutocompleteItems();
-            const resetTile = () => {
-              addTile.innerHTML = "";
-              const pi = document.createElement("ha-icon");
-              pi.setAttribute("icon", "mdi:plus");
-              pi.style.cssText = "color:" + color + ";width:22px;height:22px;";
-              addTile.appendChild(pi);
-              tileInput = null;
-            };
-            tileInput.addEventListener("input", () => {
-              const v = tileInput.value.toLowerCase().trim();
-              tileAc.innerHTML = "";
-              if (!v) { tileAc.style.display = "none"; return; }
-              const matches = allItems.filter(it => it.toLowerCase().includes(v) && !this._itemExists(list.entity, it)).slice(0, 6);
-              if (matches.length) {
-                matches.forEach(m => {
-                  const row = document.createElement("div");
-                  row.style.cssText = "padding:8px 12px;cursor:pointer;font-size:13px;color:#333;border-bottom:1px solid #e0e0e0;";
-                  row.textContent = m;
-                  row.addEventListener("mouseenter", () => row.style.background = "#e8f5e9");
-                  row.addEventListener("mouseleave", () => row.style.background = "#fff");
-                  row.addEventListener("click", () => { this._addItem(list.entity, m); resetTile(); });
-                  tileAc.appendChild(row);
-                });
-                tileAc.style.display = "block";
-              } else {
-                tileAc.style.display = "none";
-              }
-            });
-            tileInput.addEventListener("keydown", e => { if (e.key === "Enter") { this._addItem(list.entity, tileInput.value); resetTile(); } });
-            tileInput.addEventListener("blur", () => { setTimeout(() => tileInput && resetTile(), 300); });
-            addTile.appendChild(tileInput);
-            addTile.appendChild(tileAc);
-            tileInput.focus();
-          }
-        });
-        grid.appendChild(addTile);
-        catWrap.appendChild(grid);
-        card.appendChild(catWrap);
+        card.appendChild(this._renderCategory(cat, catItems, list, color));
       }
 
-      // --- Completed / Available mirror section ---
-      const onListSummaries = new Set(items.map(i => i.summary.toLowerCase()));
-      const allArticles = this._getAutocompleteItems();
-      const availByCat = {};
-      let totalAvail = 0;
-      for (const text of allArticles) {
-        if (onListSummaries.has(text.toLowerCase())) continue;
-        const cat = this._getItemCategory(text);
-        if (!availByCat[cat]) availByCat[cat] = [];
-        availByCat[cat].push(text);
-        totalAvail++;
-      }
-      if (totalAvail > 0) {
-        const mirrorWrap = document.createElement("div");
-        mirrorWrap.style.cssText = "margin-top:24px;padding-top:16px;border-top:2px dashed #ccc;";
-
-        const mirrorTitle = document.createElement("div");
-        mirrorTitle.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:0 4px;";
-        const checkIcon = document.createElement("ha-icon");
-        checkIcon.setAttribute("icon", "mdi:check-circle");
-        checkIcon.style.cssText = "color:#aaa;width:20px;height:20px;";
-        mirrorTitle.appendChild(checkIcon);
-        const mt = document.createElement("div");
-        mt.style.cssText = "font-weight:600;font-size:14px;color:#999;flex:1;";
-        mt.textContent = "Verfügbar (" + totalAvail + ")";
-        mirrorTitle.appendChild(mt);
-        const clearAll = document.createElement("div");
-        clearAll.textContent = "erledigte löschen";
-        clearAll.style.cssText = "font-size:11px;color:#aaa;cursor:pointer;";
-        clearAll.addEventListener("click", () => this._clearDone(list.entity));
-        mirrorTitle.appendChild(clearAll);
-        mirrorWrap.appendChild(mirrorTitle);
-
-        for (const cat of order) {
-          if (!availByCat[cat]) continue;
-          const catTexts = availByCat[cat];
-          const catWrap = document.createElement("div");
-          catWrap.className = "sl-cat";
-          catWrap.style.marginBottom = "12px";
-
-          const header = document.createElement("div");
-          header.className = "sl-header";
-          header.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;user-select:none;";
-          const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 16);
-          catIcon.style.filter = "grayscale(100%) opacity(0.6)";
-          header.appendChild(catIcon);
-          const catName = document.createElement("div");
-          catName.style.cssText = "font-weight:500;font-size:12px;flex:1;color:#bbb;";
-          catName.textContent = this._getCategoryName(cat);
-          header.appendChild(catName);
-          const count = document.createElement("div");
-          count.className = "sl-count";
-          count.style.cssText = "font-size:11px;color:#ccc;font-weight:400;";
-          count.textContent = catTexts.length;
-          header.appendChild(count);
-          const chevron = document.createElement("ha-icon");
-          chevron.setAttribute("icon", "mdi:chevron-down");
-          chevron.style.cssText = "color:#ddd;width:16px;height:16px;";
-          header.appendChild(chevron);
-          catWrap.appendChild(header);
-
-          const grid = document.createElement("div");
-          grid.className = "sl-grid";
-          grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:8px;padding:8px;transition:max-height 0.3s ease;";
-          let collapsed = false;
-          header.addEventListener("click", () => {
-            collapsed = !collapsed;
-            grid.style.display = collapsed ? "none" : "grid";
-            grid.dataset.collapsed = collapsed ? "true" : "";
-            chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
-          });
-
-          const batchSize = 50;
-          let shown = 0;
-          for (const text of catTexts) {
-            if (shown >= batchSize) break;
-            const existing = items.find(i => i.summary.toLowerCase() === text.toLowerCase());
-            if (existing) {
-              const tile = this._renderTile(existing, list.entity, color);
-              tile.dataset.section = "mirror";
-              grid.appendChild(tile);
-            } else {
-              grid.appendChild(this._renderGhostTile(text, list.entity, color));
-            }
-            shown++;
-          }
-          if (catTexts.length > batchSize) {
-            const loadMore = document.createElement("div");
-            loadMore.style.cssText = "display:flex;align-items:center;justify-content:center;padding:8px;border-radius:12px;background:#fafafa;border:1px dashed #ccc;cursor:pointer;margin-top:4px;grid-column:1 / -1;transition:all 0.15s;";
-            loadMore.textContent = "Mehr laden (" + (catTexts.length - shown) + ")";
-            loadMore.style.fontSize = "12px";
-            loadMore.style.color = "#999";
-            loadMore.addEventListener("mouseenter", () => { loadMore.style.background = "#e8f5e9"; loadMore.style.borderColor = color; });
-            loadMore.addEventListener("mouseleave", () => { loadMore.style.background = "#fafafa"; loadMore.style.borderColor = "#ccc"; });
-            let expanded = false;
-            loadMore.addEventListener("click", () => {
-              if (expanded) return;
-              expanded = true;
-              loadMore.remove();
-              for (let i = batchSize; i < catTexts.length; i++) {
-                const text = catTexts[i];
-                const existing = items.find(it => it.summary.toLowerCase() === text.toLowerCase());
-                if (existing) {
-                  const tile = this._renderTile(existing, list.entity, color);
-                  tile.dataset.section = "mirror";
-                  grid.appendChild(tile);
-                } else {
-                  grid.appendChild(this._renderGhostTile(text, list.entity, color));
-                }
-              }
-            });
-            grid.appendChild(loadMore);
-          }
-          catWrap.appendChild(grid);
-          mirrorWrap.appendChild(catWrap);
-        }
-        card.appendChild(mirrorWrap);
-      }
+      const mirror = this._renderMirrorSection(list, items, color, order);
+      if (mirror) card.appendChild(mirror);
     }
-    this.appendChild(card);
+    this.replaceChildren(card);
   }
 
   _renderTile(item, entityId, color) {
@@ -867,6 +914,7 @@ class ShoppingListCard extends HTMLElement {
     tile.addEventListener("mousedown", startPress);
     tile.addEventListener("mouseup", endPress);
     tile.addEventListener("mouseleave", endPress);
+    tile.addEventListener("contextmenu", e => { endPress(); e.preventDefault(); });
     tile.addEventListener("click", () => {
       if (tile.dataset.longPress !== "1") {
         const items = this._itemsByList[entityId] || [];
