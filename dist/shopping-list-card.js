@@ -94,6 +94,30 @@ class ShoppingListCard extends HTMLElement {
     return !1;
   }
 
+  _filterVisible(listWrap, query) {
+    const card = listWrap.parentElement;
+    const cats = card.querySelectorAll(".sl-cat");
+    for (const cat of cats) {
+      const tiles = cat.querySelectorAll("[data-summary]");
+      let visible = 0;
+      for (const tile of tiles) {
+        const match = !query || tile.dataset.summary.includes(query);
+        tile.style.display = match ? "" : "none";
+        if (match) visible++;
+      }
+      const header = cat.querySelector(".sl-header");
+      const grid = cat.querySelector(".sl-grid");
+      if (header) header.style.display = visible > 0 ? "" : "none";
+      if (grid) {
+        if (visible > 0) {
+          grid.style.display = grid.dataset.collapsed === "true" ? "none" : "grid";
+        } else {
+          grid.style.display = "none";
+        }
+      }
+    }
+  }
+
   _getOpenmojiUrl(hex) {
     return `https://cdn.jsdelivr.net/npm/openmoji@latest/color/svg/${hex}.svg`;
   }
@@ -503,6 +527,7 @@ class ShoppingListCard extends HTMLElement {
       input.addEventListener("input", () => {
         const val = input.value.toLowerCase().trim();
         acDropdown.innerHTML = "";
+        this._filterVisible(listWrap, val);
         if (!val) { acDropdown.style.display = "none"; return; }
         const matches = acItems.filter(it => it.toLowerCase().includes(val) && !this._itemExists(list.entity, it)).slice(0, 8);
         if (matches.length) {
@@ -512,7 +537,7 @@ class ShoppingListCard extends HTMLElement {
             row.textContent = m;
             row.addEventListener("mouseenter", () => row.style.background = "#e8f5e9");
             row.addEventListener("mouseleave", () => row.style.background = "#fff");
-            row.addEventListener("click", () => { this._addItem(list.entity, m); input.value = ""; acDropdown.style.display = "none"; });
+            row.addEventListener("click", () => { this._addItem(list.entity, m); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); });
             acDropdown.appendChild(row);
           });
           acDropdown.style.display = "block";
@@ -522,11 +547,11 @@ class ShoppingListCard extends HTMLElement {
       });
 
       const doAdd = () => {
-        if (input.value.trim()) { this._addItem(list.entity, input.value); input.value = ""; acDropdown.style.display = "none"; }
+        if (input.value.trim()) { this._addItem(list.entity, input.value); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); }
       };
       addBtn.addEventListener("click", doAdd);
       input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
-      input.addEventListener("blur", () => { setTimeout(() => acDropdown.style.display = "none", 200); });
+      input.addEventListener("blur", () => { setTimeout(() => { acDropdown.style.display = "none"; if (!input.value.trim()) this._filterVisible(listWrap, ""); }, 200); });
       input.addEventListener("focus", () => { if (input.value.trim()) input.dispatchEvent(new Event("input")); });
       card.appendChild(listWrap);
 
@@ -546,10 +571,12 @@ class ShoppingListCard extends HTMLElement {
       for (const cat of activeOrder) {
         const catItems = groups[cat].filter(i => i.status === "needs_action");
         const catWrap = document.createElement("div");
+        catWrap.className = "sl-cat";
         catWrap.style.marginBottom = "16px";
 
         // Category header
         const header = document.createElement("div");
+        header.className = "sl-header";
         header.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #e8e8e8;cursor:pointer;user-select:none;";
         const catColor = this._getCategoryColor(cat);
         const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 20);
@@ -571,11 +598,13 @@ class ShoppingListCard extends HTMLElement {
 
         // Grid
         const grid = document.createElement("div");
+        grid.className = "sl-grid";
         grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:12px;padding:12px;transition:max-height 0.3s ease;";
         let collapsed = !1;
         header.addEventListener("click", () => {
           collapsed = !collapsed;
           grid.style.display = collapsed ? "none" : "grid";
+          grid.dataset.collapsed = collapsed ? "true" : "";
           chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
         });
 
@@ -678,9 +707,11 @@ class ShoppingListCard extends HTMLElement {
           if (!availByCat[cat]) continue;
           const catTexts = availByCat[cat];
           const catWrap = document.createElement("div");
+          catWrap.className = "sl-cat";
           catWrap.style.marginBottom = "12px";
 
           const header = document.createElement("div");
+          header.className = "sl-header";
           header.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;user-select:none;";
           const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 16);
           catIcon.style.filter = "grayscale(100%) opacity(0.6)";
@@ -700,11 +731,13 @@ class ShoppingListCard extends HTMLElement {
           catWrap.appendChild(header);
 
           const grid = document.createElement("div");
+          grid.className = "sl-grid";
           grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:8px;padding:8px;transition:max-height 0.3s ease;";
           let collapsed = !1;
           header.addEventListener("click", () => {
             collapsed = !collapsed;
             grid.style.display = collapsed ? "none" : "grid";
+            grid.dataset.collapsed = collapsed ? "true" : "";
             chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
           });
 
@@ -757,6 +790,7 @@ class ShoppingListCard extends HTMLElement {
   _renderTile(item, entityId, color) {
     const isDone = item.status === "completed";
     const tile = document.createElement("div");
+    tile.dataset.summary = item.summary.toLowerCase();
     tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:" + (isDone ? "#e0e0e0" : color) + ";border:" + (isDone ? "2px solid #bbb" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;";
     tile.addEventListener("mouseenter", () => { if (!isDone) tile.style.background = "#388E3C"; });
     tile.addEventListener("mouseleave", () => { tile.style.background = isDone ? "#e0e0e0" : color; });
@@ -794,6 +828,7 @@ class ShoppingListCard extends HTMLElement {
 
   _renderGhostTile(text, entityId, color) {
     const tile = document.createElement("div");
+    tile.dataset.summary = text.toLowerCase();
     tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:#f5f5f5;border:2px dashed #ddd;opacity:0.65;cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;";
     tile.addEventListener("mouseenter", () => { tile.style.background = "#e8f5e9"; tile.style.borderColor = color; tile.style.opacity = "0.9"; });
     tile.addEventListener("mouseleave", () => { tile.style.background = "#f5f5f5"; tile.style.borderColor = "#ddd"; tile.style.opacity = "0.65"; });
