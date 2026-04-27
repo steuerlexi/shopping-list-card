@@ -671,12 +671,12 @@ class ShoppingListCard extends HTMLElement {
       }
 
       // --- Completed / Available mirror section ---
-      const activeSummaries = new Set(items.filter(i => i.status === "needs_action").map(i => i.summary.toLowerCase()));
+      const onListSummaries = new Set(items.map(i => i.summary.toLowerCase()));
       const allArticles = this._getAutocompleteItems();
       const availByCat = {};
       let totalAvail = 0;
       for (const text of allArticles) {
-        if (activeSummaries.has(text.toLowerCase())) continue;
+        if (onListSummaries.has(text.toLowerCase())) continue;
         const cat = this._getItemCategory(text);
         if (!availByCat[cat]) availByCat[cat] = [];
         availByCat[cat].push(text);
