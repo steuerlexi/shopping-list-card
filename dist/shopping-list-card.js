@@ -363,11 +363,6 @@ class ShoppingListCard extends HTMLElement {
     const card = document.createElement("ha-card");
     card.style.cssText = "padding:12px;display:block;";
 
-    const title = document.createElement("div");
-    title.style.cssText = "font-size:20px;font-weight:600;margin-bottom:16px;color:#333;";
-    title.textContent = this.config.title;
-    card.appendChild(title);
-
     for (const list of this.config.lists) {
       const items = this._itemsByList[list.entity] || [];
       const color = list.color || "#43A047";
@@ -539,17 +534,19 @@ class ShoppingListCard extends HTMLElement {
         card.appendChild(catWrap);
       }
 
-      // --- Completed mirror section ---
-      const doneByCat = {};
-      let totalDone = 0;
-      for (const cat of order) {
-        const done = groups[cat].filter(i => i.status === "completed");
-        if (done.length) {
-          doneByCat[cat] = done;
-          totalDone += done.length;
-        }
+      // --- Completed / Available mirror section ---
+      const activeSummaries = new Set(items.filter(i => i.status === "needs_action").map(i => i.summary.toLowerCase()));
+      const allArticles = this._getAutocompleteItems();
+      const availByCat = {};
+      let totalAvail = 0;
+      for (const text of allArticles) {
+        if (activeSummaries.has(text.toLowerCase())) continue;
+        const cat = this._getItemCategory(text);
+        if (!availByCat[cat]) availByCat[cat] = [];
+        availByCat[cat].push(text);
+        totalAvail++;
       }
-      if (totalDone > 0) {
+      if (totalAvail > 0) {
         const mirrorWrap = document.createElement("div");
         mirrorWrap.style.cssText = "margin-top:24px;padding-top:16px;border-top:2px dashed #ccc;";
 
@@ -561,7 +558,7 @@ class ShoppingListCard extends HTMLElement {
         mirrorTitle.appendChild(checkIcon);
         const mt = document.createElement("div");
         mt.style.cssText = "font-weight:600;font-size:14px;color:#999;flex:1;";
-        mt.textContent = "Erledigt (" + totalDone + ")";
+        mt.textContent = "Verfügbar (" + totalAvail + ")";
         mirrorTitle.appendChild(mt);
         const clearAll = document.createElement("div");
         clearAll.textContent = "alle entfernen";
@@ -571,8 +568,8 @@ class ShoppingListCard extends HTMLElement {
         mirrorWrap.appendChild(mirrorTitle);
 
         for (const cat of order) {
-          if (!doneByCat[cat]) continue;
-          const doneItems = doneByCat[cat];
+          if (!availByCat[cat]) continue;
+          const catTexts = availByCat[cat];
           const catWrap = document.createElement("div");
           catWrap.style.marginBottom = "12px";
 
@@ -587,7 +584,7 @@ class ShoppingListCard extends HTMLElement {
           header.appendChild(catName);
           const count = document.createElement("div");
           count.style.cssText = "font-size:11px;color:#ccc;font-weight:400;";
-          count.textContent = doneItems.length;
+          count.textContent = catTexts.length;
           header.appendChild(count);
           const chevron = document.createElement("ha-icon");
           chevron.setAttribute("icon", "mdi:chevron-down");
@@ -604,7 +601,14 @@ class ShoppingListCard extends HTMLElement {
             chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
           });
 
-          for (const item of doneItems) grid.appendChild(this._renderTile(item, list.entity, color));
+          for (const text of catTexts) {
+            const existing = items.find(i => i.summary.toLowerCase() === text.toLowerCase());
+            if (existing) {
+              grid.appendChild(this._renderTile(existing, list.entity, color));
+            } else {
+              grid.appendChild(this._renderGhostTile(text, list.entity, color));
+            }
+          }
           catWrap.appendChild(grid);
           mirrorWrap.appendChild(catWrap);
         }
@@ -649,6 +653,27 @@ class ShoppingListCard extends HTMLElement {
     tile.addEventListener("mouseup", endPress);
     tile.addEventListener("mouseleave", endPress);
     tile.addEventListener("click", () => { if (!longPress) this._toggleItem(entityId, item); });
+    return tile;
+  }
+
+  _renderGhostTile(text, entityId, color) {
+    const tile = document.createElement("div");
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:#f5f5f5;border:2px dashed #ddd;opacity:0.65;cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;";
+    tile.addEventListener("mouseenter", () => { tile.style.background = "#e8f5e9"; tile.style.borderColor = color; tile.style.opacity = "0.9"; });
+    tile.addEventListener("mouseleave", () => { tile.style.background = "#f5f5f5"; tile.style.borderColor = "#ddd"; tile.style.opacity = "0.65"; });
+
+    const iconWrap = document.createElement("div");
+    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
+    const icon = this._createOpenmojiImg(this._getItemIcon(text), 36);
+    iconWrap.appendChild(icon);
+    tile.appendChild(iconWrap);
+
+    const label = document.createElement("div");
+    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:#999;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
+    label.textContent = text;
+    tile.appendChild(label);
+
+    tile.addEventListener("click", () => this._addItem(entityId, text));
     return tile;
   }
 
