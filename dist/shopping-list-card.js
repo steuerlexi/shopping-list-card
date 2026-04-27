@@ -864,7 +864,7 @@ class ShoppingListCard extends HTMLElement {
 
     const hint = document.createElement("div");
     hint.style.cssText = "font-size:13px;color:#666;margin-bottom:8px;";
-    hint.textContent = "Anmerkungen (z.B. 20 Bio, Frische)";
+    hint.textContent = "Anmerkungen (z.B. 2 Packungen, Bio)";
     box.appendChild(hint);
 
     const descInput = document.createElement("input");
