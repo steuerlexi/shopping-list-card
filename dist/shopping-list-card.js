@@ -74,6 +74,131 @@ class ShoppingListCard extends HTMLElement {
       "Pralinen","Salzstangen","Studentenfutter","Trockenobst","Weinbrand"
     ])];
 
+    this._mdiIcons = [
+      "mdi:food-apple","mdi:food-apple-outline","mdi:food-carrot","mdi:food-corn",
+      "mdi:food-croissant","mdi:food-drumstick","mdi:food-drumstick-outline","mdi:food-fish",
+      "mdi:food-fish-outline","mdi:food-grain","mdi:food-steak","mdi:food-takeout-box",
+      "mdi:food-turkey","mdi:food-variant","mdi:fruit-cherries","mdi:fruit-citrus",
+      "mdi:fruit-grapes","mdi:fruit-pineapple","mdi:fruit-watermelon","mdi:egg",
+      "mdi:egg-fried","mdi:egg-outline","mdi:cheese-burger","mdi:hamburger","mdi:noodle",
+      "mdi:pasta","mdi:pizza","mdi:pizza-slice","mdi:bread-slice","mdi:bread-slice-outline",
+      "mdi:cake","mdi:cake-layered","mdi:cake-variant","mdi:cookie","mdi:cookie-outline",
+      "mdi:candy","mdi:candy-outline","mdi:candy-cane","mdi:ice-cream","mdi:coffee",
+      "mdi:coffee-outline","mdi:coffee-maker","mdi:tea","mdi:tea-outline","mdi:cup",
+      "mdi:cup-outline","mdi:cup-water","mdi:cup-off","mdi:glass-wine","mdi:glass-cocktail",
+      "mdi:glass-mug","mdi:glass-mug-variant","mdi:beer","mdi:beer-outline","mdi:bottle-wine",
+      "mdi:bottle-soda","mdi:bottle-soda-classic","mdi:fish","mdi:fish-off","mdi:carrot",
+      "mdi:corn","mdi:mushroom","mdi:mushroom-outline","mdi:mushroom-off","mdi:onion",
+      "mdi:garlic","mdi:pepper","mdi:watermelon","mdi:melon","mdi:orange","mdi:lemon",
+      "mdi:lime","mdi:cherry","mdi:strawberry","mdi:apple","mdi:avocado","mdi:eggplant",
+      "mdi:cucumber","mdi:potato","mdi:cart","mdi:cart-outline","mdi:cart-variant",
+      "mdi:shopping","mdi:shopping-outline","mdi:shopping-search","mdi:gift","mdi:gift-outline",
+      "mdi:home","mdi:home-outline","mdi:store","mdi:store-outline","mdi:store-24-hour",
+      "mdi:package","mdi:package-variant","mdi:package-variant-closed","mdi:trash-can",
+      "mdi:trash-can-outline","mdi:delete","mdi:delete-outline","mdi:paper-towel",
+      "mdi:paper-towel-outline","mdi:toilet-paper","mdi:toilet-paper-outline","mdi:shower",
+      "mdi:bathtub","mdi:toothbrush","mdi:toothbrush-paste","mdi:soap","mdi:spray-bottle",
+      "mdi:broom","mdi:vacuum-cleaner","mdi:lightbulb","mdi:lightbulb-outline","mdi:candle",
+      "mdi:candle-fire","mdi:bandage","mdi:bandage-box","mdi:pill","mdi:hand-wash",
+      "mdi:hand-water","mdi:water","mdi:water-well","mdi:bottle-water","mdi:bottle-wine-outline",
+      "mdi:cup-water","mdi:gas-station","mdi:flower","mdi:flower-outline","mdi:flower-tulip",
+      "mdi:flower-tulip-outline","mdi:seed","mdi:seed-outline","mdi:tree","mdi:tree-outline",
+      "mdi:account","mdi:account-outline","mdi:account-group","mdi:baby","mdi:baby-bottle",
+      "mdi:cat","mdi:dog","mdi:paw","mdi:paw-outline","mdi:bird","mdi:fishbowl",
+      "mdi:alpha-a","mdi:alpha-b","mdi:alpha-c","mdi:alpha-d","mdi:alpha-e",
+      "mdi:alpha-f","mdi:alpha-g","mdi:alpha-h","mdi:alpha-i","mdi:alpha-j",
+      "mdi:alpha-k","mdi:alpha-l","mdi:alpha-m","mdi:alpha-n","mdi:alpha-o",
+      "mdi:alpha-p","mdi:alpha-q","mdi:alpha-r","mdi:alpha-s","mdi:alpha-t",
+      "mdi:alpha-u","mdi:alpha-v","mdi:alpha-w","mdi:alpha-x","mdi:alpha-y",
+      "mdi:alpha-z","mdi:numeric-0","mdi:numeric-1","mdi:numeric-2","mdi:numeric-3",
+      "mdi:numeric-4","mdi:numeric-5","mdi:numeric-6","mdi:numeric-7","mdi:numeric-8",
+      "mdi:numeric-9","mdi:heart","mdi:heart-outline","mdi:star","mdi:star-outline",
+      "mdi:check","mdi:check-circle","mdi:check-circle-outline","mdi:close",
+      "mdi:close-circle","mdi:close-circle-outline","mdi:information","mdi:information-outline",
+      "mdi:help-circle","mdi:help-circle-outline","mdi:alert","mdi:alert-outline",
+      "mdi:bell","mdi:bell-outline","mdi:magnify","mdi:magnify-minus","mdi:magnify-plus",
+      "mdi:menu","mdi:dots-horizontal","mdi:dots-vertical","mdi:plus","mdi:plus-circle",
+      "mdi:plus-circle-outline","mdi:minus","mdi:minus-circle","mdi:minus-circle-outline",
+      "mdi:pencil","mdi:pencil-outline","mdi:trash-can","mdi:trash-can-outline",
+      "mdi:bookmark","mdi:bookmark-outline","mdi:pin","mdi:pin-outline",
+      "mdi:calendar","mdi:calendar-outline","mdi:clock","mdi:clock-outline",
+      "mdi:timer","mdi:timer-outline","mdi:alarm","mdi:alarm-outline","mdi:weather-sunny",
+      "mdi:weather-cloudy","mdi:weather-rainy","mdi:weather-snowy","mdi:weather-lightning",
+      "mdi:car","mdi:car-outline","mdi:car-side","mdi:car-hatchback","mdi:truck",
+      "mdi:truck-outline","mdi:bike","mdi:motorbike","mdi:bus","mdi:bus-side",
+      "mdi:train","mdi:train-car","mdi:airplane","mdi:airplane-outline","mdi:helicopter",
+      "mdi:rocket","mdi:rocket-outline","mdi:earth","mdi:earth-outline","mdi:map-marker",
+      "mdi:map-marker-outline","mdi:navigation","mdi:compass","mdi:compass-outline",
+      "mdi:flag","mdi:flag-outline","mdi:tag","mdi:tag-outline","mdi:label",
+      "mdi:label-outline","mdi:bookmark-check","mdi:bookmark-check-outline","mdi:content-save",
+      "mdi:content-save-outline","mdi:folder","mdi:folder-outline","mdi:file-document",
+      "mdi:file-document-outline","mdi:clipboard-text","mdi:clipboard-text-outline",
+      "mdi:note","mdi:note-outline","mdi:book","mdi:book-outline","mdi:library",
+      "mdi:library-outline","mdi:newspaper","mdi:newspaper-variant","mdi:rss",
+      "mdi:rss-box","mdi:email","mdi:email-outline","mdi:email-open","mdi:email-open-outline",
+      "mdi:phone","mdi:phone-outline","mdi:cellphone","mdi:cellphone-basic",
+      "mdi:laptop","mdi:monitor","mdi:television","mdi:television-classic",
+      "mdi:remote-tv","mdi:gamepad","mdi:gamepad-variant","mdi:controller-classic",
+      "mdi:headphones","mdi:headset","mdi:speaker","mdi:speaker-outline",
+      "mdi:camera","mdi:camera-outline","mdi:video","mdi:video-outline","mdi:music",
+      "mdi:music-note","mdi:music-note-outline","mdi:playlist-music","mdi:radio",
+      "mdi:radio-outline","mdi:trophy","mdi:trophy-outline","mdi:medal","mdi:medal-outline",
+      "mdi:crown","mdi:crown-outline","mdi:diamond","mdi:diamond-outline","mdi:emoticon",
+      "mdi:emoticon-outline","mdi:emoticon-happy","mdi:emoticon-happy-outline",
+      "mdi:emoticon-sad","mdi:emoticon-sad-outline","mdi:emoticon-cool",
+      "mdi:emoticon-cool-outline","mdi:emoticon-neutral","mdi:emoticon-neutral-outline",
+      "mdi:emoticon-angry","mdi:emoticon-angry-outline","mdi:face","mdi:face-outline",
+      "mdi:face-man","mdi:face-man-outline","mdi:face-woman","mdi:face-woman-outline",
+      "mdi:face-agent","mdi:face-agent-outline","mdi:robot","mdi:robot-outline",
+      "mdi:alien","mdi:alien-outline","mdi:ghost","mdi:ghost-outline","mdi:skull",
+      "mdi:skull-outline","mdi:pirate","mdi:pirate-outline","mdi:ninja","mdi:ninja-outline",
+      "mdi:wizard-hat","mdi:run","mdi:run-fast","mdi:walk","mdi:human","mdi:human-female",
+      "mdi:human-male","mdi:human-child","mdi:human-baby-changing-table","mdi:wheelchair",
+      "mdi:stairs","mdi:elevator","mdi:escalator","mdi:fire","mdi:fire-extinguisher",
+      "mdi:flash","mdi:flash-outline","mdi:flashlight","mdi:flashlight-outline",
+      "mdi:lightning-bolt","mdi:lightning-bolt-outline","mdi:snowflake",
+      "mdi:snowflake-variant","mdi:umbrella","mdi:umbrella-outline","mdi:sunglasses",
+      "mdi:glasses","mdi:hat-fedora","mdi:tshirt-crew","mdi:tshirt-crew-outline",
+      "mdi:shoe-sneaker","mdi:shoe-formal","mdi:tie","mdi:bow-tie","mdi:watch",
+      "mdi:watch-outline","mdi:clock-digital","mdi:alarm-snooze","mdi:alarm-check",
+      "mdi:bed","mdi:bed-outline","mdi:sofa","mdi:sofa-outline","mdi:table-chair",
+      "mdi:fridge","mdi:fridge-outline","mdi:fridge-top","mdi:fridge-bottom",
+      "mdi:stove","mdi:stove-outline","mdi:washing-machine","mdi:dishwasher",
+      "mdi:microwave","mdi:microwave-outline","mdi:toaster","mdi:toaster-oven",
+      "mdi:blender","mdi:coffee-maker-outline","mdi:kettle","mdi:kettle-outline",
+      "mdi:kettle-steam","mdi:kettle-steam-outline","mdi:pot","mdi:pot-steam",
+      "mdi:pot-steam-outline","mdi:pan","mdi:pan-outline","mdi:spoon-sugar",
+      "mdi:scale","mdi:scale-outline","mdi:ruler","mdi:ruler-square","mdi:tape-measure",
+      "mdi:scissors","mdi:scissors-cutting","mdi:needle","mdi:thread",
+      "mdi:safety-goggles","mdi:hard-hat","mdi:hammer","mdi:hammer-screwdriver",
+      "mdi:wrench","mdi:wrench-outline","mdi:screwdriver","mdi:screwdriver-outline",
+      "mdi:drill","mdi:saw-blade","mdi:axe","mdi:shovel","mdi:palette",
+      "mdi:palette-outline","mdi:paint-brush","mdi:paint-roller","mdi:format-paint",
+      "mdi:draw","mdi:pencil-ruler","mdi:ruler-triangle","mdi:divider",
+      "mdi:protractor","mdi:compass","mdi:compass-outline","mdi:map","mdi:map-outline",
+      "mdi:globe-model","mdi:terrain","mdi:forest","mdi:pine-tree","mdi:pine-tree-box",
+      "mdi:leaf","mdi:leaf-outline","mdi:leaf-maple","mdi:leaf-maple-outline",
+      "mdi:flower-poppy","mdi:flower-poppy-outline","mdi:flower-rose",
+      "mdi:flower-rose-outline","mdi:flower-tulip","mdi:flower-tulip-outline",
+      "mdi:grass","mdi:shrub","mdi:barley","mdi:seed","mdi:seed-outline","mdi:grain",
+      "mdi:garlic","mdi:ginger","mdi:peanut","mdi:peanut-outline","mdi:almond",
+      "mdi:cashew","mdi:chestnut","mdi:hazelnut","mdi:pistachio","mdi:walnut",
+      "mdi:cow","mdi:cow-outline","mdi:pig","mdi:pig-variant","mdi:pig-variant-outline",
+      "mdi:sheep","mdi:duck","mdi:turkey","mdi:chicken","mdi:rabbit","mdi:rabbit-variant",
+      "mdi:bee","mdi:bee-flower","mdi:bug","mdi:bug-outline","mdi:butterfly",
+      "mdi:butterfly-outline","mdi:spider","mdi:spider-outline","mdi:snail",
+      "mdi:snail-outline","mdi:turtle","mdi:turtle-outline","mdi:fishbowl",
+      "mdi:fishbowl-outline","mdi:shark","mdi:shark-outline","mdi:whale",
+      "mdi:whale-outline","mdi:dolphin","mdi:seal","mdi:penguin","mdi:penguin-outline",
+      "mdi:owl","mdi:owl-outline","mdi:eagle","mdi:eagle-outline","mdi:parrot",
+      "mdi:cat","mdi:cat-outline","mdi:dog","mdi:dog-side","mdi:dog-service",
+      "mdi:horse","mdi:horse-variant","mdi:horse-variant-outline","mdi:elephant",
+      "mdi:elephant-outline","mdi:snake","mdi:snake-outline","mdi:lizard",
+      "mdi:lizard-outline","mdi:bat","mdi:bat-outline","mdi:spider-web",
+      "mdi:spider-thread","mdi:fire-hydrant","mdi:fire-hydrant-alert",
+      "mdi:fire-hydrant-off","mdi:hydrant","mdi:hydrant-outline"
+    ];
+
     this._iconMap = {
       eier:"1F95A", ei:"1F95A", apfel:"1F34E", äpfel:"1F34E", banane:"1F34C", bananen:"1F34C",
       birne:"1F350", birnen:"1F350", kiwi:"1F95D", orange:"1F34A", orangen:"1F34A",
@@ -1025,17 +1150,19 @@ class ShoppingListCard extends HTMLElement {
     box.appendChild(quickWrap);
 
     const iconWrap = document.createElement("div");
-    iconWrap.style.cssText = "margin-bottom:12px;";
+    iconWrap.style.cssText = "margin-bottom:12px;position:relative;";
     const iconLabel = document.createElement("div");
-    iconLabel.style.cssText = "font-size:13px;color:#666;margin-bottom:4px;";
+    iconLabel.style.cssText = "font-size:13px;color:#666;margin-bottom:4px;display:flex;align-items:center;gap:6px;";
     iconLabel.textContent = "MDI Icon (optional)";
     iconWrap.appendChild(iconLabel);
+
+    const { icon: existingIcon, text: existingText } = this._parseDescription(item.description);
+
     const iconRow = document.createElement("div");
     iconRow.style.cssText = "display:flex;align-items:center;gap:8px;";
     const iconInput = document.createElement("input");
     iconInput.type = "text";
-    iconInput.placeholder = "z.B. mdi:food-apple";
-    const { icon: existingIcon, text: existingText } = this._parseDescription(item.description);
+    iconInput.placeholder = "mdi:food-apple";
     iconInput.value = existingIcon || "";
     iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:#f1f8e9;color:#333;font-size:15px;outline:none;box-sizing:border-box;";
     const iconPreview = document.createElement("ha-icon");
@@ -1055,6 +1182,57 @@ class ShoppingListCard extends HTMLElement {
     iconRow.appendChild(iconInput);
     iconRow.appendChild(iconPreview);
     iconWrap.appendChild(iconRow);
+
+    const iconDropdown = document.createElement("div");
+    iconDropdown.style.cssText = "position:absolute;left:0;right:0;top:100%;margin-top:4px;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:200;max-height:220px;overflow-y:auto;display:none;padding:8px;box-sizing:border-box;";
+    const renderIconResults = (query) => {
+      iconDropdown.innerHTML = "";
+      const q = query.toLowerCase().replace(/^mdi:/, "").trim();
+      let results = [];
+      if (!q) {
+        results = this._mdiIcons.slice(0, 30);
+      } else {
+        results = this._mdiIcons.filter(i => i.replace("mdi:", "").includes(q)).slice(0, 30);
+      }
+      if (results.length === 0) {
+        iconDropdown.style.display = "none";
+        return;
+      }
+      const grid = document.createElement("div");
+      grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(40px, 1fr));gap:4px;";
+      results.forEach(name => {
+        const cell = document.createElement("div");
+        cell.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border-radius:8px;cursor:pointer;transition:background 0.1s;min-height:44px;";
+        const ico = document.createElement("ha-icon");
+        ico.setAttribute("icon", name);
+        ico.style.cssText = "width:22px;height:22px;color:#555;";
+        cell.appendChild(ico);
+        cell.addEventListener("mouseenter", () => { cell.style.background = "#e8f5e9"; });
+        cell.addEventListener("mouseleave", () => { cell.style.background = "transparent"; });
+        cell.addEventListener("click", () => {
+          iconInput.value = name;
+          updatePreview();
+          iconDropdown.style.display = "none";
+        });
+        grid.appendChild(cell);
+      });
+      iconDropdown.appendChild(grid);
+      iconDropdown.style.display = "block";
+    };
+    iconInput.addEventListener("focus", () => renderIconResults(iconInput.value));
+    iconInput.addEventListener("input", () => renderIconResults(iconInput.value));
+    iconInput.addEventListener("blur", () => { setTimeout(() => iconDropdown.style.display = "none", 200); });
+    iconWrap.appendChild(iconDropdown);
+
+    const iconClear = document.createElement("div");
+    iconClear.style.cssText = "font-size:11px;color:#aaa;cursor:pointer;margin-top:4px;text-align:right;";
+    iconClear.textContent = "Icon entfernen";
+    iconClear.addEventListener("click", () => {
+      iconInput.value = "";
+      updatePreview();
+      iconDropdown.style.display = "none";
+    });
+    iconWrap.appendChild(iconClear);
     box.appendChild(iconWrap);
 
     const descInput = document.createElement("input");
