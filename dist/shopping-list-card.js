@@ -8,7 +8,6 @@ class ShoppingListCard extends HTMLElement {
     this._iconMap = null;
     this._catMap = null;
     this._renderedHash = "";
-    this._mdiIconMap = {};
   }
 
   setConfig(config) {
@@ -177,7 +176,6 @@ class ShoppingListCard extends HTMLElement {
       { key: "getraenke", keys: new Set(["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"]) },
       { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","mundspülung","nasenspray","orangenschalen","papiertüten","parfüm","pfefferkörner","pflaster","rasierklingen","rasierschaum","räucherstäbchen","salbei","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zahnbürste","zitronenmelisse","zündhölzer"]) }
     ];
-    this._loadMdiIcons();
   }
 
   set hass(hass) {
@@ -291,46 +289,32 @@ class ShoppingListCard extends HTMLElement {
     return "1F6D2";
   }
 
-  _loadMdiIcons() {
-    try {
-      const raw = localStorage.getItem("shopping-list-card-mdi-icons");
-      if (raw) this._mdiIconMap = JSON.parse(raw);
-    } catch (e) {
-      this._mdiIconMap = {};
-    }
+  _parseDescription(desc) {
+    if (!desc) return { icon: null, text: "" };
+    const match = desc.match(/^\[(mdi:[\w-]+)\]\s*(.*)$/);
+    if (match) return { icon: match[1], text: match[2] };
+    return { icon: null, text: desc };
   }
 
-  _getMdiIcon(text) {
-    const t = text.toLowerCase();
-    if (this._mdiIconMap[t]) return this._mdiIconMap[t];
-    const map = this.config?.icon_map || {};
-    if (map[t] && String(map[t]).startsWith("mdi:")) return map[t];
-    return null;
-  }
-
-  _setMdiIcon(text, icon) {
-    const t = text.toLowerCase();
-    if (!icon) {
-      delete this._mdiIconMap[t];
-    } else {
-      this._mdiIconMap[t] = icon;
-    }
-    try {
-      localStorage.setItem("shopping-list-card-mdi-icons", JSON.stringify(this._mdiIconMap));
-    } catch (e) {}
-  }
-
-  _renderItemIcon(container, text, size) {
-    const mdiIcon = this._getMdiIcon(text);
+  _renderItemIcon(container, item, size) {
+    const { icon } = this._parseDescription(item?.description);
     container.innerHTML = "";
-    if (mdiIcon && mdiIcon.startsWith("mdi:")) {
-      const icon = document.createElement("ha-icon");
-      icon.setAttribute("icon", mdiIcon);
-      icon.style.cssText = `width:${size}px;height:${size}px;color:inherit;`;
-      container.appendChild(icon);
+    if (icon) {
+      const el = document.createElement("ha-icon");
+      el.setAttribute("icon", icon);
+      el.style.cssText = `width:${size}px;height:${size}px;color:inherit;`;
+      container.appendChild(el);
     } else {
-      const icon = this._createOpenmojiImg(this._getItemIcon(text), size);
-      container.appendChild(icon);
+      const map = this.config?.icon_map || {};
+      if (map[item?.summary] && String(map[item.summary]).startsWith("mdi:")) {
+        const el = document.createElement("ha-icon");
+        el.setAttribute("icon", map[item.summary]);
+        el.style.cssText = `width:${size}px;height:${size}px;color:inherit;`;
+        container.appendChild(el);
+      } else {
+        const img = this._createOpenmojiImg(this._getItemIcon(item?.summary || ""), size);
+        container.appendChild(img);
+      }
     }
   }
 
@@ -499,21 +483,21 @@ class ShoppingListCard extends HTMLElement {
           badge.style.color = isDone ? "#666" : "#fff";
         }
 
-        const oldDesc = tile.querySelector(".sl-badge")?.textContent || "";
-        const newDesc = item.description || "";
-        if (oldDesc !== newDesc) {
-          if (!newDesc) {
+        const { text: newDescText } = this._parseDescription(item.description || "");
+        const oldDescText = tile.querySelector(".sl-badge")?.textContent || "";
+        if (oldDescText !== newDescText) {
+          if (!newDescText) {
             const b = tile.querySelector(".sl-badge");
             b && b.remove();
           } else {
             let b = tile.querySelector(".sl-badge");
             if (b) {
-              b.textContent = newDesc;
+              b.textContent = newDescText;
             } else {
               b = document.createElement("div");
               b.className = "sl-badge";
               b.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "#ccc" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "#666" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
-              b.textContent = newDesc;
+              b.textContent = newDescText;
               tile.appendChild(b);
             }
           }
@@ -924,7 +908,7 @@ class ShoppingListCard extends HTMLElement {
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
-    this._renderItemIcon(iconWrap, item.summary, 36);
+    this._renderItemIcon(iconWrap, item, 36);
     tile.appendChild(iconWrap);
 
     const label = document.createElement("div");
@@ -934,11 +918,14 @@ class ShoppingListCard extends HTMLElement {
     tile.appendChild(label);
 
     if (item.description) {
-      const badge = document.createElement("div");
-      badge.className = "sl-badge";
-      badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "#ccc" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "#666" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
-      badge.textContent = item.description;
-      tile.appendChild(badge);
+      const { text: descText } = this._parseDescription(item.description);
+      if (descText) {
+        const badge = document.createElement("div");
+        badge.className = "sl-badge";
+        badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "#ccc" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "#666" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
+        badge.textContent = descText;
+        tile.appendChild(badge);
+      }
     }
 
     let pressTimer;
@@ -981,7 +968,7 @@ class ShoppingListCard extends HTMLElement {
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
-    this._renderItemIcon(iconWrap, text, 36);
+    this._renderItemIcon(iconWrap, { summary: text, description: null }, 36);
     tile.appendChild(iconWrap);
 
     const label = document.createElement("div");
@@ -1048,7 +1035,8 @@ class ShoppingListCard extends HTMLElement {
     const iconInput = document.createElement("input");
     iconInput.type = "text";
     iconInput.placeholder = "z.B. mdi:food-apple";
-    iconInput.value = this._getMdiIcon(item.summary) || "";
+    const { icon: existingIcon, text: existingText } = this._parseDescription(item.description);
+    iconInput.value = existingIcon || "";
     iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:#f1f8e9;color:#333;font-size:15px;outline:none;box-sizing:border-box;";
     const iconPreview = document.createElement("ha-icon");
     iconPreview.style.cssText = "width:28px;height:28px;color:#666;flex-shrink:0;";
@@ -1071,7 +1059,7 @@ class ShoppingListCard extends HTMLElement {
 
     const descInput = document.createElement("input");
     descInput.type = "text";
-    descInput.value = item.description || "";
+    descInput.value = existingText || "";
     descInput.style.cssText = "width:100%;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:#f1f8e9;color:#333;font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;";
     box.appendChild(descInput);
 
@@ -1083,15 +1071,9 @@ class ShoppingListCard extends HTMLElement {
     saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:#43A047;color:#fff;font-size:15px;font-weight:600;cursor:pointer;";
     saveBtn.addEventListener("click", () => {
       const mdiVal = iconInput.value.trim();
-      const prevMdi = this._getMdiIcon(item.summary);
-      let iconChanged = false;
-      if (mdiVal && mdiVal.startsWith("mdi:")) {
-        if (prevMdi !== mdiVal) { this._setMdiIcon(item.summary, mdiVal); iconChanged = true; }
-      } else if (prevMdi) {
-        this._setMdiIcon(item.summary, null); iconChanged = true;
-      }
-      this._updateDescription(entityId, item, descInput.value.trim());
-      if (iconChanged) this._render();
+      const descVal = descInput.value.trim();
+      const fullDesc = mdiVal && mdiVal.startsWith("mdi:") ? `[${mdiVal}] ${descVal}` : descVal;
+      this._updateDescription(entityId, item, fullDesc);
       overlay.remove();
     });
     btns.appendChild(saveBtn);
