@@ -74,7 +74,7 @@ class ShoppingListCard extends HTMLElement {
       "Pralinen","Salzstangen","Studentenfutter","Trockenobst","Weinbrand"
     ])];
 
-    this._mdiIcons = [
+    this._iconLibrary = [
       "mdi:food-apple","mdi:food-apple-outline","mdi:food-carrot","mdi:food-corn",
       "mdi:food-croissant","mdi:food-drumstick","mdi:food-drumstick-outline","mdi:food-fish",
       "mdi:food-fish-outline","mdi:food-grain","mdi:food-steak","mdi:food-takeout-box",
@@ -196,7 +196,22 @@ class ShoppingListCard extends HTMLElement {
       "mdi:elephant-outline","mdi:snake","mdi:snake-outline","mdi:lizard",
       "mdi:lizard-outline","mdi:bat","mdi:bat-outline","mdi:spider-web",
       "mdi:spider-thread","mdi:fire-hydrant","mdi:fire-hydrant-alert",
-      "mdi:fire-hydrant-off","mdi:hydrant","mdi:hydrant-outline"
+      "mdi:fire-hydrant-off","mdi:hydrant","mdi:hydrant-outline",
+      "si:github","si:apple","si:google","si:amazon","si:netflix","si:spotify",
+      "si:twitter","si:facebook","si:instagram","si:youtube","si:discord","si:slack",
+      "si:docker","si:kubernetes","si:nginx","si:apache","si:linux","si:windows",
+      "si:android","si:ios","si:playstation","si:xbox","si:nintendo","si:steam",
+      "si:visa","si:mastercard","si:paypal","si:bitcoin","si:ethereum",
+      "phu:apple-logo","phu:carrot","phu:coffee","phu:fish","phu:hamburger",
+      "phu:ice-cream","phu:orange","phu:pizza","phu:shopping-cart","phu:wine",
+      "fluent:food-apple-24-filled","fluent:food-cake-24-filled","fluent:food-carrot-24-filled",
+      "fluent:food-egg-24-filled","fluent:food-fish-24-filled","fluent:food-pizza-24-filled",
+      "fluent:drink-coffee-24-filled","fluent:drink-wine-24-filled","fluent:drink-beer-24-filled",
+      "hue:lightbulb","hue:lightbulb-group","hue:lightbulb-off","hue:outlet","hue:plug",
+      "hue:motion-sensor","hue:contact-sensor","hue:tap-switch","hue:dimmer-switch",
+      "fas:carrot","fas:apple-alt","fas:lemon","fas:fish","fas:hamburger","fas:pizza-slice",
+      "fas:ice-cream","fas:cookie","fas:candy-cane","fas:mug-hot","fas:wine-glass-alt",
+      "far:lemon","far:apple-alt","far:grin","far:sad-tear","far:smile","far:frown"
     ];
 
     this._iconMap = {
@@ -316,18 +331,18 @@ class ShoppingListCard extends HTMLElement {
       this._debounceTimer = null;
       await this._updateItems(this._hass);
       this._render();
-    }, 100);
+    }, 0);
   }
 
   async _updateItems(hass) {
     if (!hass || !this.config?.lists) return;
-    for (const list of this.config.lists) {
+    const promises = this.config.lists.map(async (list) => {
       const entityId = list.entity;
       try {
         const state = hass.states[entityId];
         if (state?.attributes?.todo_items) {
           this._itemsByList[entityId] = state.attributes.todo_items;
-          continue;
+          return;
         }
         const res = await hass.callWS({
           type: "call_service",
@@ -343,7 +358,8 @@ class ShoppingListCard extends HTMLElement {
         console.warn("Shopping List Card: Failed to fetch items for", entityId, e);
         this._itemsByList[entityId] = [];
       }
-    }
+    });
+    await Promise.all(promises);
   }
 
   _shouldRender(oldHass, newHass) {
@@ -358,8 +374,8 @@ class ShoppingListCard extends HTMLElement {
       const oldItems = oldState.attributes?.todo_items || [];
       const newItems = newState.attributes?.todo_items || [];
       if (oldItems.length !== newItems.length) return true;
-      const oldHash = oldItems.map(i => i.summary + i.status + (i.description || "")).join("|");
-      const newHash = newItems.map(i => i.summary + i.status + (i.description || "")).join("|");
+      const oldHash = oldItems.map(i => i.summary + (i.description || "")).join("|");
+      const newHash = newItems.map(i => i.summary + (i.description || "")).join("|");
       if (oldHash !== newHash) return true;
     }
     return false;
@@ -416,7 +432,7 @@ class ShoppingListCard extends HTMLElement {
 
   _parseDescription(desc) {
     if (!desc) return { icon: null, text: "" };
-    const match = desc.match(/^\[(mdi:[\w-]+)\]\s*(.*)$/);
+    const match = desc.match(/^\[([a-z]+:[\w-]+)\]\s*(.*)$/);
     if (match) return { icon: match[1], text: match[2] };
     return { icon: null, text: desc };
   }
@@ -431,7 +447,7 @@ class ShoppingListCard extends HTMLElement {
       container.appendChild(el);
     } else {
       const map = this.config?.icon_map || {};
-      if (map[item?.summary] && String(map[item.summary]).startsWith("mdi:")) {
+      if (map[item?.summary] && /^[a-z]+:/.test(String(map[item.summary]))) {
         const el = document.createElement("ha-icon");
         el.setAttribute("icon", map[item.summary]);
         el.style.cssText = `width:${size}px;height:${size}px;color:inherit;`;
@@ -957,7 +973,7 @@ class ShoppingListCard extends HTMLElement {
     const currentSummaries = [];
     for (const list of this.config.lists) {
       const items = this._itemsByList[list.entity] || [];
-      for (const item of items) currentSummaries.push(list.entity + "|" + item.summary);
+      for (const item of items) currentSummaries.push(list.entity + "|" + item.summary + "|" + (item.description || ""));
     }
     currentSummaries.sort();
     const structHash = currentSummaries.join(";");
@@ -1122,7 +1138,7 @@ class ShoppingListCard extends HTMLElement {
 
     const hint = document.createElement("div");
     hint.style.cssText = "font-size:13px;color:#666;margin-bottom:8px;";
-    hint.textContent = "Anmerkungen (z.B. 2 Packungen, Bio)";
+    hint.textContent = "Anmerkungen";
     box.appendChild(hint);
 
     const quickWrap = document.createElement("div");
@@ -1187,12 +1203,12 @@ class ShoppingListCard extends HTMLElement {
     iconDropdown.style.cssText = "position:absolute;left:0;right:0;top:100%;margin-top:4px;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:200;max-height:220px;overflow-y:auto;display:none;padding:8px;box-sizing:border-box;";
     const renderIconResults = (query) => {
       iconDropdown.innerHTML = "";
-      const q = query.toLowerCase().replace(/^mdi:/, "").trim();
+      const q = query.toLowerCase().replace(/^[a-z]+:/, "").trim();
       let results = [];
       if (!q) {
-        results = this._mdiIcons.slice(0, 30);
+        results = this._iconLibrary.slice(0, 30);
       } else {
-        results = this._mdiIcons.filter(i => i.replace("mdi:", "").includes(q)).slice(0, 30);
+        results = this._iconLibrary.filter(i => i.replace(/^[a-z]+:/, "").includes(q)).slice(0, 30);
       }
       if (results.length === 0) {
         iconDropdown.style.display = "none";
