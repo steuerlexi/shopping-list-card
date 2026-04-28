@@ -1031,13 +1031,41 @@ class ShoppingListCard extends HTMLElement {
       for (const k of Object.keys(groups)) if (!order.includes(k)) order.push(k);
 
       const activeOrder = order.filter(k => groups[k].some(i => i.status === "needs_action"));
-      for (const cat of activeOrder) {
+
+      // Render first 2 categories immediately, rest lazy
+      const immediateCats = activeOrder.slice(0, 2);
+      const lazyCats = activeOrder.slice(2);
+
+      for (const cat of immediateCats) {
         const catItems = groups[cat].filter(i => i.status === "needs_action");
         card.appendChild(this._renderCategory(cat, catItems, list, color));
       }
 
-      const mirror = this._renderMirrorSection(list, items, color, order);
-      if (mirror) card.appendChild(mirror);
+      // Lazy-load remaining categories + mirror
+      if (lazyCats.length || items.length > 0) {
+        const lazyContainer = document.createElement("div");
+        lazyContainer.className = "sl-lazy-container";
+        card.appendChild(lazyContainer);
+
+        requestAnimationFrame(() => {
+          if (!this.isConnected) return;
+          const frag = document.createDocumentFragment();
+          for (const cat of lazyCats) {
+            const catItems = groups[cat].filter(i => i.status === "needs_action");
+            frag.appendChild(this._renderCategory(cat, catItems, list, color));
+          }
+          const mirror = this._renderMirrorSection(list, items, color, order);
+          if (mirror) frag.appendChild(mirror);
+
+          // Replace placeholder with actual content
+          const placeholder = card.querySelector(".sl-lazy-container");
+          if (placeholder) {
+            placeholder.replaceWith(frag);
+          } else {
+            card.appendChild(frag);
+          }
+        });
+      }
     }
     this.replaceChildren(card);
   }
