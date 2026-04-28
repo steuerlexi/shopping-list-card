@@ -775,7 +775,7 @@ class ShoppingListCard extends HTMLElement {
 
     const grid = document.createElement("div");
     grid.className = "sl-grid";
-    grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:12px;padding:12px;transition:max-height 0.3s ease;";
+    grid.className = "sl-grid";
     let collapsed = false;
     header.addEventListener("click", () => {
       collapsed = !collapsed;
@@ -803,7 +803,7 @@ class ShoppingListCard extends HTMLElement {
       if (!tileInput) {
         addTile.innerHTML = "";
         const tileAc = document.createElement("div");
-        tileAc.style.cssText = "position:absolute;top:100%;left:-25px;width:150px;background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:200;max-height:160px;overflow-y:auto;display:none;";
+        tileAc.style.cssText = "position:absolute;top:100%;left:50%;transform:translateX(-50%);width:min(180px,80vw);background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:200;max-height:160px;overflow-y:auto;display:none;";
         tileInput = document.createElement("input");
         tileInput.type = "text";
         tileInput.placeholder = "...";
@@ -913,7 +913,8 @@ class ShoppingListCard extends HTMLElement {
 
       const grid = document.createElement("div");
       grid.className = "sl-grid";
-      grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:8px;padding:8px;transition:max-height 0.3s ease;";
+      grid.className = "sl-grid";
+      grid.style.cssText = "gap:8px;padding:8px;transition:max-height 0.3s ease;";
       let collapsed = false;
       header.addEventListener("click", () => {
         collapsed = !collapsed;
@@ -1004,7 +1005,12 @@ class ShoppingListCard extends HTMLElement {
     const card = document.createElement("ha-card");
     card.style.cssText = "padding:12px;display:block;";
     const style = document.createElement("style");
-    style.textContent = "@keyframes sl-spin{to{transform:rotate(360deg)}}";
+    style.textContent = `
+      @keyframes sl-spin{to{transform:rotate(360deg)}}
+      .sl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px;padding:12px;}
+      @media (max-width:400px){.sl-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;padding:8px;}}
+      @media (max-width:320px){.sl-grid{grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;}}
+    `;
     card.appendChild(style);
 
     for (const list of this.config.lists) {
@@ -1129,7 +1135,7 @@ class ShoppingListCard extends HTMLElement {
     overlay.className = "shopping-list-modal";
     overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;";
     const box = document.createElement("div");
-    box.style.cssText = "background:#fff;border-radius:16px;padding:20px;width:300px;max-width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.3);";
+    box.style.cssText = "background:#fff;border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);box-sizing:border-box;";
 
     const title = document.createElement("div");
     title.style.cssText = "font-size:17px;font-weight:600;margin-bottom:12px;color:#2e7d32;";
