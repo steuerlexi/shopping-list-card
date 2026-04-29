@@ -851,7 +851,7 @@ class ShoppingListCard extends HTMLElement {
     return catWrap;
   }
 
-  _renderMirrorSection(list, items, color, order, maxItems = 20) {
+  _renderMirrorSection(list, items, color, order, maxPerCat = 20) {
     const onListSummaries = new Set(items.map(i => i.summary.toLowerCase()));
     const allArticles = this._getAutocompleteItems();
     const allAvail = [];
@@ -861,14 +861,16 @@ class ShoppingListCard extends HTMLElement {
     }
     if (allAvail.length === 0) return null;
 
-    const isLimited = maxItems !== Infinity && allAvail.length > maxItems;
-    const shownArticles = isLimited ? allAvail.slice(0, maxItems) : allAvail;
-
     const availByCat = {};
-    for (const text of shownArticles) {
+    for (const text of allAvail) {
       const cat = this._getItemCategory(text);
       if (!availByCat[cat]) availByCat[cat] = [];
       availByCat[cat].push(text);
+    }
+
+    let hasAnyLimit = false;
+    for (const cat of order) {
+      if (availByCat[cat] && availByCat[cat].length > maxPerCat) { hasAnyLimit = true; break; }
     }
 
     const mirrorWrap = document.createElement("div");
@@ -882,7 +884,7 @@ class ShoppingListCard extends HTMLElement {
     mirrorTitle.appendChild(checkIcon);
     const mt = document.createElement("div");
     mt.style.cssText = "font-weight:600;font-size:14px;color:#999;flex:1;";
-    mt.textContent = "Verfügbar (" + (isLimited ? shownArticles.length + "/" : "") + allAvail.length + ")";
+    mt.textContent = "Verfügbar (" + allAvail.length + ")";
     mirrorTitle.appendChild(mt);
     const clearAll = document.createElement("div");
     clearAll.textContent = "erledigte löschen";
@@ -893,7 +895,9 @@ class ShoppingListCard extends HTMLElement {
 
     for (const cat of order) {
       if (!availByCat[cat]) continue;
-      const catTexts = availByCat[cat];
+      const fullCatTexts = availByCat[cat];
+      const isLimited = fullCatTexts.length > maxPerCat;
+      const catTexts = isLimited ? fullCatTexts.slice(0, maxPerCat) : fullCatTexts;
       const catWrap = document.createElement("div");
       catWrap.className = "sl-cat";
       catWrap.style.marginBottom = "12px";
@@ -911,7 +915,7 @@ class ShoppingListCard extends HTMLElement {
       const count = document.createElement("div");
       count.className = "sl-count";
       count.style.cssText = "font-size:11px;color:#ccc;font-weight:400;";
-      count.textContent = catTexts.length;
+      count.textContent = fullCatTexts.length;
       header.appendChild(count);
       const chevron = document.createElement("ha-icon");
       chevron.setAttribute("icon", "mdi:chevron-down");
@@ -941,14 +945,43 @@ class ShoppingListCard extends HTMLElement {
           grid.appendChild(this._renderGhostTile(text, list.entity, color));
         }
       }
+
+      if (isLimited) {
+        const loadMore = document.createElement("div");
+        loadMore.style.cssText = "display:flex;align-items:center;justify-content:center;padding:8px;border-radius:12px;background:#fafafa;border:1px dashed #ccc;cursor:pointer;margin-top:4px;grid-column:1 / -1;transition:all 0.15s;";
+        loadMore.textContent = "Mehr laden (" + (fullCatTexts.length - catTexts.length) + ")";
+        loadMore.style.fontSize = "12px";
+        loadMore.style.color = "#999";
+        loadMore.addEventListener("mouseenter", () => { loadMore.style.background = "#e8f5e9"; loadMore.style.borderColor = color; });
+        loadMore.addEventListener("mouseleave", () => { loadMore.style.background = "#fafafa"; loadMore.style.borderColor = "#ccc"; });
+        let expanded = false;
+        loadMore.addEventListener("click", () => {
+          if (expanded) return;
+          expanded = true;
+          loadMore.remove();
+          for (let i = maxPerCat; i < fullCatTexts.length; i++) {
+            const text = fullCatTexts[i];
+            const existing = items.find(it => it.summary.toLowerCase() === text.toLowerCase());
+            if (existing) {
+              const tile = this._renderTile(existing, list.entity, color);
+              tile.dataset.section = "mirror";
+              grid.appendChild(tile);
+            } else {
+              grid.appendChild(this._renderGhostTile(text, list.entity, color));
+            }
+          }
+        });
+        grid.appendChild(loadMore);
+      }
+
       catWrap.appendChild(grid);
       mirrorWrap.appendChild(catWrap);
     }
 
-    if (isLimited) {
+    if (hasAnyLimit) {
       const showAll = document.createElement("div");
       showAll.style.cssText = "display:flex;align-items:center;justify-content:center;padding:10px;border-radius:12px;background:#fafafa;border:1px dashed #ccc;cursor:pointer;margin-top:8px;transition:all 0.15s;";
-      showAll.textContent = "Alle " + allAvail.length + " Artikel anzeigen";
+      showAll.textContent = "Alle Artikel anzeigen";
       showAll.style.fontSize = "13px";
       showAll.style.color = "#666";
       showAll.addEventListener("mouseenter", () => { showAll.style.background = "#e8f5e9"; showAll.style.borderColor = color; });
