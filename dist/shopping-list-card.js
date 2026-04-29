@@ -40,8 +40,8 @@ class ShoppingListCard extends HTMLElement {
       "Apfel","Banane","Birne","Kiwi","Orange","Mandarine","Trauben","Kirschen","Erdbeeren","Himbeeren",
       "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
       "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln",
-      "Knoblauch","Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Croissants",
-      "Milch","Joghurt","Sahne","Butter","Käse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen",
+      "Knoblauch","Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants",
+      "Milch","Joghurt","Sahne","Butter","Käse","Schafskäse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen",
       "Hackfleisch","Schnitzel","Wurst","Schinken","Fisch","Lachs","Garnelen","Tofu","Nudeln","Spaghetti",
       "Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig","Ketchup","Mayonnaise","Senf","Honig",
       "Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Wein",
@@ -49,7 +49,7 @@ class ShoppingListCard extends HTMLElement {
       "Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse","Mandeln","TK-Gemüse","Müllbeutel",
       "Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel","Heidelbeeren",
       "Holunder","Johannisbeeren","Klementine","Mandarine","Nektarine","Pampelmuse","Preiselbeeren",
-      "Rote Bete","Stachelbeeren","Wassermelone","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat",
+      "Rote Bete","Stachelbeeren","Wassermelone","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat","Dill",
       "Kürbis","Lauch","Mais","Mangold","Pak Choi","Pastinake","Peperoni","Petersilie","Porree",
       "Rettich","Rosenkohl","Rotkohl","Rucola","Spargel","Süßkartoffel","Topinambur","Weißkohl",
       "Buttermilch","Camembert","Creme fraiche","Feta","Griechischer Joghurt","Kefir","Kochkäse",
@@ -225,11 +225,11 @@ class ShoppingListCard extends HTMLElement {
       paprika:"1FAD1", karotte:"1F955", karotten:"1F955", zucchini:"1F955", aubergine:"1F346",
       brokkoli:"1F966", blumenkohl:"1F966", spinat:"1F96C", blattspinat:"1F96C", salat:"1F96C",
       kartoffel:"1F954", kartoffeln:"1F954", zwiebel:"1F9C5", zwiebeln:"1F9C5", knoblauch:"1F9C4",
-      lauch:"1F96C", schnittlauch:"1F96C", frühlingszwiebel:"1F9C5", schalotte:"1F9C5",
+      lauch:"1F96C", schnittlauch:"1F96C", dill:"1F33F", frühlingszwiebel:"1F9C5", schalotte:"1F9C5",
       radieschen:"1F955", sellerie:"1F96C", "rote bete":"1F345", rotebete:"1F345", pilz:"1F344",
       champignon:"1F344", pfifferling:"1F344", steinpilz:"1F344", kräuterseitling:"1F344",
       austernpilz:"1F344", pilze:"1F344", gemüse:"1F955", obst:"1F353", frucht:"1F353",
-      brot:"1F35E", brötchen:"1F35E", toast:"1F35E", semmel:"1F35E", baguette:"1F35E",
+      brot:"1F35E", brötchen:"1F35E", toast:"1F35E", semmel:"1F35E", baguette:"1F35E", "kräuterbaguette":"1F35E", "kräuterbaguettes":"1F35E",
       ciabatta:"1F35E", croissant:"1F950", croissants:"1F950", schrippe:"1F35E", weckle:"1F35E",
       laugenbrezel:"1F35E", brezel:"1F35E", milch:"1F95B", joghurt:"1FAD9", sahne:"1F95B",
       schmand:"1F95B", schlagsahne:"1F95B", butter:"1F9C8", käse:"1F9C0", quark:"1FAD9",
@@ -252,7 +252,7 @@ class ShoppingListCard extends HTMLElement {
       wasser:"1F4A7", getränke:"1F964", cola:"1F964", limonade:"1F964", sprite:"1F964",
       fanta:"1F964", apfelschorle:"1F964", saft:"1F9C3", orangensaft:"1F9C3", kapseln:"2615",
       kakao:"2615", tiefkühl:"2744", tiefkühlpizza:"1F355", pizza:"1F355", frikassee:"1F963",
-      fischstäbchen:"1F41F", pommes:"1F35F", eis:"1F366", eiskrem:"1F366",
+      fischstäbchen:"1F41F", pommes:"1F35F", eis:"1F368", eiskrem:"1F368",
       toilettenpapier:"1F9FB", küchenrolle:"1F9FB", papier:"1F4C4", taschentuch:"1F9FB",
       waschmittel:"1F9FC", spülmittel:"1FAE7", spüli:"1FAE7", zahnpasta:"1FAE5",
       zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"1F9FC",
@@ -267,7 +267,7 @@ class ShoppingListCard extends HTMLElement {
       pastinake:"1F955", petersilie:"1F33F", porree:"1F96C", rettich:"1F955",
       rosenkohl:"1F966", rotkohl:"1F966", rucola:"1F96C", spargel:"1F966",
       süßkartoffel:"1F360", topinambur:"1F954", weißkohl:"1F966", buttermilch:"1F95B",
-      camembert:"1F9C0", "creme fraiche":"1F95B", feta:"1F9C0",
+      camembert:"1F9C0", "creme fraiche":"1F95B", feta:"1F9C0", schafskäse:"1F9C0",
       "griechischer joghurt":"1FAD9", kefir:"1F95B", kochkäse:"1F9C0", leerdammer:"1F9C0",
       milchreis:"1F35A", ricotta:"1F9C0", calamari:"1F991", ente:"1F357",
       hähnchenbrust:"1F357", hähnchenkeule:"1F357", kalbfleisch:"1F969", kassler:"1F953",
@@ -307,9 +307,9 @@ class ShoppingListCard extends HTMLElement {
     };
 
     this._catMap = [
-      { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","mandarine","traube","trauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder"]) },
-      { key: "brot_backwaren", keys: new Set(["brot","brötchen","toast","semmel","baguette","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","wraps"]) },
-      { key: "milch_eier", keys: new Set(["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta"]) },
+      { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","mandarine","traube","trauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","dill","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder"]) },
+      { key: "brot_backwaren", keys: new Set(["brot","brötchen","toast","semmel","baguette","kräuterbaguette","kräuterbaguettes","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","wraps"]) },
+      { key: "milch_eier", keys: new Set(["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta","schafskäse"]) },
       { key: "fleisch_fisch", keys: new Set(["fleisch","steak","hähnchen","pute","ente","schinken","speck","wurst","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"]) },
       { key: "trockenwaren", keys: new Set(["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","öl","olivenöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","sonnenblumenöl","soßenbinder","vanillezucker","worcestersauce"]) },
       { key: "tiefkuehlprodukte", keys: new Set(["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem","gemüsepfanne","knödel","nuggets","paniertes","piroggen","ravioli","reibekuchen","schaschlik","tortellini","tk-gemüse","waffeln"]) },
@@ -923,7 +923,7 @@ class ShoppingListCard extends HTMLElement {
         chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
       });
 
-      const batchSize = 50;
+      const batchSize = 20;
       let shown = 0;
       for (const text of catTexts) {
         if (shown >= batchSize) break;
