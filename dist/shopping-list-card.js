@@ -97,11 +97,11 @@ class ShoppingListCard extends HTMLElement {
       "mdi:package","mdi:package-variant","mdi:package-variant-closed","mdi:trash-can",
       "mdi:trash-can-outline","mdi:delete","mdi:delete-outline","mdi:paper-towel",
       "mdi:paper-towel-outline","mdi:toilet-paper","mdi:toilet-paper-outline","mdi:shower",
-      "mdi:bathtub","mdi:toothbrush","mdi:toothbrush-paste","mdi:soap","mdi:spray-bottle",
+      "mdi:bathtub","mdi:toothbrush","mdi:toothbrush-paste","mdi:soap","mdi:shaker","mdi:shaker-outline","mdi:spray-bottle",
       "mdi:broom","mdi:vacuum-cleaner","mdi:lightbulb","mdi:lightbulb-outline","mdi:candle",
       "mdi:candle-fire","mdi:bandage","mdi:bandage-box","mdi:pill","mdi:hand-wash",
       "mdi:hand-water","mdi:water","mdi:water-well","mdi:bottle-water","mdi:bottle-wine-outline",
-      "mdi:cup-water","mdi:gas-station","mdi:flower","mdi:flower-outline","mdi:flower-tulip",
+      "mdi:cup-water","mdi:gas-station","mdi:oil","mdi:flower","mdi:flower-outline","mdi:flower-tulip",
       "mdi:flower-tulip-outline","mdi:seed","mdi:seed-outline","mdi:tree","mdi:tree-outline",
       "mdi:account","mdi:account-outline","mdi:account-group","mdi:baby","mdi:baby-bottle",
       "mdi:cat","mdi:dog","mdi:paw","mdi:paw-outline","mdi:bird","mdi:fishbowl",
@@ -231,7 +231,7 @@ class ShoppingListCard extends HTMLElement {
       austernpilz:"1F344", pilze:"1F344", gemüse:"1F955", obst:"1F353", frucht:"1F353",
       brot:"1F35E", brötchen:"1F35E", toast:"1F35E", semmel:"1F35E", baguette:"1F35E", "kräuterbaguette":"1F35E", "kräuterbaguettes":"1F35E",
       ciabatta:"1F35E", croissant:"1F950", croissants:"1F950", schrippe:"1F35E", weckle:"1F35E",
-      laugenbrezel:"1F35E", brezel:"1F35E", milch:"1F95B", joghurt:"1FAD9", sahne:"1F95B",
+      laugenbrezel:"1F35E", brezel:"1F35E", milch:"1F95B", joghurt:"1FAD9", sahne:"mdi:cup-water",
       schmand:"1F95B", schlagsahne:"1F95B", butter:"1F9C8", käse:"1F9C0", quark:"1FAD9",
       frischkäse:"1F9C0", mozzarella:"1F9C0", brie:"1F9C0", gouda:"1F9C0", emmentaler:"1F9C0",
       parmesan:"1F9C0", "cream cheese":"1F9C0", mascarpone:"1F9C0", burrata:"1F9C0",
@@ -255,8 +255,8 @@ class ShoppingListCard extends HTMLElement {
       fischstäbchen:"1F41F", pommes:"1F35F", eis:"mdi:ice-cream", eiskrem:"mdi:ice-cream",
       toilettenpapier:"1F9FB", küchenrolle:"1F9FB", papier:"1F4C4", taschentuch:"1F9FB",
       waschmittel:"1F9FC", spülmittel:"1FAE7", spüli:"1FAE7", zahnpasta:"1FAE5",
-      zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"1F9FC",
-      deodorant:"1F9F4", rasierer:"1FA92", dusch:"1F6BF", bad:"1F6BF", weichspüler:"1F9FC",
+      zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"mdi:soap",
+      deodorant:"1F9F4", rasierer:"1FA92", dusch:"1F6BF", bad:"1F6BF", weichspüler:"mdi:washing-machine",
       reiniger:"1F9F9", tabs:"1F9FC", schokolade:"1F36B", kekse:"1F36A", chips:"1F35F",
       nüsse:"1F330", mandeln:"1F330", müllbeutel:"1F5D1", aprikose:"1F351",
       brombeeren:"1F347", clementine:"1F34A", klementine:"1F34A", cranberry:"1F347",
@@ -270,14 +270,14 @@ class ShoppingListCard extends HTMLElement {
       camembert:"1F9C0", "creme fraiche":"1F95B", feta:"1F9C0", schafskäse:"1F9C0",
       "griechischer joghurt":"1FAD9", kefir:"1F95B", kochkäse:"1F9C0", leerdammer:"1F9C0",
       milchreis:"1F35A", ricotta:"1F9C0", calamari:"1F991", ente:"1F357",
-      hähnchenbrust:"1F357", hähnchenkeule:"1F357", kalbfleisch:"1F969", kassler:"1F953",
+      hähnchenbrust:"1F357", hähnchenkeule:"1F357", kalbfleisch:"mdi:food-steak", kassler:"1F953",
       lamm:"1F411", leber:"1F969", lunge:"1F969", putenbrust:"1F357",
       putenschnitzel:"1F357", rinderfilet:"1F969", rinderhack:"1F969",
       rinderroulade:"1F969", rollmops:"1F41F", sülze:"1F963", zander:"1F41F",
       backpulver:"1F9C2", balsamico:"1F9C2", brühe:"1F963", gnocchi:"1F35D",
       haferflocken:"1F33E", kartoffelstärke:"1F33E", kichererbsen:"1F96C",
       kidneybohnen:"1F96C", linsen:"1F96C", paniermehl:"1F33E", pesto:"1F33F",
-      polenta:"1F35A", rosinen:"1F347", sahnesteif:"1F9C2", sojasoße:"1F963",
+      polenta:"1F35A", rosinen:"1F347", sahnesteif:"mdi:shaker", sojasoße:"1F963",
       sonnenblumenöl:"1F6E2", soßenbinder:"1F9C2", vanillezucker:"1F36C",
       worcestersauce:"1F9C2", energydrink:"1F964", granatapfelsaft:"1F9C3",
       hugo:"1F377", mineralwasser:"1F4A7", prosecco:"1F377", radler:"1F37A",
@@ -292,7 +292,7 @@ class ShoppingListCard extends HTMLElement {
       glühbirne:"1F4A1", haargel:"1F9FC", handcreme:"1F9F5", handschuhe:"1F9E4",
       hustensaft:"1F9EA", insektenspray:"1F9F4", kerze:"1F56F", kerzen:"1F56F",
       klorollen:"1F9FB", kondome:"1F9F4", körperöl:"1F9F7", küchentücher:"1F9FB",
-      leinöl:"1F6E2", lotion:"1F9F5", lufterfrischer:"1F33F", "make-up":"1F484",
+      leinöl:"mdi:oil", lotion:"1F9F5", lufterfrischer:"1F33F", "make-up":"1F484",
       mascara:"1F484", medikamente:"1F48A", milchreiniger:"1F9FC", mülltüten:"1F5D1",
       mundspülung:"1F9F4", nasenspray:"1F9EA", orangenschalen:"1F34A",
       papiertüten:"1F4E6", parfüm:"1F484", pfefferkörner:"1F336", pflaster:"1F48A",
@@ -305,6 +305,7 @@ class ShoppingListCard extends HTMLElement {
       nougat:"1F36B", pralinen:"1F36B", salzstangen:"1F35F", studentenfutter:"1F330",
       trockenobst:"1F347", weinbrand:"1F377"
     };
+    this._iconMapEntries = Object.entries(this._iconMap).sort((a, b) => b[0].length - a[0].length);
 
     this._catMap = [
       { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","mandarine","traube","trauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","dill","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder"]) },
@@ -424,7 +425,7 @@ class ShoppingListCard extends HTMLElement {
     const t = text.toLowerCase();
     const map = this.config.icon_map || {};
     if (map[text]) return map[text];
-    for (const [key, hex] of Object.entries(this._iconMap)) {
+    for (const [key, hex] of this._iconMapEntries) {
       if (t.includes(key)) return hex;
     }
     return "1F6D2";
