@@ -236,8 +236,8 @@ class ShoppingListCard extends HTMLElement {
       frischkäse:"1F9C0", mozzarella:"1F9C0", brie:"1F9C0", gouda:"1F9C0", emmentaler:"1F9C0",
       parmesan:"1F9C0", "cream cheese":"1F9C0", mascarpone:"1F9C0", burrata:"1F9C0",
       cheddar:"1F9C0", fleisch:"1F969", steak:"1F969", hähnchen:"1F357", pute:"1F357",
-      ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"1F354", salami:"1F354",
-      mettwurst:"1F354", schnitzel:"1F357", hackfleisch:"1F969", fisch:"1F41F", lachs:"1F41F",
+      ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"1F32D", salami:"1F32D",
+      mettwurst:"1F32D", schnitzel:"1F969", hackfleisch:"1F356", fisch:"1F41F", lachs:"1F41F",
       thunfisch:"1F41F", forelle:"1F41F", scholle:"1F41F", makrele:"1F41F", garnelen:"1F990",
       krabben:"1F990", tofu:"1F96C", "tk-gemüse":"2744", seitan:"1F969", vegan:"1F96C", vegetarisch:"1F96C",
       nudeln:"1F35D", spaghetti:"1F35D", penne:"1F35D", rigatoni:"1F35D", fettuccine:"1F35D",
@@ -252,7 +252,7 @@ class ShoppingListCard extends HTMLElement {
       wasser:"1F4A7", getränke:"1F964", cola:"1F964", limonade:"1F964", sprite:"1F964",
       fanta:"1F964", apfelschorle:"1F964", saft:"1F9C3", orangensaft:"1F9C3", kapseln:"2615",
       kakao:"2615", tiefkühl:"2744", tiefkühlpizza:"1F355", pizza:"1F355", frikassee:"1F963",
-      fischstäbchen:"1F41F", pommes:"1F35F", eis:"1F368", eiskrem:"1F368",
+      fischstäbchen:"1F41F", pommes:"1F35F", eis:"mdi:ice-cream", eiskrem:"mdi:ice-cream",
       toilettenpapier:"1F9FB", küchenrolle:"1F9FB", papier:"1F4C4", taschentuch:"1F9FB",
       waschmittel:"1F9FC", spülmittel:"1FAE7", spüli:"1FAE7", zahnpasta:"1FAE5",
       zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"1F9FC",
@@ -447,13 +447,15 @@ class ShoppingListCard extends HTMLElement {
       container.appendChild(el);
     } else {
       const map = this.config?.icon_map || {};
-      if (map[item?.summary] && /^[a-z]+:/.test(String(map[item.summary]))) {
+      const mapped = map[item?.summary];
+      const iconValue = mapped && /^[a-z]+:/.test(String(mapped)) ? mapped : this._getItemIcon(item?.summary || "");
+      if (iconValue && /^[a-z]+:/.test(String(iconValue))) {
         const el = document.createElement("ha-icon");
-        el.setAttribute("icon", map[item.summary]);
+        el.setAttribute("icon", iconValue);
         el.style.cssText = `width:${size}px;height:${size}px;color:inherit;`;
         container.appendChild(el);
       } else {
-        const img = this._createOpenmojiImg(this._getItemIcon(item?.summary || ""), size);
+        const img = this._createOpenmojiImg(iconValue || "1F6D2", size);
         container.appendChild(img);
       }
     }
@@ -849,19 +851,25 @@ class ShoppingListCard extends HTMLElement {
     return catWrap;
   }
 
-  _renderMirrorSection(list, items, color, order) {
+  _renderMirrorSection(list, items, color, order, maxItems = 20) {
     const onListSummaries = new Set(items.map(i => i.summary.toLowerCase()));
     const allArticles = this._getAutocompleteItems();
-    const availByCat = {};
-    let totalAvail = 0;
+    const allAvail = [];
     for (const text of allArticles) {
       if (onListSummaries.has(text.toLowerCase())) continue;
+      allAvail.push(text);
+    }
+    if (allAvail.length === 0) return null;
+
+    const isLimited = maxItems !== Infinity && allAvail.length > maxItems;
+    const shownArticles = isLimited ? allAvail.slice(0, maxItems) : allAvail;
+
+    const availByCat = {};
+    for (const text of shownArticles) {
       const cat = this._getItemCategory(text);
       if (!availByCat[cat]) availByCat[cat] = [];
       availByCat[cat].push(text);
-      totalAvail++;
     }
-    if (totalAvail === 0) return null;
 
     const mirrorWrap = document.createElement("div");
     mirrorWrap.style.cssText = "margin-top:24px;padding-top:16px;border-top:2px dashed #ccc;";
@@ -874,7 +882,7 @@ class ShoppingListCard extends HTMLElement {
     mirrorTitle.appendChild(checkIcon);
     const mt = document.createElement("div");
     mt.style.cssText = "font-weight:600;font-size:14px;color:#999;flex:1;";
-    mt.textContent = "Verfügbar (" + totalAvail + ")";
+    mt.textContent = "Verfügbar (" + (isLimited ? shownArticles.length + "/" : "") + allAvail.length + ")";
     mirrorTitle.appendChild(mt);
     const clearAll = document.createElement("div");
     clearAll.textContent = "erledigte löschen";
@@ -923,10 +931,7 @@ class ShoppingListCard extends HTMLElement {
         chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
       });
 
-      const batchSize = 20;
-      let shown = 0;
       for (const text of catTexts) {
-        if (shown >= batchSize) break;
         const existing = items.find(i => i.summary.toLowerCase() === text.toLowerCase());
         if (existing) {
           const tile = this._renderTile(existing, list.entity, color);
@@ -935,38 +940,26 @@ class ShoppingListCard extends HTMLElement {
         } else {
           grid.appendChild(this._renderGhostTile(text, list.entity, color));
         }
-        shown++;
-      }
-      if (catTexts.length > batchSize) {
-        const loadMore = document.createElement("div");
-        loadMore.style.cssText = "display:flex;align-items:center;justify-content:center;padding:8px;border-radius:12px;background:#fafafa;border:1px dashed #ccc;cursor:pointer;margin-top:4px;grid-column:1 / -1;transition:all 0.15s;";
-        loadMore.textContent = "Mehr laden (" + (catTexts.length - shown) + ")";
-        loadMore.style.fontSize = "12px";
-        loadMore.style.color = "#999";
-        loadMore.addEventListener("mouseenter", () => { loadMore.style.background = "#e8f5e9"; loadMore.style.borderColor = color; });
-        loadMore.addEventListener("mouseleave", () => { loadMore.style.background = "#fafafa"; loadMore.style.borderColor = "#ccc"; });
-        let expanded = false;
-        loadMore.addEventListener("click", () => {
-          if (expanded) return;
-          expanded = true;
-          loadMore.remove();
-          for (let i = batchSize; i < catTexts.length; i++) {
-            const text = catTexts[i];
-            const existing = items.find(it => it.summary.toLowerCase() === text.toLowerCase());
-            if (existing) {
-              const tile = this._renderTile(existing, list.entity, color);
-              tile.dataset.section = "mirror";
-              grid.appendChild(tile);
-            } else {
-              grid.appendChild(this._renderGhostTile(text, list.entity, color));
-            }
-          }
-        });
-        grid.appendChild(loadMore);
       }
       catWrap.appendChild(grid);
       mirrorWrap.appendChild(catWrap);
     }
+
+    if (isLimited) {
+      const showAll = document.createElement("div");
+      showAll.style.cssText = "display:flex;align-items:center;justify-content:center;padding:10px;border-radius:12px;background:#fafafa;border:1px dashed #ccc;cursor:pointer;margin-top:8px;transition:all 0.15s;";
+      showAll.textContent = "Alle " + allAvail.length + " Artikel anzeigen";
+      showAll.style.fontSize = "13px";
+      showAll.style.color = "#666";
+      showAll.addEventListener("mouseenter", () => { showAll.style.background = "#e8f5e9"; showAll.style.borderColor = color; });
+      showAll.addEventListener("mouseleave", () => { showAll.style.background = "#fafafa"; showAll.style.borderColor = "#ccc"; });
+      showAll.addEventListener("click", () => {
+        const newMirror = this._renderMirrorSection(list, items, color, order, Infinity);
+        if (newMirror) mirrorWrap.replaceWith(newMirror);
+      });
+      mirrorWrap.appendChild(showAll);
+    }
+
     return mirrorWrap;
   }
 
