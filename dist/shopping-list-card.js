@@ -390,7 +390,7 @@ class ShoppingListCard extends HTMLElement {
       let visible = 0;
       for (const tile of tiles) {
         const match = !query || tile.dataset.summary.includes(query);
-        tile.style.display = match ? "" : "none";
+        tile.style.display = match ? "flex" : "none";
         if (match) visible++;
       }
       const header = cat.querySelector(".sl-header");
