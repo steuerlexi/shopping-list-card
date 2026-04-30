@@ -277,6 +277,11 @@ class ShoppingListCard extends HTMLElement {
     img.style.flexShrink = "0";
     img.style.objectFit = "contain";
     img.alt = "";
+    img.onerror = () => {
+      if (img.src !== this._getOpenmojiUrl("1F6D2")) {
+        img.src = this._getOpenmojiUrl("1F6D2");
+      }
+    };
     return img;
   }
 
@@ -323,12 +328,18 @@ class ShoppingListCard extends HTMLElement {
 
   _getItemCategory(text) {
     const t = text.toLowerCase();
+    let bestMatch = null;
+    let bestLen = 0;
     for (const cat of this._catMap) {
       for (const key of cat.keys) {
-        if (t.includes(key)) return cat.key;
+        if (key.length <= bestLen) continue;
+        if (t.includes(key)) {
+          bestMatch = cat.key;
+          bestLen = key.length;
+        }
       }
     }
-    return "sonstiges";
+    return bestMatch || "sonstiges";
   }
 
   _getCategoryName(key) {
@@ -385,7 +396,7 @@ class ShoppingListCard extends HTMLElement {
   _showToast(msg) {
     const toast = document.createElement("div");
     toast.textContent = msg;
-    toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;z-index:800;opacity:0;transition:opacity 0.3s ease;";
+    toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--sl-toast-bg);color:var(--sl-toast-text);padding:10px 18px;border-radius:24px;font-size:14px;z-index:800;opacity:0;transition:opacity 0.3s ease;";
     document.body.appendChild(toast);
     requestAnimationFrame(() => toast.style.opacity = "1");
     setTimeout(() => {
@@ -485,20 +496,20 @@ class ShoppingListCard extends HTMLElement {
 
         const isDone = item.status === "completed";
         tile.dataset.status = item.status;
-        tile.style.background = isDone ? "#e0e0e0" : color;
-        tile.style.border = isDone ? "2px solid #bbb" : "none";
+        tile.style.background = isDone ? "var(--sl-bg)" : color;
+        tile.style.border = isDone ? "2px solid var(--sl-border)" : "none";
         tile.style.opacity = isDone ? "0.55" : "1";
 
         const label = tile.querySelector(".sl-label");
         if (label) {
-          label.style.color = isDone ? "#999" : "#fff";
+          label.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
           label.style.textDecoration = isDone ? "line-through" : "none";
         }
 
         const badge = tile.querySelector(".sl-badge");
         if (badge) {
-          badge.style.background = isDone ? "#ccc" : "rgba(255,255,255,0.25)";
-          badge.style.color = isDone ? "#666" : "#fff";
+          badge.style.background = isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)";
+          badge.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
         }
 
         const { text: newDescText } = this._parseDescription(item.description || "");
@@ -514,7 +525,7 @@ class ShoppingListCard extends HTMLElement {
             } else {
               b = document.createElement("div");
               b.className = "sl-badge";
-              b.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "#ccc" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "#666" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
+              b.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
               b.textContent = newDescText;
               tile.appendChild(b);
             }
@@ -540,7 +551,7 @@ class ShoppingListCard extends HTMLElement {
       const modalEntity = modal.dataset.itemEntity;
       if (modalUid && modalEntity) {
         const items = this._itemsByList[modalEntity] || [];
-        if (!items.some(i => i.uid === modalUid)) modal.remove();
+        if (!items.some(i => i.uid === modalUid)) { modal.remove(); }
       }
     }
   }
@@ -551,30 +562,30 @@ class ShoppingListCard extends HTMLElement {
     const color = list.color || "#43A047";
 
     const searchWrap = document.createElement("div");
-    searchWrap.style.cssText = "display:flex;align-items:center;background:#fafafa;border-radius:12px;padding:0 12px;border:1px solid #e8e8e8;";
+    searchWrap.style.cssText = "display:flex;align-items:center;background:var(--sl-bg-input);border-radius:12px;padding:0 12px;border:1px solid var(--sl-border);";
     const searchIcon = document.createElement("ha-icon");
     searchIcon.setAttribute("icon", "mdi:magnify");
-    searchIcon.style.cssText = "color:#aaa;width:20px;height:20px;margin-right:8px;";
+    searchIcon.style.cssText = "color:var(--sl-text-muted);width:20px;height:20px;margin-right:8px;";
     searchWrap.appendChild(searchIcon);
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = "Artikel suchen oder hinzufügen...";
-    input.style.cssText = "flex:1;border:none;background:transparent;font-size:16px;padding:12px 0;outline:none;color:#333;";
+    input.style.cssText = "flex:1;border:none;background:transparent;font-size:16px;padding:12px 0;outline:none;color:var(--sl-text);";
     searchWrap.appendChild(input);
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.textContent = "+";
-    addBtn.style.cssText = "background:transparent;color:#888;border:none;border-radius:50%;width:32px;height:32px;font-size:22px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+    addBtn.style.cssText = "background:transparent;color:var(--sl-text-muted);border:none;border-radius:50%;width:32px;height:32px;font-size:22px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
     searchWrap.appendChild(addBtn);
     listWrap.appendChild(searchWrap);
 
     const hasItems = (this._itemsByList[list.entity] || []).length > 0;
     if (!hasItems) {
       const loadingRow = document.createElement("div");
-      loadingRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:8px 4px;color:#999;font-size:13px;";
+      loadingRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:8px 4px;color:var(--sl-text-muted);font-size:13px;";
       const spin = document.createElement("ha-icon");
       spin.setAttribute("icon", "mdi:loading");
-      spin.style.cssText = "width:16px;height:16px;color:#aaa;animation:sl-spin 1s linear infinite;";
+      spin.style.cssText = "width:16px;height:16px;color:var(--sl-text-muted);animation:sl-spin 1s linear infinite;";
       loadingRow.appendChild(spin);
       const lt = document.createElement("span");
       lt.textContent = "Artikel werden geladen...";
@@ -583,28 +594,32 @@ class ShoppingListCard extends HTMLElement {
     }
 
     const acDropdown = document.createElement("div");
-    acDropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:#fff;border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;max-height:200px;overflow-y:auto;display:none;";
+    acDropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:var(--sl-bg);border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;max-height:200px;overflow-y:auto;display:none;";
     listWrap.appendChild(acDropdown);
     let acMouseDown = false;
     acDropdown.addEventListener("mousedown", () => { acMouseDown = true; });
 
     const acItems = this._getAutocompleteItems();
+    let searchTimer = null;
     input.addEventListener("input", () => {
       const val = input.value.toLowerCase().trim();
-      acDropdown.innerHTML = "";
-      this._filterVisible(listWrap, val);
-      if (!val) { acDropdown.style.display = "none"; return; }
-      const matches = acItems.filter(it => {
-        const existing = this._findItemBySummary(list.entity, it);
-        return it.toLowerCase().includes(val) && !(existing && existing.status === "needs_action");
-      }).slice(0, 8);
+      searchTimer && clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        searchTimer = null;
+        acDropdown.innerHTML = "";
+        this._filterVisible(listWrap, val);
+        if (!val) { acDropdown.style.display = "none"; return; }
+        const matches = acItems.filter(it => {
+          const existing = this._findItemBySummary(list.entity, it);
+          return it.toLowerCase().includes(val) && !(existing && existing.status === "needs_action");
+        }).slice(0, 8);
       if (matches.length) {
         matches.forEach(m => {
           const row = document.createElement("div");
-          row.style.cssText = "padding:10px 16px;cursor:pointer;font-size:15px;color:#333;border-bottom:1px solid #e0e0e0;";
+          row.style.cssText = "padding:10px 16px;cursor:pointer;font-size:15px;color:var(--sl-text);border-bottom:1px solid var(--sl-border);";
           row.textContent = m;
-          row.addEventListener("mouseenter", () => row.style.background = "#e8f5e9");
-          row.addEventListener("mouseleave", () => row.style.background = "#fff");
+          row.addEventListener("mouseenter", () => row.style.background = "var(--sl-hover)");
+          row.addEventListener("mouseleave", () => row.style.background = "var(--sl-bg)");
           row.addEventListener("click", () => { this._addItem(list.entity, m); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); });
           acDropdown.appendChild(row);
         });
@@ -612,6 +627,7 @@ class ShoppingListCard extends HTMLElement {
       } else {
         acDropdown.style.display = "none";
       }
+      }, 150);
     });
 
     const doAdd = () => {
@@ -637,7 +653,7 @@ class ShoppingListCard extends HTMLElement {
 
     const header = document.createElement("div");
     header.className = "sl-header";
-    header.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #e8e8e8;cursor:pointer;user-select:none;";
+    header.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--sl-border);cursor:pointer;user-select:none;";
     const catColor = this._getCategoryColor(cat);
     const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 20);
     catIcon.style.filter = "drop-shadow(0 0 1px rgba(0,0,0,0.2))";
@@ -648,12 +664,12 @@ class ShoppingListCard extends HTMLElement {
     header.appendChild(catName);
     const count = document.createElement("div");
     count.className = "sl-count";
-    count.style.cssText = "font-size:12px;color:#999;font-weight:400;";
+    count.style.cssText = "font-size:12px;color:var(--sl-text-muted);font-weight:400;";
     count.textContent = catItems.length;
     header.appendChild(count);
     const chevron = document.createElement("ha-icon");
     chevron.setAttribute("icon", "mdi:chevron-down");
-    chevron.style.cssText = "color:#bbb;width:18px;height:18px;";
+    chevron.style.cssText = "color:var(--sl-text-muted);width:18px;height:18px;";
     header.appendChild(chevron);
     catWrap.appendChild(header);
 
@@ -674,25 +690,25 @@ class ShoppingListCard extends HTMLElement {
     }
 
     const addTile = document.createElement("div");
-    addTile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:12px;border:2px dashed " + color + "60;background:#fff;cursor:pointer;min-height:72px;transition:all 0.15s;position:relative;";
+    addTile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:12px;border:2px dashed " + color + "60;background:var(--sl-bg);cursor:pointer;min-height:72px;transition:all 0.15s;position:relative;";
     const plusIcon = document.createElement("ha-icon");
     plusIcon.setAttribute("icon", "mdi:plus");
     plusIcon.style.cssText = "color:" + color + ";width:22px;height:22px;";
     addTile.appendChild(plusIcon);
-    addTile.addEventListener("mouseenter", () => { addTile.style.background = "#e8f5e9"; addTile.style.borderColor = color; });
-    addTile.addEventListener("mouseleave", () => { addTile.style.background = "#fff"; addTile.style.borderColor = color + "60"; });
+    addTile.addEventListener("mouseenter", () => { addTile.style.background = "var(--sl-hover)"; addTile.style.borderColor = color; });
+    addTile.addEventListener("mouseleave", () => { addTile.style.background = "var(--sl-bg)"; addTile.style.borderColor = color + "60"; });
     let tileInput = null;
     let tileAcMouseDown = false;
     addTile.addEventListener("click", () => {
       if (!tileInput) {
         addTile.innerHTML = "";
         const tileAc = document.createElement("div");
-        tileAc.style.cssText = "position:absolute;top:100%;left:50%;transform:translateX(-50%);width:min(180px,80vw);background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:200;max-height:160px;overflow-y:auto;display:none;";
+        tileAc.style.cssText = "position:absolute;top:100%;left:50%;transform:translateX(-50%);width:min(180px,80vw);background:var(--sl-bg);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:200;max-height:160px;overflow-y:auto;display:none;";
         tileAc.addEventListener("mousedown", () => { tileAcMouseDown = true; });
         tileInput = document.createElement("input");
         tileInput.type = "text";
         tileInput.placeholder = "...";
-        tileInput.style.cssText = "width:100%;border:none;background:transparent;color:#333;font-size:13px;text-align:center;outline:none;";
+        tileInput.style.cssText = "width:100%;border:none;background:transparent;color:var(--sl-text);font-size:13px;text-align:center;outline:none;";
         const allItems = this._getAutocompleteItems();
         const resetTile = () => {
           addTile.innerHTML = "";
@@ -713,10 +729,10 @@ class ShoppingListCard extends HTMLElement {
           if (matches.length) {
             matches.forEach(m => {
               const row = document.createElement("div");
-              row.style.cssText = "padding:8px 12px;cursor:pointer;font-size:13px;color:#333;border-bottom:1px solid #e0e0e0;";
+              row.style.cssText = "padding:8px 12px;cursor:pointer;font-size:13px;color:var(--sl-text);border-bottom:1px solid var(--sl-border);";
               row.textContent = m;
-              row.addEventListener("mouseenter", () => row.style.background = "#e8f5e9");
-              row.addEventListener("mouseleave", () => row.style.background = "#fff");
+              row.addEventListener("mouseenter", () => row.style.background = "var(--sl-hover)");
+              row.addEventListener("mouseleave", () => row.style.background = "var(--sl-bg)");
               row.addEventListener("click", () => { this._addItem(list.entity, m); resetTile(); });
               tileAc.appendChild(row);
             });
@@ -739,6 +755,8 @@ class ShoppingListCard extends HTMLElement {
 
   _renderMirrorSection(list, items, color, order, maxPerCat = 20) {
     const onListSummaries = new Set(items.filter(i => i.status === "needs_action").map(i => i.summary.toLowerCase()));
+    const itemBySummary = new Map();
+    for (const item of items) itemBySummary.set(item.summary.toLowerCase(), item);
     const allArticles = this._getAutocompleteItems();
     const allAvail = [];
     const acLower = new Set(allArticles.map(a => a.toLowerCase()));
@@ -766,21 +784,21 @@ class ShoppingListCard extends HTMLElement {
     }
 
     const mirrorWrap = document.createElement("div");
-    mirrorWrap.style.cssText = "margin-top:24px;padding-top:16px;border-top:2px dashed #ccc;";
+    mirrorWrap.style.cssText = "margin-top:24px;padding-top:16px;border-top:2px dashed var(--sl-border);";
 
     const mirrorTitle = document.createElement("div");
     mirrorTitle.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:0 4px;";
     const checkIcon = document.createElement("ha-icon");
     checkIcon.setAttribute("icon", "mdi:check-circle");
-    checkIcon.style.cssText = "color:#aaa;width:20px;height:20px;";
+    checkIcon.style.cssText = "color:var(--sl-text-muted);width:20px;height:20px;";
     mirrorTitle.appendChild(checkIcon);
     const mt = document.createElement("div");
-    mt.style.cssText = "font-weight:600;font-size:14px;color:#999;flex:1;";
+    mt.style.cssText = "font-weight:600;font-size:14px;color:var(--sl-text-muted);flex:1;";
     mt.textContent = "Verfügbar (" + allAvail.length + ")";
     mirrorTitle.appendChild(mt);
     const clearAll = document.createElement("div");
     clearAll.textContent = "erledigte löschen";
-    clearAll.style.cssText = "font-size:11px;color:#aaa;cursor:pointer;";
+    clearAll.style.cssText = "font-size:11px;color:var(--sl-text-muted);cursor:pointer;";
     clearAll.addEventListener("click", () => this._clearDone(list.entity));
     mirrorTitle.appendChild(clearAll);
     mirrorWrap.appendChild(mirrorTitle);
@@ -796,22 +814,22 @@ class ShoppingListCard extends HTMLElement {
 
       const header = document.createElement("div");
       header.className = "sl-header";
-      header.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;user-select:none;";
+      header.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--sl-border);cursor:pointer;user-select:none;";
       const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 16);
       catIcon.style.filter = "grayscale(100%) opacity(0.6)";
       header.appendChild(catIcon);
       const catName = document.createElement("div");
-      catName.style.cssText = "font-weight:500;font-size:12px;flex:1;color:#bbb;";
+      catName.style.cssText = "font-weight:500;font-size:12px;flex:1;color:var(--sl-text-muted);";
       catName.textContent = this._getCategoryName(cat);
       header.appendChild(catName);
       const count = document.createElement("div");
       count.className = "sl-count";
-      count.style.cssText = "font-size:11px;color:#ccc;font-weight:400;";
+      count.style.cssText = "font-size:11px;color:var(--sl-text-muted);font-weight:400;";
       count.textContent = fullCatTexts.length;
       header.appendChild(count);
       const chevron = document.createElement("ha-icon");
       chevron.setAttribute("icon", "mdi:chevron-down");
-      chevron.style.cssText = "color:#ddd;width:16px;height:16px;";
+      chevron.style.cssText = "color:var(--sl-text-muted);width:16px;height:16px;";
       header.appendChild(chevron);
       catWrap.appendChild(header);
 
@@ -827,7 +845,7 @@ class ShoppingListCard extends HTMLElement {
       });
 
       for (const text of catTexts) {
-        const existing = items.find(i => i.summary.toLowerCase() === text.toLowerCase());
+        const existing = itemBySummary.get(text.toLowerCase());
         if (existing) {
           const tile = this._renderTile(existing, list.entity, color);
           tile.dataset.section = "mirror";
@@ -839,12 +857,12 @@ class ShoppingListCard extends HTMLElement {
 
       if (isLimited) {
         const loadMore = document.createElement("div");
-        loadMore.style.cssText = "display:flex;align-items:center;justify-content:center;padding:8px;border-radius:12px;background:#fafafa;border:1px dashed #ccc;cursor:pointer;margin-top:4px;grid-column:1 / -1;transition:all 0.15s;";
+        loadMore.style.cssText = "display:flex;align-items:center;justify-content:center;padding:8px;border-radius:12px;background:var(--sl-bg-input);border:1px dashed var(--sl-border);cursor:pointer;margin-top:4px;grid-column:1 / -1;transition:all 0.15s;";
         loadMore.textContent = "Mehr laden (" + (fullCatTexts.length - catTexts.length) + ")";
         loadMore.style.fontSize = "12px";
-        loadMore.style.color = "#999";
-        loadMore.addEventListener("mouseenter", () => { loadMore.style.background = "#e8f5e9"; loadMore.style.borderColor = color; });
-        loadMore.addEventListener("mouseleave", () => { loadMore.style.background = "#fafafa"; loadMore.style.borderColor = "#ccc"; });
+        loadMore.style.color = "var(--sl-text-muted)";
+        loadMore.addEventListener("mouseenter", () => { loadMore.style.background = "var(--sl-hover)"; loadMore.style.borderColor = color; });
+        loadMore.addEventListener("mouseleave", () => { loadMore.style.background = "var(--sl-bg-input)"; loadMore.style.borderColor = "var(--sl-border)"; });
         let expanded = false;
         loadMore.addEventListener("click", () => {
           if (expanded) return;
@@ -852,7 +870,7 @@ class ShoppingListCard extends HTMLElement {
           loadMore.remove();
           for (let i = maxPerCat; i < fullCatTexts.length; i++) {
             const text = fullCatTexts[i];
-            const existing = items.find(it => it.summary.toLowerCase() === text.toLowerCase());
+            const existing = itemBySummary.get(text.toLowerCase());
             if (existing) {
               const tile = this._renderTile(existing, list.entity, color);
               tile.dataset.section = "mirror";
@@ -871,12 +889,12 @@ class ShoppingListCard extends HTMLElement {
 
     if (hasAnyLimit) {
       const showAll = document.createElement("div");
-      showAll.style.cssText = "display:flex;align-items:center;justify-content:center;padding:10px;border-radius:12px;background:#fafafa;border:1px dashed #ccc;cursor:pointer;margin-top:8px;transition:all 0.15s;";
+      showAll.style.cssText = "display:flex;align-items:center;justify-content:center;padding:10px;border-radius:12px;background:var(--sl-bg-input);border:1px dashed var(--sl-border);cursor:pointer;margin-top:8px;transition:all 0.15s;";
       showAll.textContent = "Alle Artikel anzeigen";
       showAll.style.fontSize = "13px";
-      showAll.style.color = "#666";
-      showAll.addEventListener("mouseenter", () => { showAll.style.background = "#e8f5e9"; showAll.style.borderColor = color; });
-      showAll.addEventListener("mouseleave", () => { showAll.style.background = "#fafafa"; showAll.style.borderColor = "#ccc"; });
+      showAll.style.color = "var(--sl-text-sec)";
+      showAll.addEventListener("mouseenter", () => { showAll.style.background = "var(--sl-hover)"; showAll.style.borderColor = color; });
+      showAll.addEventListener("mouseleave", () => { showAll.style.background = "var(--sl-bg-input)"; showAll.style.borderColor = "var(--sl-border)"; });
       showAll.addEventListener("click", () => {
         const newMirror = this._renderMirrorSection(list, items, color, order, Infinity);
         if (newMirror) mirrorWrap.replaceWith(newMirror);
@@ -921,6 +939,20 @@ class ShoppingListCard extends HTMLElement {
 
     const card = document.createElement("ha-card");
     card.style.cssText = "padding:12px;display:block;";
+    card.style.setProperty("--sl-bg", "var(--card-background-color, #fff)");
+    card.style.setProperty("--sl-bg-input", "var(--input-fill-color, var(--card-background-color, #fafafa))");
+    card.style.setProperty("--sl-text", "var(--primary-text-color, #333)");
+    card.style.setProperty("--sl-text-sec", "var(--secondary-text-color, #666)");
+    card.style.setProperty("--sl-text-muted", "var(--disabled-text-color, #999)");
+    card.style.setProperty("--sl-border", "var(--divider-color, #e8e8e8)");
+    card.style.setProperty("--sl-hover", "var(--primary-background-color, #e8f5e9)");
+    card.style.setProperty("--sl-input-bg", "var(--input-fill-color, #f1f8e9)");
+    card.style.setProperty("--sl-input-border", "var(--input-border-color, #c8e6c9)");
+    card.style.setProperty("--sl-toast-bg", "var(--secondary-background-color, #333)");
+    card.style.setProperty("--sl-toast-text", "var(--text-primary-color, #fff)");
+    card.style.setProperty("--sl-danger", "var(--error-color, #ef5350)");
+    card.style.setProperty("--sl-save", "var(--primary-color, #43A047)");
+    card.style.setProperty("--sl-save-text", "var(--text-primary-color, #fff)");
     const style = document.createElement("style");
     style.textContent = `
       @keyframes sl-spin{to{transform:rotate(360deg)}}
@@ -995,9 +1027,9 @@ class ShoppingListCard extends HTMLElement {
     tile.dataset.summary = item.summary.toLowerCase();
     tile.dataset.entity = entityId;
     tile.dataset.status = item.status;
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:" + (isDone ? "#e0e0e0" : color) + ";border:" + (isDone ? "2px solid #bbb" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
-    tile.addEventListener("mouseenter", () => { if (tile.dataset.status !== "completed") tile.style.background = "#388E3C"; });
-    tile.addEventListener("mouseleave", () => { tile.style.background = tile.dataset.status === "completed" ? "#e0e0e0" : color; });
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:" + (isDone ? "var(--sl-bg)" : color) + ";border:" + (isDone ? "2px solid var(--sl-border)" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
+    tile.addEventListener("mouseenter", () => { if (tile.dataset.status !== "completed") tile.style.background = "var(--sl-save)"; });
+    tile.addEventListener("mouseleave", () => { tile.style.background = tile.dataset.status === "completed" ? "var(--sl-bg)" : color; });
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
@@ -1006,7 +1038,7 @@ class ShoppingListCard extends HTMLElement {
 
     const label = document.createElement("div");
     label.className = "sl-label";
-    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:" + (isDone ? "#999" : "#fff") + ";text-decoration:" + (isDone ? "line-through" : "none") + ";max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
+    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";text-decoration:" + (isDone ? "line-through" : "none") + ";max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
     label.textContent = item.summary;
     tile.appendChild(label);
 
@@ -1015,7 +1047,7 @@ class ShoppingListCard extends HTMLElement {
       if (descText) {
         const badge = document.createElement("div");
         badge.className = "sl-badge";
-        badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "#ccc" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "#666" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
+        badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
         badge.textContent = descText;
         tile.appendChild(badge);
       }
@@ -1032,7 +1064,7 @@ class ShoppingListCard extends HTMLElement {
       this._haptic(80);
       const items = this._itemsByList[entityId] || [];
       const currentItem = items.find(i => i.uid === tile.dataset.uid);
-      if (currentItem) this._showEditModal(currentItem, entityId);
+      if (currentItem) this._showEditModal(currentItem, entityId, tile);
     };
     const startPress = () => {
       longPressFired = false;
@@ -1085,9 +1117,9 @@ class ShoppingListCard extends HTMLElement {
     tile.dataset.summary = text.toLowerCase();
     tile.dataset.entity = entityId;
     tile.dataset.status = "ghost";
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:#f5f5f5;border:2px dashed #ddd;opacity:0.65;cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
-    tile.addEventListener("mouseenter", () => { tile.style.background = "#e8f5e9"; tile.style.borderColor = color; tile.style.opacity = "0.9"; });
-    tile.addEventListener("mouseleave", () => { tile.style.background = "#f5f5f5"; tile.style.borderColor = "#ddd"; tile.style.opacity = "0.65"; });
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:var(--sl-bg);border:2px dashed var(--sl-border);opacity:0.65;cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
+    tile.addEventListener("mouseenter", () => { tile.style.background = "var(--sl-hover)"; tile.style.borderColor = color; tile.style.opacity = "0.9"; });
+    tile.addEventListener("mouseleave", () => { tile.style.background = "var(--sl-bg)"; tile.style.borderColor = "var(--sl-border)"; tile.style.opacity = "0.65"; });
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
@@ -1096,7 +1128,7 @@ class ShoppingListCard extends HTMLElement {
 
     const label = document.createElement("div");
     label.className = "sl-label";
-    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:#999;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
+    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:var(--sl-text-muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
     label.textContent = text;
     tile.appendChild(label);
 
@@ -1104,9 +1136,10 @@ class ShoppingListCard extends HTMLElement {
     return tile;
   }
 
-  _showEditModal(item, entityId) {
+  _showEditModal(item, entityId, triggerEl) {
     const existing = document.querySelector(".shopping-list-modal");
     existing && existing.remove();
+    const close = () => { overlay.remove(); triggerEl && triggerEl.focus(); };
     const overlay = document.createElement("div");
     overlay.className = "shopping-list-modal";
     overlay.setAttribute("role", "dialog");
@@ -1116,16 +1149,16 @@ class ShoppingListCard extends HTMLElement {
     overlay.dataset.itemUid = item.uid;
     overlay.dataset.itemEntity = entityId;
     const box = document.createElement("div");
-    box.style.cssText = "background:#fff;border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);box-sizing:border-box;";
+    box.style.cssText = "background:var(--sl-bg);border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);box-sizing:border-box;color:var(--sl-text);";
 
     const title = document.createElement("div");
     title.className = "sl-modal-title";
-    title.style.cssText = "font-size:17px;font-weight:600;margin-bottom:12px;color:#2e7d32;";
+    title.style.cssText = "font-size:17px;font-weight:600;margin-bottom:12px;color:var(--primary-color, #2e7d32);";
     title.textContent = item.summary;
     box.appendChild(title);
 
     const hint = document.createElement("div");
-    hint.style.cssText = "font-size:13px;color:#666;margin-bottom:8px;";
+    hint.style.cssText = "font-size:13px;color:var(--sl-text-sec);margin-bottom:8px;";
     hint.textContent = "Anmerkungen";
     box.appendChild(hint);
 
@@ -1135,9 +1168,9 @@ class ShoppingListCard extends HTMLElement {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = "+" + qty;
-      btn.style.cssText = "padding:6px 12px;border-radius:16px;border:1px solid #c8e6c9;background:#e8f5e9;color:#2e7d32;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
-      btn.addEventListener("mouseenter", () => { btn.style.background = "#c8e6c9"; });
-      btn.addEventListener("mouseleave", () => { btn.style.background = "#e8f5e9"; });
+      btn.style.cssText = "padding:6px 12px;border-radius:16px;border:1px solid var(--sl-input-border);background:var(--sl-hover);color:var(--primary-color, #2e7d32);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
+      btn.addEventListener("mouseenter", () => { btn.style.background = "var(--sl-input-border)"; });
+      btn.addEventListener("mouseleave", () => { btn.style.background = "var(--sl-hover)"; });
       btn.addEventListener("click", () => {
         const val = descInput.value.trim();
         const addNum = parseInt(qty.replace("x", ""), 10);
@@ -1160,7 +1193,7 @@ class ShoppingListCard extends HTMLElement {
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "margin-bottom:12px;position:relative;";
     const iconLabel = document.createElement("div");
-    iconLabel.style.cssText = "font-size:13px;color:#666;margin-bottom:4px;display:flex;align-items:center;gap:6px;";
+    iconLabel.style.cssText = "font-size:13px;color:var(--sl-text-sec);margin-bottom:4px;display:flex;align-items:center;gap:6px;";
     iconLabel.textContent = "Icon (optional, z.B. mdi:, fas:, fluent:)";
     iconWrap.appendChild(iconLabel);
 
@@ -1172,17 +1205,17 @@ class ShoppingListCard extends HTMLElement {
     iconInput.type = "text";
     iconInput.placeholder = "mdi:food-apple";
     iconInput.value = existingIcon || "";
-    iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:#f1f8e9;color:#333;font-size:15px;outline:none;box-sizing:border-box;";
+    iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid var(--sl-input-border);background:var(--sl-input-bg);color:var(--sl-text);font-size:15px;outline:none;box-sizing:border-box;";
     const iconPreview = document.createElement("ha-icon");
-    iconPreview.style.cssText = "width:28px;height:28px;color:#666;flex-shrink:0;";
+    iconPreview.style.cssText = "width:28px;height:28px;color:var(--sl-text-sec);flex-shrink:0;";
     const updatePreview = () => {
       const val = iconInput.value.trim();
       if (val && /^[a-z]+:/.test(val)) {
         iconPreview.setAttribute("icon", val);
-        iconPreview.style.color = "#333";
+        iconPreview.style.color = "var(--sl-text)";
       } else {
         iconPreview.setAttribute("icon", "mdi:image-off");
-        iconPreview.style.color = "#ccc";
+        iconPreview.style.color = "var(--sl-text-muted)";
       }
     };
     updatePreview();
@@ -1192,7 +1225,7 @@ class ShoppingListCard extends HTMLElement {
     iconWrap.appendChild(iconRow);
 
     const iconClear = document.createElement("div");
-    iconClear.style.cssText = "font-size:11px;color:#aaa;cursor:pointer;margin-top:4px;text-align:right;";
+    iconClear.style.cssText = "font-size:11px;color:var(--sl-text-muted);cursor:pointer;margin-top:4px;text-align:right;";
     iconClear.textContent = "Icon entfernen";
     iconClear.addEventListener("click", () => {
       iconInput.value = "";
@@ -1204,7 +1237,7 @@ class ShoppingListCard extends HTMLElement {
     const descInput = document.createElement("input");
     descInput.type = "text";
     descInput.value = existingText || "";
-    descInput.style.cssText = "width:100%;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:#f1f8e9;color:#333;font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;";
+    descInput.style.cssText = "width:100%;padding:10px;border-radius:8px;border:1px solid var(--sl-input-border);background:var(--sl-input-bg);color:var(--sl-text);font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;";
     box.appendChild(descInput);
 
     const btns = document.createElement("div");
@@ -1213,7 +1246,7 @@ class ShoppingListCard extends HTMLElement {
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.textContent = "Speichern";
-    saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:#43A047;color:#fff;font-size:15px;font-weight:600;cursor:pointer;";
+    saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:var(--sl-save);color:var(--sl-save-text);font-size:15px;font-weight:600;cursor:pointer;";
     saveBtn.addEventListener("click", () => {
       const mdiVal = iconInput.value.trim();
       const descVal = descInput.value.trim();
@@ -1224,29 +1257,29 @@ class ShoppingListCard extends HTMLElement {
       if (cached) cached.description = fullDesc;
       this._lastStructHash = "";
       overlay.remove();
-      setTimeout(() => this._fetchAndRender(), 500);
+      setTimeout(() => { this._fetchAndRender(); triggerEl && triggerEl.focus(); }, 500);
     });
     btns.appendChild(saveBtn);
 
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.textContent = "Abbrechen";
-    cancelBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:transparent;color:#333;font-size:15px;cursor:pointer;";
-    cancelBtn.addEventListener("click", () => overlay.remove());
+    cancelBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid var(--sl-input-border);background:transparent;color:var(--sl-text);font-size:15px;cursor:pointer;";
+    cancelBtn.addEventListener("click", () => close());
     btns.appendChild(cancelBtn);
     box.appendChild(btns);
 
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.textContent = "Löschen";
-    delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #ef5350;background:transparent;color:#ef5350;font-size:13px;cursor:pointer;";
-    delBtn.addEventListener("click", () => { this._removeItem(entityId, item); overlay.remove(); });
+    delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid var(--sl-danger);background:transparent;color:var(--sl-danger);font-size:13px;cursor:pointer;";
+    delBtn.addEventListener("click", () => { this._removeItem(entityId, item); close(); });
     box.appendChild(delBtn);
 
     overlay.appendChild(box);
-    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+    overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
     overlay.addEventListener("keydown", e => {
-      if (e.key === "Escape") { overlay.remove(); return; }
+      if (e.key === "Escape") { close(); return; }
       if (e.key === "Tab") {
         const focusable = box.querySelectorAll("button, input, [tabindex]:not([tabindex='-1'])");
         if (!focusable.length) return;
