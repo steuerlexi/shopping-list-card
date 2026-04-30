@@ -520,7 +520,7 @@ class ShoppingListCard extends HTMLElement {
 
   _itemExists(entityId, text) {
     const items = this._itemsByList[entityId] || [];
-    return items.some(item => item.summary.toLowerCase() === text.toLowerCase());
+    return items.some(item => item.status === "needs_action" && item.summary.toLowerCase() === text.toLowerCase());
   }
 
   _showToast(msg) {
