@@ -1145,11 +1145,11 @@ class ShoppingListCard extends HTMLElement {
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("aria-label", item.summary + " bearbeiten");
-    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:900;";
+    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:900;";
     overlay.dataset.itemUid = item.uid;
     overlay.dataset.itemEntity = entityId;
     const box = document.createElement("div");
-    box.style.cssText = "background:var(--sl-bg);border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);box-sizing:border-box;color:var(--sl-text);";
+    box.style.cssText = "background:var(--sl-bg);border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--sl-border);box-sizing:border-box;color:var(--sl-text);";
 
     const title = document.createElement("div");
     title.className = "sl-modal-title";
@@ -1168,7 +1168,7 @@ class ShoppingListCard extends HTMLElement {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = "+" + qty;
-      btn.style.cssText = "padding:6px 12px;border-radius:16px;border:1px solid var(--sl-input-border);background:var(--sl-hover);color:var(--primary-color, #2e7d32);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
+      btn.style.cssText = "padding:6px 12px;border-radius:16px;border:2px solid var(--sl-input-border);background:var(--sl-hover);color:var(--primary-color, #2e7d32);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
       btn.addEventListener("mouseenter", () => { btn.style.background = "var(--sl-input-border)"; });
       btn.addEventListener("mouseleave", () => { btn.style.background = "var(--sl-hover)"; });
       btn.addEventListener("click", () => {
@@ -1205,7 +1205,7 @@ class ShoppingListCard extends HTMLElement {
     iconInput.type = "text";
     iconInput.placeholder = "mdi:food-apple";
     iconInput.value = existingIcon || "";
-    iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid var(--sl-input-border);background:var(--sl-input-bg);color:var(--sl-text);font-size:15px;outline:none;box-sizing:border-box;";
+    iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:2px solid var(--sl-input-border);background:var(--sl-input-bg);color:var(--sl-text);font-size:15px;outline:none;box-sizing:border-box;";
     const iconPreview = document.createElement("ha-icon");
     iconPreview.style.cssText = "width:28px;height:28px;color:var(--sl-text-sec);flex-shrink:0;";
     const updatePreview = () => {
@@ -1237,7 +1237,7 @@ class ShoppingListCard extends HTMLElement {
     const descInput = document.createElement("input");
     descInput.type = "text";
     descInput.value = existingText || "";
-    descInput.style.cssText = "width:100%;padding:10px;border-radius:8px;border:1px solid var(--sl-input-border);background:var(--sl-input-bg);color:var(--sl-text);font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;";
+    descInput.style.cssText = "width:100%;padding:10px;border-radius:8px;border:2px solid var(--sl-input-border);background:var(--sl-input-bg);color:var(--sl-text);font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;";
     box.appendChild(descInput);
 
     const btns = document.createElement("div");
@@ -1246,7 +1246,7 @@ class ShoppingListCard extends HTMLElement {
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.textContent = "Speichern";
-    saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:var(--sl-save);color:var(--sl-save-text);font-size:15px;font-weight:600;cursor:pointer;";
+    saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:var(--sl-save);color:var(--sl-save-text);font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);";
     saveBtn.addEventListener("click", () => {
       const mdiVal = iconInput.value.trim();
       const descVal = descInput.value.trim();
@@ -1272,7 +1272,7 @@ class ShoppingListCard extends HTMLElement {
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.textContent = "Löschen";
-    delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid var(--sl-danger);background:transparent;color:var(--sl-danger);font-size:13px;cursor:pointer;";
+    delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:2px solid var(--sl-danger);background:transparent;color:var(--sl-danger);font-size:13px;cursor:pointer;";
     delBtn.addEventListener("click", () => { this._removeItem(entityId, item); close(); });
     box.appendChild(delBtn);
 
