@@ -863,7 +863,7 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _renderMirrorSection(list, items, color, order, maxPerCat = 20) {
-    const onListSummaries = new Set(items.map(i => i.summary.toLowerCase()));
+    const onListSummaries = new Set(items.filter(i => i.status === "needs_action").map(i => i.summary.toLowerCase()));
     const allArticles = this._getAutocompleteItems();
     const allAvail = [];
     const acLower = new Set(allArticles.map(a => a.toLowerCase()));
