@@ -1244,11 +1244,14 @@ class ShoppingListCard extends HTMLElement {
       btn.addEventListener("mouseleave", () => { btn.style.background = "#e8f5e9"; });
       btn.addEventListener("click", () => {
         const val = descInput.value.trim();
-        const num = qty.replace("x", "");
-        if (!val) {
+        const addNum = parseInt(qty.replace("x", ""), 10);
+        const existingMatch = val.match(/^(\d+)x?\s*(.*)$/);
+        if (existingMatch) {
+          const currentNum = parseInt(existingMatch[1], 10);
+          const rest = existingMatch[2];
+          descInput.value = (currentNum + addNum) + "x" + (rest ? " " + rest : "");
+        } else if (!val) {
           descInput.value = qty;
-        } else if (/^\d+x?\s*/.test(val)) {
-          descInput.value = qty + " " + val.replace(/^\d+x?\s*/, "");
         } else {
           descInput.value = qty + " " + val;
         }
@@ -1292,54 +1295,6 @@ class ShoppingListCard extends HTMLElement {
     iconRow.appendChild(iconPreview);
     iconWrap.appendChild(iconRow);
 
-    const iconDropdown = document.createElement("div");
-    iconDropdown.style.cssText = "position:absolute;left:0;right:0;top:100%;margin-top:4px;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:200;max-height:220px;overflow-y:auto;display:none;padding:8px;box-sizing:border-box;";
-    let iconDropdownMouseDown = false;
-    iconDropdown.addEventListener("mousedown", () => { iconDropdownMouseDown = true; });
-    const renderIconResults = (query) => {
-      iconDropdown.innerHTML = "";
-      const q = query.toLowerCase().replace(/^[a-z]+:/, "").trim();
-      let results = [];
-      if (!q) {
-        results = this._iconLibrary.slice(0, 30);
-      } else {
-        results = this._iconLibrary.filter(i => i.replace(/^[a-z]+:/, "").includes(q)).slice(0, 30);
-      }
-      if (results.length === 0) {
-        iconDropdown.style.display = "none";
-        return;
-      }
-      const grid = document.createElement("div");
-      grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(40px, 1fr));gap:4px;";
-      results.forEach(name => {
-        const cell = document.createElement("div");
-        cell.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border-radius:8px;cursor:pointer;transition:background 0.1s;min-height:44px;";
-        const ico = document.createElement("ha-icon");
-        ico.setAttribute("icon", name);
-        ico.style.cssText = "width:22px;height:22px;color:#555;";
-        cell.appendChild(ico);
-        cell.addEventListener("mouseenter", () => { cell.style.background = "#e8f5e9"; });
-        cell.addEventListener("mouseleave", () => { cell.style.background = "transparent"; });
-        cell.addEventListener("click", () => {
-          iconInput.value = name;
-          updatePreview();
-          iconDropdown.style.display = "none";
-        });
-        grid.appendChild(cell);
-      });
-      iconDropdown.appendChild(grid);
-      iconDropdown.style.display = "block";
-    };
-    iconInput.addEventListener("focus", () => renderIconResults(iconInput.value));
-    iconInput.addEventListener("input", () => renderIconResults(iconInput.value));
-    iconInput.addEventListener("blur", () => {
-      setTimeout(() => {
-        if (!iconDropdownMouseDown) iconDropdown.style.display = "none";
-        iconDropdownMouseDown = false;
-      }, 200);
-    });
-    iconWrap.appendChild(iconDropdown);
-
     const iconClear = document.createElement("div");
     iconClear.style.cssText = "font-size:11px;color:#aaa;cursor:pointer;margin-top:4px;text-align:right;";
     iconClear.textContent = "Icon entfernen";
@@ -1369,7 +1324,12 @@ class ShoppingListCard extends HTMLElement {
       const descVal = descInput.value.trim();
       const fullDesc = mdiVal && mdiVal.startsWith("mdi:") ? `[${mdiVal}] ${descVal}` : descVal;
       this._updateDescription(entityId, item, fullDesc);
+      const items = this._itemsByList[entityId] || [];
+      const cached = items.find(i => i.summary === item.summary);
+      if (cached) cached.description = fullDesc;
+      this._lastStructHash = "";
       overlay.remove();
+      setTimeout(() => this._fetchAndRender(), 500);
     });
     btns.appendChild(saveBtn);
 
