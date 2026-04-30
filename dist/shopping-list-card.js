@@ -557,7 +557,7 @@ class ShoppingListCard extends HTMLElement {
         this._haptic(30);
         return;
       }
-      this._callService("todo", "update_item", { entity_id: entityId, uid: existing.uid, status: "needs_action" });
+      this._callService("todo", "update_item", { entity_id: entityId, item: existing.summary, status: "needs_action" });
       this._haptic(60);
       return;
     }
@@ -568,13 +568,13 @@ class ShoppingListCard extends HTMLElement {
   _toggleItem(entityId, item) {
     if (!this._hass) return;
     const status = item.status === "completed" ? "needs_action" : "completed";
-    this._callService("todo", "update_item", { entity_id: entityId, uid: item.uid, status: status });
+    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status });
     this._haptic(status === "needs_action" ? 40 : 60);
   }
 
   _removeItem(entityId, item) {
     if (!this._hass) return;
-    this._callService("todo", "remove_item", { entity_id: entityId, uid: item.uid });
+    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary });
     this._haptic(40);
   }
 
@@ -586,7 +586,7 @@ class ShoppingListCard extends HTMLElement {
 
   _updateDescription(entityId, item, desc) {
     if (!this._hass) return;
-    this._callService("todo", "update_item", { entity_id: entityId, uid: item.uid, description: desc });
+    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc });
     this._haptic(40);
   }
 
