@@ -1,5 +1,9 @@
 # Shopping List Card
 
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/release/steuerlexi/shopping-list-card.svg?style=for-the-badge)](https://github.com/steuerlexi/shopping-list-card/releases)
+[![License](https://img.shields.io/github/license/steuerlexi/shopping-list-card.svg?style=for-the-badge)](LICENSE)
+
 A Home Assistant Lovelace custom card for managing shopping lists natively inside Home Assistant — no external app needed.
 
 Built entirely on HA's native `todo` platform.
@@ -24,11 +28,14 @@ Built entirely on HA's native `todo` platform.
 
 ## Installation
 
-### HACS
+### HACS (Recommended)
 
-1. Add this repository as a custom repository in HACS
-2. Search for "Shopping List Card" and install
-3. Add the resource to your dashboard
+1. Open HACS → **Frontend** → **Custom repositories**
+2. Add repository: `https://github.com/steuerlexi/shopping-list-card`
+   - Category: **Lovelace**
+3. Click **Download** on the Shopping List Card entry
+4. Add to your dashboard resources (HACS does this automatically)
+5. Refresh your browser cache (Ctrl+Shift+R)
 
 ### Manual
 
