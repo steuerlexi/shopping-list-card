@@ -37,14 +37,14 @@ class ShoppingListCard extends HTMLElement {
 
   _initCaches() {
     this._autocompleteItems = [...new Set([
-      "Apfel","Banane","Birne","Kiwi","Orange","Mandarine","Trauben","Kirschen","Erdbeeren","Himbeeren",
+      "Apfel","Banane","Bananen","Birne","Kiwi","Orange","Mandarine","Trauben","Weintrauben","Kirschen","Erdbeeren","Himbeeren",
       "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
       "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln",
       "Knoblauch","Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants",
-      "Milch","Joghurt","Sahne","Butter","Käse","Schafskäse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen",
-      "Hackfleisch","Schnitzel","Wurst","Schinken","Fisch","Lachs","Garnelen","Tofu","Nudeln","Spaghetti",
+      "Milch","Joghurt","Sahne","Butter","Käse","Schafskäse","Ofenkäse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen",
+      "Hackfleisch","Schnitzel","Wurst","Schinken","Fisch","Lachs","Garnelen","Tofu","Bratwürstchen","Nudeln","Spaghetti",
       "Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig","Ketchup","Mayonnaise","Senf","Honig",
-      "Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Wein",
+      "Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Wein","Weißwein","Rotwein",
       "Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo","Duschgel","Seife","Zahnpasta","Waschmittel",
       "Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse","Mandeln","TK-Gemüse","Müllbeutel",
       "Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel","Heidelbeeren",
@@ -308,14 +308,14 @@ class ShoppingListCard extends HTMLElement {
     this._iconMapEntries = Object.entries(this._iconMap).sort((a, b) => b[0].length - a[0].length);
 
     this._catMap = [
-      { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","mandarine","traube","trauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","dill","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder"]) },
+      { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","mandarine","traube","trauben","weintrauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","dill","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder","orangenschalen","salbei","zitronenmelisse","trockenobst"]) },
       { key: "brot_backwaren", keys: new Set(["brot","brötchen","toast","semmel","baguette","kräuterbaguette","kräuterbaguettes","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","wraps"]) },
-      { key: "milch_eier", keys: new Set(["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta","schafskäse"]) },
-      { key: "fleisch_fisch", keys: new Set(["fleisch","steak","hähnchen","pute","ente","schinken","speck","wurst","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"]) },
-      { key: "trockenwaren", keys: new Set(["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","öl","olivenöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","sonnenblumenöl","soßenbinder","vanillezucker","worcestersauce"]) },
+      { key: "milch_eier", keys: new Set(["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","ei","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta","schafskäse","ofenkäse"]) },
+      { key: "fleisch_fisch", keys: new Set(["fleisch","steak","hähnchen","pute","ente","schinken","speck","wurst","bratwürstchen","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"]) },
+      { key: "trockenwaren", keys: new Set(["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","öl","olivenöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","sonnenblumenöl","soßenbinder","vanillezucker","worcestersauce","schokolade","keks","chips","nüsse","mandeln","bonbons","bubblegum","gummibärchen","kaugummi","knuspermüsli","lebkuchen","lutscher","marshmallow","nougat","pralinen","salzstangen","studentenfutter","pfefferkörner"]) },
       { key: "tiefkuehlprodukte", keys: new Set(["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem","gemüsepfanne","knödel","nuggets","paniertes","piroggen","ravioli","reibekuchen","schaschlik","tortellini","tk-gemüse","waffeln"]) },
       { key: "getraenke", keys: new Set(["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"]) },
-      { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","mundspülung","nasenspray","orangenschalen","papiertüten","parfüm","pfefferkörner","pflaster","rasierklingen","rasierschaum","räucherstäbchen","salbei","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zahnbürste","zitronenmelisse","zündhölzer"]) }
+      { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","müllbeutel","mundspülung","nasenspray","papiertüten","parfüm","pflaster","rasierklingen","rasierschaum","räucherstäbchen","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zündhölzer"]) }
     ];
   }
 
@@ -390,7 +390,7 @@ class ShoppingListCard extends HTMLElement {
       let visible = 0;
       for (const tile of tiles) {
         const match = !query || tile.dataset.summary.includes(query);
-        tile.style.display = match ? "" : "none";
+        tile.style.display = match ? "flex" : "none";
         if (match) visible++;
       }
       const header = cat.querySelector(".sl-header");
@@ -660,9 +660,9 @@ class ShoppingListCard extends HTMLElement {
       countEl.textContent = visible;
     }
 
-    const modal = this.querySelector(".shopping-list-modal");
+    const modal = document.querySelector(".shopping-list-modal");
     if (modal) {
-      const modalTitle = modal.querySelector("div > div:first-child");
+      const modalTitle = modal.querySelector(".sl-modal-title");
       if (modalTitle) {
         const summary = modalTitle.textContent.toLowerCase();
         let found = false;
@@ -692,6 +692,7 @@ class ShoppingListCard extends HTMLElement {
     input.style.cssText = "flex:1;border:none;background:transparent;font-size:16px;padding:12px 0;outline:none;color:#333;";
     searchWrap.appendChild(input);
     const addBtn = document.createElement("button");
+    addBtn.type = "button";
     addBtn.textContent = "+";
     addBtn.style.cssText = "background:transparent;color:#888;border:none;border-radius:50%;width:32px;height:32px;font-size:22px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
     searchWrap.appendChild(addBtn);
@@ -714,6 +715,8 @@ class ShoppingListCard extends HTMLElement {
     const acDropdown = document.createElement("div");
     acDropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:#fff;border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;max-height:200px;overflow-y:auto;display:none;";
     listWrap.appendChild(acDropdown);
+    let acMouseDown = false;
+    acDropdown.addEventListener("mousedown", () => { acMouseDown = true; });
 
     const acItems = this._getAutocompleteItems();
     input.addEventListener("input", () => {
@@ -743,7 +746,12 @@ class ShoppingListCard extends HTMLElement {
     };
     addBtn.addEventListener("click", doAdd);
     input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
-    input.addEventListener("blur", () => { setTimeout(() => { acDropdown.style.display = "none"; if (!input.value.trim()) this._filterVisible(listWrap, ""); }, 200); });
+    input.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (!acMouseDown) { acDropdown.style.display = "none"; if (!input.value.trim()) this._filterVisible(listWrap, ""); }
+        acMouseDown = false;
+      }, 200);
+    });
     input.addEventListener("focus", () => { if (input.value.trim()) input.dispatchEvent(new Event("input")); });
 
     return listWrap;
@@ -802,11 +810,13 @@ class ShoppingListCard extends HTMLElement {
     addTile.addEventListener("mouseenter", () => { addTile.style.background = "#e8f5e9"; addTile.style.borderColor = color; });
     addTile.addEventListener("mouseleave", () => { addTile.style.background = "#fff"; addTile.style.borderColor = color + "60"; });
     let tileInput = null;
+    let tileAcMouseDown = false;
     addTile.addEventListener("click", () => {
       if (!tileInput) {
         addTile.innerHTML = "";
         const tileAc = document.createElement("div");
         tileAc.style.cssText = "position:absolute;top:100%;left:50%;transform:translateX(-50%);width:min(180px,80vw);background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:200;max-height:160px;overflow-y:auto;display:none;";
+        tileAc.addEventListener("mousedown", () => { tileAcMouseDown = true; });
         tileInput = document.createElement("input");
         tileInput.type = "text";
         tileInput.placeholder = "...";
@@ -841,7 +851,7 @@ class ShoppingListCard extends HTMLElement {
           }
         });
         tileInput.addEventListener("keydown", e => { if (e.key === "Enter") { this._addItem(list.entity, tileInput.value); resetTile(); } });
-        tileInput.addEventListener("blur", () => { setTimeout(() => tileInput && resetTile(), 300); });
+        tileInput.addEventListener("blur", () => { setTimeout(() => { if (!tileAcMouseDown && tileInput) resetTile(); tileAcMouseDown = false; }, 300); });
         addTile.appendChild(tileInput);
         addTile.appendChild(tileAc);
         tileInput.focus();
@@ -853,12 +863,18 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _renderMirrorSection(list, items, color, order, maxPerCat = 20) {
-    const onListSummaries = new Set(items.map(i => i.summary.toLowerCase()));
+    const onListSummaries = new Set(items.filter(i => i.status === "needs_action").map(i => i.summary.toLowerCase()));
     const allArticles = this._getAutocompleteItems();
     const allAvail = [];
+    const acLower = new Set(allArticles.map(a => a.toLowerCase()));
     for (const text of allArticles) {
       if (onListSummaries.has(text.toLowerCase())) continue;
       allAvail.push(text);
+    }
+    const allItems = this._itemsByList[list.entity] || [];
+    const completedExtras = allItems.filter(i => i.status === "completed" && !acLower.has(i.summary.toLowerCase()) && !onListSummaries.has(i.summary.toLowerCase()));
+    for (const ci of completedExtras) {
+      if (!allAvail.includes(ci.summary)) allAvail.push(ci.summary);
     }
     if (allAvail.length === 0) return null;
 
@@ -1130,23 +1146,43 @@ class ShoppingListCard extends HTMLElement {
       }
     }
 
-    let pressTimer;
+    let pressTimer = null;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchHandled = false;
     const startPress = () => {
       tile.dataset.longPress = "";
       pressTimer = setTimeout(() => {
+        pressTimer = null;
         tile.dataset.longPress = "1";
         const items = this._itemsByList[entityId] || [];
         const currentItem = items.find(i => i.summary.toLowerCase() === tile.dataset.summary);
         if (currentItem) this._showEditModal(currentItem, entityId);
       }, 600);
     };
-    const endPress = () => { clearTimeout(pressTimer); };
-    tile.addEventListener("touchstart", startPress, { passive: true });
-    tile.addEventListener("touchend", endPress);
-    tile.addEventListener("touchmove", endPress);
-    tile.addEventListener("mousedown", startPress);
-    tile.addEventListener("mouseup", endPress);
-    tile.addEventListener("mouseleave", endPress);
+    const endPress = () => {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    };
+    tile.addEventListener("touchstart", e => {
+      touchHandled = true;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      startPress();
+    }, { passive: true });
+    tile.addEventListener("touchend", () => { endPress(); setTimeout(() => touchHandled = false, 100); });
+    tile.addEventListener("touchmove", e => {
+      if (pressTimer) {
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        if (Math.sqrt(dx * dx + dy * dy) > 10) endPress();
+      }
+    }, { passive: true });
+    tile.addEventListener("mousedown", e => {
+      if (touchHandled) return;
+      startPress();
+    });
+    tile.addEventListener("mouseup", () => { endPress(); });
+    tile.addEventListener("mouseleave", () => { endPress(); });
     tile.addEventListener("contextmenu", e => { endPress(); e.preventDefault(); });
     tile.addEventListener("click", () => {
       if (tile.dataset.longPress !== "1") {
@@ -1184,7 +1220,7 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _showEditModal(item, entityId) {
-    const existing = this.querySelector(".shopping-list-modal");
+    const existing = document.querySelector(".shopping-list-modal");
     existing && existing.remove();
     const overlay = document.createElement("div");
     overlay.className = "shopping-list-modal";
@@ -1193,6 +1229,7 @@ class ShoppingListCard extends HTMLElement {
     box.style.cssText = "background:#fff;border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);box-sizing:border-box;";
 
     const title = document.createElement("div");
+    title.className = "sl-modal-title";
     title.style.cssText = "font-size:17px;font-weight:600;margin-bottom:12px;color:#2e7d32;";
     title.textContent = item.summary;
     box.appendChild(title);
@@ -1206,17 +1243,21 @@ class ShoppingListCard extends HTMLElement {
     quickWrap.style.cssText = "display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;";
     for (const qty of ["1x", "2x", "5x", "10x"]) {
       const btn = document.createElement("button");
+      btn.type = "button";
       btn.textContent = "+" + qty;
       btn.style.cssText = "padding:6px 12px;border-radius:16px;border:1px solid #c8e6c9;background:#e8f5e9;color:#2e7d32;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
       btn.addEventListener("mouseenter", () => { btn.style.background = "#c8e6c9"; });
       btn.addEventListener("mouseleave", () => { btn.style.background = "#e8f5e9"; });
       btn.addEventListener("click", () => {
         const val = descInput.value.trim();
-        const num = qty.replace("x", "");
-        if (!val) {
+        const addNum = parseInt(qty.replace("x", ""), 10);
+        const existingMatch = val.match(/^(\d+)x?\s*(.*)$/);
+        if (existingMatch) {
+          const currentNum = parseInt(existingMatch[1], 10);
+          const rest = existingMatch[2];
+          descInput.value = (currentNum + addNum) + "x" + (rest ? " " + rest : "");
+        } else if (!val) {
           descInput.value = qty;
-        } else if (/^\d+x?\s*/.test(val)) {
-          descInput.value = qty + " " + val.replace(/^\d+x?\s*/, "");
         } else {
           descInput.value = qty + " " + val;
         }
@@ -1260,47 +1301,6 @@ class ShoppingListCard extends HTMLElement {
     iconRow.appendChild(iconPreview);
     iconWrap.appendChild(iconRow);
 
-    const iconDropdown = document.createElement("div");
-    iconDropdown.style.cssText = "position:absolute;left:0;right:0;top:100%;margin-top:4px;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:200;max-height:220px;overflow-y:auto;display:none;padding:8px;box-sizing:border-box;";
-    const renderIconResults = (query) => {
-      iconDropdown.innerHTML = "";
-      const q = query.toLowerCase().replace(/^[a-z]+:/, "").trim();
-      let results = [];
-      if (!q) {
-        results = this._iconLibrary.slice(0, 30);
-      } else {
-        results = this._iconLibrary.filter(i => i.replace(/^[a-z]+:/, "").includes(q)).slice(0, 30);
-      }
-      if (results.length === 0) {
-        iconDropdown.style.display = "none";
-        return;
-      }
-      const grid = document.createElement("div");
-      grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill, minmax(40px, 1fr));gap:4px;";
-      results.forEach(name => {
-        const cell = document.createElement("div");
-        cell.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border-radius:8px;cursor:pointer;transition:background 0.1s;min-height:44px;";
-        const ico = document.createElement("ha-icon");
-        ico.setAttribute("icon", name);
-        ico.style.cssText = "width:22px;height:22px;color:#555;";
-        cell.appendChild(ico);
-        cell.addEventListener("mouseenter", () => { cell.style.background = "#e8f5e9"; });
-        cell.addEventListener("mouseleave", () => { cell.style.background = "transparent"; });
-        cell.addEventListener("click", () => {
-          iconInput.value = name;
-          updatePreview();
-          iconDropdown.style.display = "none";
-        });
-        grid.appendChild(cell);
-      });
-      iconDropdown.appendChild(grid);
-      iconDropdown.style.display = "block";
-    };
-    iconInput.addEventListener("focus", () => renderIconResults(iconInput.value));
-    iconInput.addEventListener("input", () => renderIconResults(iconInput.value));
-    iconInput.addEventListener("blur", () => { setTimeout(() => iconDropdown.style.display = "none", 200); });
-    iconWrap.appendChild(iconDropdown);
-
     const iconClear = document.createElement("div");
     iconClear.style.cssText = "font-size:11px;color:#aaa;cursor:pointer;margin-top:4px;text-align:right;";
     iconClear.textContent = "Icon entfernen";
@@ -1322,6 +1322,7 @@ class ShoppingListCard extends HTMLElement {
     btns.style.cssText = "display:flex;gap:8px;";
 
     const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
     saveBtn.textContent = "Speichern";
     saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:#43A047;color:#fff;font-size:15px;font-weight:600;cursor:pointer;";
     saveBtn.addEventListener("click", () => {
@@ -1329,11 +1330,17 @@ class ShoppingListCard extends HTMLElement {
       const descVal = descInput.value.trim();
       const fullDesc = mdiVal && mdiVal.startsWith("mdi:") ? `[${mdiVal}] ${descVal}` : descVal;
       this._updateDescription(entityId, item, fullDesc);
+      const items = this._itemsByList[entityId] || [];
+      const cached = items.find(i => i.summary === item.summary);
+      if (cached) cached.description = fullDesc;
+      this._lastStructHash = "";
       overlay.remove();
+      setTimeout(() => this._fetchAndRender(), 500);
     });
     btns.appendChild(saveBtn);
 
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.textContent = "Abbrechen";
     cancelBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:transparent;color:#333;font-size:15px;cursor:pointer;";
     cancelBtn.addEventListener("click", () => overlay.remove());
@@ -1341,6 +1348,7 @@ class ShoppingListCard extends HTMLElement {
     box.appendChild(btns);
 
     const delBtn = document.createElement("button");
+    delBtn.type = "button";
     delBtn.textContent = "Löschen";
     delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #ef5350;background:transparent;color:#ef5350;font-size:13px;cursor:pointer;";
     delBtn.addEventListener("click", () => { this._removeItem(entityId, item); overlay.remove(); });
@@ -1348,7 +1356,7 @@ class ShoppingListCard extends HTMLElement {
 
     overlay.appendChild(box);
     overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
-    this.appendChild(overlay);
+    document.body.appendChild(overlay);
     descInput.focus();
   }
 
