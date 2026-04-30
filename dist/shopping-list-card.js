@@ -660,9 +660,9 @@ class ShoppingListCard extends HTMLElement {
       countEl.textContent = visible;
     }
 
-    const modal = this.querySelector(".shopping-list-modal");
+    const modal = document.querySelector(".shopping-list-modal");
     if (modal) {
-      const modalTitle = modal.querySelector("div > div:first-child");
+      const modalTitle = modal.querySelector(".sl-modal-title");
       if (modalTitle) {
         const summary = modalTitle.textContent.toLowerCase();
         let found = false;
@@ -692,6 +692,7 @@ class ShoppingListCard extends HTMLElement {
     input.style.cssText = "flex:1;border:none;background:transparent;font-size:16px;padding:12px 0;outline:none;color:#333;";
     searchWrap.appendChild(input);
     const addBtn = document.createElement("button");
+    addBtn.type = "button";
     addBtn.textContent = "+";
     addBtn.style.cssText = "background:transparent;color:#888;border:none;border-radius:50%;width:32px;height:32px;font-size:22px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
     searchWrap.appendChild(addBtn);
@@ -714,6 +715,8 @@ class ShoppingListCard extends HTMLElement {
     const acDropdown = document.createElement("div");
     acDropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:#fff;border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;max-height:200px;overflow-y:auto;display:none;";
     listWrap.appendChild(acDropdown);
+    let acMouseDown = false;
+    acDropdown.addEventListener("mousedown", () => { acMouseDown = true; });
 
     const acItems = this._getAutocompleteItems();
     input.addEventListener("input", () => {
@@ -743,7 +746,12 @@ class ShoppingListCard extends HTMLElement {
     };
     addBtn.addEventListener("click", doAdd);
     input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
-    input.addEventListener("blur", () => { setTimeout(() => { acDropdown.style.display = "none"; if (!input.value.trim()) this._filterVisible(listWrap, ""); }, 200); });
+    input.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (!acMouseDown) { acDropdown.style.display = "none"; if (!input.value.trim()) this._filterVisible(listWrap, ""); }
+        acMouseDown = false;
+      }, 200);
+    });
     input.addEventListener("focus", () => { if (input.value.trim()) input.dispatchEvent(new Event("input")); });
 
     return listWrap;
@@ -802,11 +810,13 @@ class ShoppingListCard extends HTMLElement {
     addTile.addEventListener("mouseenter", () => { addTile.style.background = "#e8f5e9"; addTile.style.borderColor = color; });
     addTile.addEventListener("mouseleave", () => { addTile.style.background = "#fff"; addTile.style.borderColor = color + "60"; });
     let tileInput = null;
+    let tileAcMouseDown = false;
     addTile.addEventListener("click", () => {
       if (!tileInput) {
         addTile.innerHTML = "";
         const tileAc = document.createElement("div");
         tileAc.style.cssText = "position:absolute;top:100%;left:50%;transform:translateX(-50%);width:min(180px,80vw);background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:200;max-height:160px;overflow-y:auto;display:none;";
+        tileAc.addEventListener("mousedown", () => { tileAcMouseDown = true; });
         tileInput = document.createElement("input");
         tileInput.type = "text";
         tileInput.placeholder = "...";
@@ -841,7 +851,7 @@ class ShoppingListCard extends HTMLElement {
           }
         });
         tileInput.addEventListener("keydown", e => { if (e.key === "Enter") { this._addItem(list.entity, tileInput.value); resetTile(); } });
-        tileInput.addEventListener("blur", () => { setTimeout(() => tileInput && resetTile(), 300); });
+        tileInput.addEventListener("blur", () => { setTimeout(() => { if (!tileAcMouseDown && tileInput) resetTile(); tileAcMouseDown = false; }, 300); });
         addTile.appendChild(tileInput);
         addTile.appendChild(tileAc);
         tileInput.focus();
@@ -1130,23 +1140,43 @@ class ShoppingListCard extends HTMLElement {
       }
     }
 
-    let pressTimer;
+    let pressTimer = null;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchHandled = false;
     const startPress = () => {
       tile.dataset.longPress = "";
       pressTimer = setTimeout(() => {
+        pressTimer = null;
         tile.dataset.longPress = "1";
         const items = this._itemsByList[entityId] || [];
         const currentItem = items.find(i => i.summary.toLowerCase() === tile.dataset.summary);
         if (currentItem) this._showEditModal(currentItem, entityId);
       }, 600);
     };
-    const endPress = () => { clearTimeout(pressTimer); };
-    tile.addEventListener("touchstart", startPress, { passive: true });
-    tile.addEventListener("touchend", endPress);
-    tile.addEventListener("touchmove", endPress);
-    tile.addEventListener("mousedown", startPress);
-    tile.addEventListener("mouseup", endPress);
-    tile.addEventListener("mouseleave", endPress);
+    const endPress = () => {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    };
+    tile.addEventListener("touchstart", e => {
+      touchHandled = true;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      startPress();
+    }, { passive: true });
+    tile.addEventListener("touchend", () => { endPress(); setTimeout(() => touchHandled = false, 100); });
+    tile.addEventListener("touchmove", e => {
+      if (pressTimer) {
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        if (Math.sqrt(dx * dx + dy * dy) > 10) endPress();
+      }
+    }, { passive: true });
+    tile.addEventListener("mousedown", e => {
+      if (touchHandled) return;
+      startPress();
+    });
+    tile.addEventListener("mouseup", () => { endPress(); });
+    tile.addEventListener("mouseleave", () => { endPress(); });
     tile.addEventListener("contextmenu", e => { endPress(); e.preventDefault(); });
     tile.addEventListener("click", () => {
       if (tile.dataset.longPress !== "1") {
@@ -1184,7 +1214,7 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _showEditModal(item, entityId) {
-    const existing = this.querySelector(".shopping-list-modal");
+    const existing = document.querySelector(".shopping-list-modal");
     existing && existing.remove();
     const overlay = document.createElement("div");
     overlay.className = "shopping-list-modal";
@@ -1193,6 +1223,7 @@ class ShoppingListCard extends HTMLElement {
     box.style.cssText = "background:#fff;border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);box-sizing:border-box;";
 
     const title = document.createElement("div");
+    title.className = "sl-modal-title";
     title.style.cssText = "font-size:17px;font-weight:600;margin-bottom:12px;color:#2e7d32;";
     title.textContent = item.summary;
     box.appendChild(title);
@@ -1206,6 +1237,7 @@ class ShoppingListCard extends HTMLElement {
     quickWrap.style.cssText = "display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;";
     for (const qty of ["1x", "2x", "5x", "10x"]) {
       const btn = document.createElement("button");
+      btn.type = "button";
       btn.textContent = "+" + qty;
       btn.style.cssText = "padding:6px 12px;border-radius:16px;border:1px solid #c8e6c9;background:#e8f5e9;color:#2e7d32;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
       btn.addEventListener("mouseenter", () => { btn.style.background = "#c8e6c9"; });
@@ -1262,6 +1294,8 @@ class ShoppingListCard extends HTMLElement {
 
     const iconDropdown = document.createElement("div");
     iconDropdown.style.cssText = "position:absolute;left:0;right:0;top:100%;margin-top:4px;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:200;max-height:220px;overflow-y:auto;display:none;padding:8px;box-sizing:border-box;";
+    let iconDropdownMouseDown = false;
+    iconDropdown.addEventListener("mousedown", () => { iconDropdownMouseDown = true; });
     const renderIconResults = (query) => {
       iconDropdown.innerHTML = "";
       const q = query.toLowerCase().replace(/^[a-z]+:/, "").trim();
@@ -1298,7 +1332,12 @@ class ShoppingListCard extends HTMLElement {
     };
     iconInput.addEventListener("focus", () => renderIconResults(iconInput.value));
     iconInput.addEventListener("input", () => renderIconResults(iconInput.value));
-    iconInput.addEventListener("blur", () => { setTimeout(() => iconDropdown.style.display = "none", 200); });
+    iconInput.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (!iconDropdownMouseDown) iconDropdown.style.display = "none";
+        iconDropdownMouseDown = false;
+      }, 200);
+    });
     iconWrap.appendChild(iconDropdown);
 
     const iconClear = document.createElement("div");
@@ -1322,6 +1361,7 @@ class ShoppingListCard extends HTMLElement {
     btns.style.cssText = "display:flex;gap:8px;";
 
     const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
     saveBtn.textContent = "Speichern";
     saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:#43A047;color:#fff;font-size:15px;font-weight:600;cursor:pointer;";
     saveBtn.addEventListener("click", () => {
@@ -1334,6 +1374,7 @@ class ShoppingListCard extends HTMLElement {
     btns.appendChild(saveBtn);
 
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.textContent = "Abbrechen";
     cancelBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid #c8e6c9;background:transparent;color:#333;font-size:15px;cursor:pointer;";
     cancelBtn.addEventListener("click", () => overlay.remove());
@@ -1341,6 +1382,7 @@ class ShoppingListCard extends HTMLElement {
     box.appendChild(btns);
 
     const delBtn = document.createElement("button");
+    delBtn.type = "button";
     delBtn.textContent = "Löschen";
     delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #ef5350;background:transparent;color:#ef5350;font-size:13px;cursor:pointer;";
     delBtn.addEventListener("click", () => { this._removeItem(entityId, item); overlay.remove(); });
@@ -1348,7 +1390,7 @@ class ShoppingListCard extends HTMLElement {
 
     overlay.appendChild(box);
     overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
-    this.appendChild(overlay);
+    document.body.appendChild(overlay);
     descInput.focus();
   }
 
