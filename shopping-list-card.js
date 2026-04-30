@@ -1128,7 +1128,7 @@ class ShoppingListCard extends HTMLElement {
     tile.dataset.summary = item.summary.toLowerCase();
     tile.dataset.entity = entityId;
     tile.dataset.status = item.status;
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:" + (isDone ? "#e0e0e0" : color) + ";border:" + (isDone ? "2px solid #bbb" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;";
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:" + (isDone ? "#e0e0e0" : color) + ";border:" + (isDone ? "2px solid #bbb" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
     tile.addEventListener("mouseenter", () => { if (tile.dataset.status !== "completed") tile.style.background = "#388E3C"; });
     tile.addEventListener("mouseleave", () => { tile.style.background = tile.dataset.status === "completed" ? "#e0e0e0" : color; });
 
@@ -1158,15 +1158,21 @@ class ShoppingListCard extends HTMLElement {
     let touchStartX = 0;
     let touchStartY = 0;
     let touchHandled = false;
+    let longPressFired = false;
+    const fireLongPress = () => {
+      if (longPressFired) return;
+      longPressFired = true;
+      this._haptic(80);
+      const items = this._itemsByList[entityId] || [];
+      const currentItem = items.find(i => i.uid === tile.dataset.uid);
+      if (currentItem) this._showEditModal(currentItem, entityId);
+    };
     const startPress = () => {
-      tile.dataset.longPress = "";
+      longPressFired = false;
       pressTimer = setTimeout(() => {
         pressTimer = null;
-        tile.dataset.longPress = "1";
-        const items = this._itemsByList[entityId] || [];
-        const currentItem = items.find(i => i.uid === tile.dataset.uid);
-        if (currentItem) this._showEditModal(currentItem, entityId);
-      }, 600);
+        fireLongPress();
+      }, 500);
     };
     const endPress = () => {
       if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
@@ -1177,7 +1183,7 @@ class ShoppingListCard extends HTMLElement {
       touchStartY = e.touches[0].clientY;
       startPress();
     }, { passive: true });
-    tile.addEventListener("touchend", () => { endPress(); setTimeout(() => touchHandled = false, 100); });
+    tile.addEventListener("touchend", () => { endPress(); setTimeout(() => touchHandled = false, 300); });
     tile.addEventListener("touchmove", e => {
       if (pressTimer) {
         const dx = e.touches[0].clientX - touchStartX;
@@ -1191,9 +1197,13 @@ class ShoppingListCard extends HTMLElement {
     });
     tile.addEventListener("mouseup", () => { endPress(); });
     tile.addEventListener("mouseleave", () => { endPress(); });
-    tile.addEventListener("contextmenu", e => { endPress(); e.preventDefault(); });
+    tile.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      endPress();
+      fireLongPress();
+    });
     tile.addEventListener("click", () => {
-      if (tile.dataset.longPress !== "1") {
+      if (!longPressFired) {
         const items = this._itemsByList[entityId] || [];
         const currentItem = items.find(i => i.uid === tile.dataset.uid);
         if (currentItem) this._toggleItem(entityId, currentItem);
@@ -1208,7 +1218,7 @@ class ShoppingListCard extends HTMLElement {
     tile.dataset.summary = text.toLowerCase();
     tile.dataset.entity = entityId;
     tile.dataset.status = "ghost";
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:#f5f5f5;border:2px dashed #ddd;opacity:0.65;cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;";
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:#f5f5f5;border:2px dashed #ddd;opacity:0.65;cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
     tile.addEventListener("mouseenter", () => { tile.style.background = "#e8f5e9"; tile.style.borderColor = color; tile.style.opacity = "0.9"; });
     tile.addEventListener("mouseleave", () => { tile.style.background = "#f5f5f5"; tile.style.borderColor = "#ddd"; tile.style.opacity = "0.65"; });
 
