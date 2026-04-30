@@ -375,8 +375,8 @@ class ShoppingListCard extends HTMLElement {
       const oldItems = oldState.attributes?.todo_items || [];
       const newItems = newState.attributes?.todo_items || [];
       if (oldItems.length !== newItems.length) return true;
-      const oldHash = oldItems.map(i => i.summary + (i.description || "")).join("|");
-      const newHash = newItems.map(i => i.summary + (i.description || "")).join("|");
+      const oldHash = oldItems.map(i => i.uid + ":" + i.summary + (i.description || "") + i.status).join("|");
+      const newHash = newItems.map(i => i.uid + ":" + i.summary + (i.description || "") + i.status).join("|");
       if (oldHash !== newHash) return true;
     }
     return false;
@@ -518,9 +518,9 @@ class ShoppingListCard extends HTMLElement {
     return this._autocompleteItems;
   }
 
-  _itemExists(entityId, text) {
+  _findItemBySummary(entityId, text) {
     const items = this._itemsByList[entityId] || [];
-    return items.some(item => item.status === "needs_action" && item.summary.toLowerCase() === text.toLowerCase());
+    return items.find(item => item.summary.toLowerCase() === text.toLowerCase()) || null;
   }
 
   _showToast(msg) {
@@ -550,9 +550,15 @@ class ShoppingListCard extends HTMLElement {
   _addItem(entityId, text) {
     const val = text.trim();
     if (!val || !this._hass) return;
-    if (this._itemExists(entityId, val)) {
-      this._showToast("'" + val + "' ist bereits auf der Liste");
-      this._haptic(30);
+    const existing = this._findItemBySummary(entityId, val);
+    if (existing) {
+      if (existing.status === "needs_action") {
+        this._showToast("'" + val + "' ist bereits auf der Liste");
+        this._haptic(30);
+        return;
+      }
+      this._callService("todo", "update_item", { entity_id: entityId, uid: existing.uid, status: "needs_action" });
+      this._haptic(60);
       return;
     }
     this._callService("todo", "add_item", { entity_id: entityId, item: val });
@@ -562,13 +568,13 @@ class ShoppingListCard extends HTMLElement {
   _toggleItem(entityId, item) {
     if (!this._hass) return;
     const status = item.status === "completed" ? "needs_action" : "completed";
-    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status });
+    this._callService("todo", "update_item", { entity_id: entityId, uid: item.uid, status: status });
     this._haptic(status === "needs_action" ? 40 : 60);
   }
 
   _removeItem(entityId, item) {
     if (!this._hass) return;
-    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary });
+    this._callService("todo", "remove_item", { entity_id: entityId, uid: item.uid });
     this._haptic(40);
   }
 
@@ -580,7 +586,7 @@ class ShoppingListCard extends HTMLElement {
 
   _updateDescription(entityId, item, desc) {
     if (!this._hass) return;
-    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc });
+    this._callService("todo", "update_item", { entity_id: entityId, uid: item.uid, description: desc });
     this._haptic(40);
   }
 
@@ -599,13 +605,12 @@ class ShoppingListCard extends HTMLElement {
     for (const list of this.config.lists) {
       const items = this._itemsByList[list.entity] || [];
       const itemMap = new Map();
-      for (const item of items) itemMap.set(item.summary.toLowerCase(), item);
+      for (const item of items) itemMap.set(item.uid, item);
       const color = list.color || "#43A047";
 
       const tiles = this.querySelectorAll(`[data-entity="${list.entity}"].sl-tile`);
       for (const tile of tiles) {
-        const summary = tile.dataset.summary;
-        const item = itemMap.get(summary);
+        const item = itemMap.get(tile.dataset.uid);
         if (!item) continue;
         if (tile.dataset.status === item.status) continue;
 
@@ -662,15 +667,11 @@ class ShoppingListCard extends HTMLElement {
 
     const modal = document.querySelector(".shopping-list-modal");
     if (modal) {
-      const modalTitle = modal.querySelector(".sl-modal-title");
-      if (modalTitle) {
-        const summary = modalTitle.textContent.toLowerCase();
-        let found = false;
-        for (const list of this.config.lists) {
-          const items = this._itemsByList[list.entity] || [];
-          if (items.some(i => i.summary.toLowerCase() === summary)) { found = true; break; }
-        }
-        if (!found) modal.remove();
+      const modalUid = modal.dataset.itemUid;
+      const modalEntity = modal.dataset.itemEntity;
+      if (modalUid && modalEntity) {
+        const items = this._itemsByList[modalEntity] || [];
+        if (!items.some(i => i.uid === modalUid)) modal.remove();
       }
     }
   }
@@ -724,7 +725,10 @@ class ShoppingListCard extends HTMLElement {
       acDropdown.innerHTML = "";
       this._filterVisible(listWrap, val);
       if (!val) { acDropdown.style.display = "none"; return; }
-      const matches = acItems.filter(it => it.toLowerCase().includes(val) && !this._itemExists(list.entity, it)).slice(0, 8);
+      const matches = acItems.filter(it => {
+        const existing = this._findItemBySummary(list.entity, it);
+        return !(existing && existing.status === "needs_action");
+      }).slice(0, 8);
       if (matches.length) {
         matches.forEach(m => {
           const row = document.createElement("div");
@@ -834,7 +838,10 @@ class ShoppingListCard extends HTMLElement {
           const v = tileInput.value.toLowerCase().trim();
           tileAc.innerHTML = "";
           if (!v) { tileAc.style.display = "none"; return; }
-          const matches = allItems.filter(it => it.toLowerCase().includes(v) && !this._itemExists(list.entity, it)).slice(0, 6);
+          const matches = allItems.filter(it => {
+            const existing = this._findItemBySummary(list.entity, it);
+            return !(existing && existing.status === "needs_action");
+          }).slice(0, 6);
           if (matches.length) {
             matches.forEach(m => {
               const row = document.createElement("div");
@@ -1017,7 +1024,7 @@ class ShoppingListCard extends HTMLElement {
     const currentSummaries = [];
     for (const list of this.config.lists) {
       const items = this._itemsByList[list.entity] || [];
-      for (const item of items) currentSummaries.push(list.entity + "|" + item.summary + "|" + (item.description || ""));
+      for (const item of items) currentSummaries.push(list.entity + "|" + item.uid + "|" + item.summary + "|" + (item.description || "") + "|" + item.status);
     }
     currentSummaries.sort();
     const structHash = currentSummaries.join(";");
@@ -1028,10 +1035,10 @@ class ShoppingListCard extends HTMLElement {
       for (const list of this.config.lists) {
         const items = this._itemsByList[list.entity] || [];
         const itemMap = new Map();
-        for (const item of items) itemMap.set(item.summary.toLowerCase(), item);
+        for (const item of items) itemMap.set(item.uid, item);
         const tiles = existingCard.querySelectorAll(`[data-entity="${list.entity}"].sl-tile:not(.sl-ghost)`);
         for (const tile of tiles) {
-          const item = itemMap.get(tile.dataset.summary);
+          const item = itemMap.get(tile.dataset.uid);
           if (!item) continue;
           const expected = item.status === "needs_action" ? "active" : "mirror";
           if (tile.dataset.section !== expected) { sectionChanged = true; break; }
@@ -1117,6 +1124,7 @@ class ShoppingListCard extends HTMLElement {
     const isDone = item.status === "completed";
     const tile = document.createElement("div");
     tile.className = "sl-tile";
+    tile.dataset.uid = item.uid;
     tile.dataset.summary = item.summary.toLowerCase();
     tile.dataset.entity = entityId;
     tile.dataset.status = item.status;
@@ -1156,7 +1164,7 @@ class ShoppingListCard extends HTMLElement {
         pressTimer = null;
         tile.dataset.longPress = "1";
         const items = this._itemsByList[entityId] || [];
-        const currentItem = items.find(i => i.summary.toLowerCase() === tile.dataset.summary);
+        const currentItem = items.find(i => i.uid === tile.dataset.uid);
         if (currentItem) this._showEditModal(currentItem, entityId);
       }, 600);
     };
@@ -1187,7 +1195,7 @@ class ShoppingListCard extends HTMLElement {
     tile.addEventListener("click", () => {
       if (tile.dataset.longPress !== "1") {
         const items = this._itemsByList[entityId] || [];
-        const currentItem = items.find(i => i.summary.toLowerCase() === tile.dataset.summary);
+        const currentItem = items.find(i => i.uid === tile.dataset.uid);
         if (currentItem) this._toggleItem(entityId, currentItem);
       }
     });
@@ -1225,6 +1233,8 @@ class ShoppingListCard extends HTMLElement {
     const overlay = document.createElement("div");
     overlay.className = "shopping-list-modal";
     overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;";
+    overlay.dataset.itemUid = item.uid;
+    overlay.dataset.itemEntity = entityId;
     const box = document.createElement("div");
     box.style.cssText = "background:#fff;border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);box-sizing:border-box;";
 
@@ -1331,7 +1341,7 @@ class ShoppingListCard extends HTMLElement {
       const fullDesc = mdiVal && mdiVal.startsWith("mdi:") ? `[${mdiVal}] ${descVal}` : descVal;
       this._updateDescription(entityId, item, fullDesc);
       const items = this._itemsByList[entityId] || [];
-      const cached = items.find(i => i.summary === item.summary);
+      const cached = items.find(i => i.uid === item.uid);
       if (cached) cached.description = fullDesc;
       this._lastStructHash = "";
       overlay.remove();
