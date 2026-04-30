@@ -7,7 +7,6 @@ class ShoppingListCard extends HTMLElement {
     this._autocompleteItems = null;
     this._iconMap = null;
     this._catMap = null;
-    this._renderedHash = "";
   }
 
   setConfig(config) {
@@ -424,7 +423,7 @@ class ShoppingListCard extends HTMLElement {
   _getItemIcon(text) {
     const t = text.toLowerCase();
     const map = this.config.icon_map || {};
-    if (map[text]) return map[text];
+    if (map[text] || map[t]) return map[text] || map[t];
     for (const [key, hex] of this._iconMapEntries) {
       if (t.includes(key)) return hex;
     }
@@ -526,7 +525,7 @@ class ShoppingListCard extends HTMLElement {
   _showToast(msg) {
     const toast = document.createElement("div");
     toast.textContent = msg;
-    toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;z-index:10000;opacity:0;transition:opacity 0.3s ease;";
+    toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;z-index:9998;opacity:0;transition:opacity 0.3s ease;";
     document.body.appendChild(toast);
     requestAnimationFrame(() => toast.style.opacity = "1");
     setTimeout(() => {
@@ -727,7 +726,7 @@ class ShoppingListCard extends HTMLElement {
       if (!val) { acDropdown.style.display = "none"; return; }
       const matches = acItems.filter(it => {
         const existing = this._findItemBySummary(list.entity, it);
-        return !(existing && existing.status === "needs_action");
+        return it.toLowerCase().includes(val) && !(existing && existing.status === "needs_action");
       }).slice(0, 8);
       if (matches.length) {
         matches.forEach(m => {
@@ -790,7 +789,6 @@ class ShoppingListCard extends HTMLElement {
 
     const grid = document.createElement("div");
     grid.className = "sl-grid";
-    grid.className = "sl-grid";
     let collapsed = false;
     header.addEventListener("click", () => {
       collapsed = !collapsed;
@@ -840,7 +838,7 @@ class ShoppingListCard extends HTMLElement {
           if (!v) { tileAc.style.display = "none"; return; }
           const matches = allItems.filter(it => {
             const existing = this._findItemBySummary(list.entity, it);
-            return !(existing && existing.status === "needs_action");
+            return it.toLowerCase().includes(v) && !(existing && existing.status === "needs_action");
           }).slice(0, 6);
           if (matches.length) {
             matches.forEach(m => {
@@ -948,7 +946,6 @@ class ShoppingListCard extends HTMLElement {
       catWrap.appendChild(header);
 
       const grid = document.createElement("div");
-      grid.className = "sl-grid";
       grid.className = "sl-grid";
       grid.style.cssText = "gap:8px;padding:8px;transition:max-height 0.3s ease;";
       let collapsed = false;
@@ -1327,7 +1324,6 @@ class ShoppingListCard extends HTMLElement {
     iconClear.addEventListener("click", () => {
       iconInput.value = "";
       updatePreview();
-      iconDropdown.style.display = "none";
     });
     iconWrap.appendChild(iconClear);
     box.appendChild(iconWrap);
