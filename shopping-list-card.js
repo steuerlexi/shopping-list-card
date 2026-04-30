@@ -73,146 +73,6 @@ class ShoppingListCard extends HTMLElement {
       "Pralinen","Salzstangen","Studentenfutter","Trockenobst","Weinbrand"
     ])];
 
-    this._iconLibrary = [
-      "mdi:food-apple","mdi:food-apple-outline","mdi:food-carrot","mdi:food-corn",
-      "mdi:food-croissant","mdi:food-drumstick","mdi:food-drumstick-outline","mdi:food-fish",
-      "mdi:food-fish-outline","mdi:food-grain","mdi:food-steak","mdi:food-takeout-box",
-      "mdi:food-turkey","mdi:food-variant","mdi:fruit-cherries","mdi:fruit-citrus",
-      "mdi:fruit-grapes","mdi:fruit-pineapple","mdi:fruit-watermelon","mdi:egg",
-      "mdi:egg-fried","mdi:egg-outline","mdi:cheese-burger","mdi:hamburger","mdi:noodle",
-      "mdi:pasta","mdi:pizza","mdi:pizza-slice","mdi:bread-slice","mdi:bread-slice-outline",
-      "mdi:cake","mdi:cake-layered","mdi:cake-variant","mdi:cookie","mdi:cookie-outline",
-      "mdi:candy","mdi:candy-outline","mdi:candy-cane","mdi:ice-cream","mdi:coffee",
-      "mdi:coffee-outline","mdi:coffee-maker","mdi:tea","mdi:tea-outline","mdi:cup",
-      "mdi:cup-outline","mdi:cup-water","mdi:cup-off","mdi:glass-wine","mdi:glass-cocktail",
-      "mdi:glass-mug","mdi:glass-mug-variant","mdi:beer","mdi:beer-outline","mdi:bottle-wine",
-      "mdi:bottle-soda","mdi:bottle-soda-classic","mdi:fish","mdi:fish-off","mdi:carrot",
-      "mdi:corn","mdi:mushroom","mdi:mushroom-outline","mdi:mushroom-off","mdi:onion",
-      "mdi:garlic","mdi:pepper","mdi:watermelon","mdi:melon","mdi:orange","mdi:lemon",
-      "mdi:lime","mdi:cherry","mdi:strawberry","mdi:apple","mdi:avocado","mdi:eggplant",
-      "mdi:cucumber","mdi:potato","mdi:cart","mdi:cart-outline","mdi:cart-variant",
-      "mdi:shopping","mdi:shopping-outline","mdi:shopping-search","mdi:gift","mdi:gift-outline",
-      "mdi:home","mdi:home-outline","mdi:store","mdi:store-outline","mdi:store-24-hour",
-      "mdi:package","mdi:package-variant","mdi:package-variant-closed","mdi:trash-can",
-      "mdi:trash-can-outline","mdi:delete","mdi:delete-outline","mdi:paper-towel",
-      "mdi:paper-towel-outline","mdi:toilet-paper","mdi:toilet-paper-outline","mdi:shower",
-      "mdi:bathtub","mdi:toothbrush","mdi:toothbrush-paste","mdi:soap","mdi:shaker","mdi:shaker-outline","mdi:spray-bottle",
-      "mdi:broom","mdi:vacuum-cleaner","mdi:lightbulb","mdi:lightbulb-outline","mdi:candle",
-      "mdi:candle-fire","mdi:bandage","mdi:bandage-box","mdi:pill","mdi:hand-wash",
-      "mdi:hand-water","mdi:water","mdi:water-well","mdi:bottle-water","mdi:bottle-wine-outline",
-      "mdi:cup-water","mdi:gas-station","mdi:oil","mdi:flower","mdi:flower-outline","mdi:flower-tulip",
-      "mdi:flower-tulip-outline","mdi:seed","mdi:seed-outline","mdi:tree","mdi:tree-outline",
-      "mdi:account","mdi:account-outline","mdi:account-group","mdi:baby","mdi:baby-bottle",
-      "mdi:cat","mdi:dog","mdi:paw","mdi:paw-outline","mdi:bird","mdi:fishbowl",
-      "mdi:alpha-a","mdi:alpha-b","mdi:alpha-c","mdi:alpha-d","mdi:alpha-e",
-      "mdi:alpha-f","mdi:alpha-g","mdi:alpha-h","mdi:alpha-i","mdi:alpha-j",
-      "mdi:alpha-k","mdi:alpha-l","mdi:alpha-m","mdi:alpha-n","mdi:alpha-o",
-      "mdi:alpha-p","mdi:alpha-q","mdi:alpha-r","mdi:alpha-s","mdi:alpha-t",
-      "mdi:alpha-u","mdi:alpha-v","mdi:alpha-w","mdi:alpha-x","mdi:alpha-y",
-      "mdi:alpha-z","mdi:numeric-0","mdi:numeric-1","mdi:numeric-2","mdi:numeric-3",
-      "mdi:numeric-4","mdi:numeric-5","mdi:numeric-6","mdi:numeric-7","mdi:numeric-8",
-      "mdi:numeric-9","mdi:heart","mdi:heart-outline","mdi:star","mdi:star-outline",
-      "mdi:check","mdi:check-circle","mdi:check-circle-outline","mdi:close",
-      "mdi:close-circle","mdi:close-circle-outline","mdi:information","mdi:information-outline",
-      "mdi:help-circle","mdi:help-circle-outline","mdi:alert","mdi:alert-outline",
-      "mdi:bell","mdi:bell-outline","mdi:magnify","mdi:magnify-minus","mdi:magnify-plus",
-      "mdi:menu","mdi:dots-horizontal","mdi:dots-vertical","mdi:plus","mdi:plus-circle",
-      "mdi:plus-circle-outline","mdi:minus","mdi:minus-circle","mdi:minus-circle-outline",
-      "mdi:pencil","mdi:pencil-outline","mdi:trash-can","mdi:trash-can-outline",
-      "mdi:bookmark","mdi:bookmark-outline","mdi:pin","mdi:pin-outline",
-      "mdi:calendar","mdi:calendar-outline","mdi:clock","mdi:clock-outline",
-      "mdi:timer","mdi:timer-outline","mdi:alarm","mdi:alarm-outline","mdi:weather-sunny",
-      "mdi:weather-cloudy","mdi:weather-rainy","mdi:weather-snowy","mdi:weather-lightning",
-      "mdi:car","mdi:car-outline","mdi:car-side","mdi:car-hatchback","mdi:truck",
-      "mdi:truck-outline","mdi:bike","mdi:motorbike","mdi:bus","mdi:bus-side",
-      "mdi:train","mdi:train-car","mdi:airplane","mdi:airplane-outline","mdi:helicopter",
-      "mdi:rocket","mdi:rocket-outline","mdi:earth","mdi:earth-outline","mdi:map-marker",
-      "mdi:map-marker-outline","mdi:navigation","mdi:compass","mdi:compass-outline",
-      "mdi:flag","mdi:flag-outline","mdi:tag","mdi:tag-outline","mdi:label",
-      "mdi:label-outline","mdi:bookmark-check","mdi:bookmark-check-outline","mdi:content-save",
-      "mdi:content-save-outline","mdi:folder","mdi:folder-outline","mdi:file-document",
-      "mdi:file-document-outline","mdi:clipboard-text","mdi:clipboard-text-outline",
-      "mdi:note","mdi:note-outline","mdi:book","mdi:book-outline","mdi:library",
-      "mdi:library-outline","mdi:newspaper","mdi:newspaper-variant","mdi:rss",
-      "mdi:rss-box","mdi:email","mdi:email-outline","mdi:email-open","mdi:email-open-outline",
-      "mdi:phone","mdi:phone-outline","mdi:cellphone","mdi:cellphone-basic",
-      "mdi:laptop","mdi:monitor","mdi:television","mdi:television-classic",
-      "mdi:remote-tv","mdi:gamepad","mdi:gamepad-variant","mdi:controller-classic",
-      "mdi:headphones","mdi:headset","mdi:speaker","mdi:speaker-outline",
-      "mdi:camera","mdi:camera-outline","mdi:video","mdi:video-outline","mdi:music",
-      "mdi:music-note","mdi:music-note-outline","mdi:playlist-music","mdi:radio",
-      "mdi:radio-outline","mdi:trophy","mdi:trophy-outline","mdi:medal","mdi:medal-outline",
-      "mdi:crown","mdi:crown-outline","mdi:diamond","mdi:diamond-outline","mdi:emoticon",
-      "mdi:emoticon-outline","mdi:emoticon-happy","mdi:emoticon-happy-outline",
-      "mdi:emoticon-sad","mdi:emoticon-sad-outline","mdi:emoticon-cool",
-      "mdi:emoticon-cool-outline","mdi:emoticon-neutral","mdi:emoticon-neutral-outline",
-      "mdi:emoticon-angry","mdi:emoticon-angry-outline","mdi:face","mdi:face-outline",
-      "mdi:face-man","mdi:face-man-outline","mdi:face-woman","mdi:face-woman-outline",
-      "mdi:face-agent","mdi:face-agent-outline","mdi:robot","mdi:robot-outline",
-      "mdi:alien","mdi:alien-outline","mdi:ghost","mdi:ghost-outline","mdi:skull",
-      "mdi:skull-outline","mdi:pirate","mdi:pirate-outline","mdi:ninja","mdi:ninja-outline",
-      "mdi:wizard-hat","mdi:run","mdi:run-fast","mdi:walk","mdi:human","mdi:human-female",
-      "mdi:human-male","mdi:human-child","mdi:human-baby-changing-table","mdi:wheelchair",
-      "mdi:stairs","mdi:elevator","mdi:escalator","mdi:fire","mdi:fire-extinguisher",
-      "mdi:flash","mdi:flash-outline","mdi:flashlight","mdi:flashlight-outline",
-      "mdi:lightning-bolt","mdi:lightning-bolt-outline","mdi:snowflake",
-      "mdi:snowflake-variant","mdi:umbrella","mdi:umbrella-outline","mdi:sunglasses",
-      "mdi:glasses","mdi:hat-fedora","mdi:tshirt-crew","mdi:tshirt-crew-outline",
-      "mdi:shoe-sneaker","mdi:shoe-formal","mdi:tie","mdi:bow-tie","mdi:watch",
-      "mdi:watch-outline","mdi:clock-digital","mdi:alarm-snooze","mdi:alarm-check",
-      "mdi:bed","mdi:bed-outline","mdi:sofa","mdi:sofa-outline","mdi:table-chair",
-      "mdi:fridge","mdi:fridge-outline","mdi:fridge-top","mdi:fridge-bottom",
-      "mdi:stove","mdi:stove-outline","mdi:washing-machine","mdi:dishwasher",
-      "mdi:microwave","mdi:microwave-outline","mdi:toaster","mdi:toaster-oven",
-      "mdi:blender","mdi:coffee-maker-outline","mdi:kettle","mdi:kettle-outline",
-      "mdi:kettle-steam","mdi:kettle-steam-outline","mdi:pot","mdi:pot-steam",
-      "mdi:pot-steam-outline","mdi:pan","mdi:pan-outline","mdi:spoon-sugar",
-      "mdi:scale","mdi:scale-outline","mdi:ruler","mdi:ruler-square","mdi:tape-measure",
-      "mdi:scissors","mdi:scissors-cutting","mdi:needle","mdi:thread",
-      "mdi:safety-goggles","mdi:hard-hat","mdi:hammer","mdi:hammer-screwdriver",
-      "mdi:wrench","mdi:wrench-outline","mdi:screwdriver","mdi:screwdriver-outline",
-      "mdi:drill","mdi:saw-blade","mdi:axe","mdi:shovel","mdi:palette",
-      "mdi:palette-outline","mdi:paint-brush","mdi:paint-roller","mdi:format-paint",
-      "mdi:draw","mdi:pencil-ruler","mdi:ruler-triangle","mdi:divider",
-      "mdi:protractor","mdi:compass","mdi:compass-outline","mdi:map","mdi:map-outline",
-      "mdi:globe-model","mdi:terrain","mdi:forest","mdi:pine-tree","mdi:pine-tree-box",
-      "mdi:leaf","mdi:leaf-outline","mdi:leaf-maple","mdi:leaf-maple-outline",
-      "mdi:flower-poppy","mdi:flower-poppy-outline","mdi:flower-rose",
-      "mdi:flower-rose-outline","mdi:flower-tulip","mdi:flower-tulip-outline",
-      "mdi:grass","mdi:shrub","mdi:barley","mdi:seed","mdi:seed-outline","mdi:grain",
-      "mdi:garlic","mdi:ginger","mdi:peanut","mdi:peanut-outline","mdi:almond",
-      "mdi:cashew","mdi:chestnut","mdi:hazelnut","mdi:pistachio","mdi:walnut",
-      "mdi:cow","mdi:cow-outline","mdi:pig","mdi:pig-variant","mdi:pig-variant-outline",
-      "mdi:sheep","mdi:duck","mdi:turkey","mdi:chicken","mdi:rabbit","mdi:rabbit-variant",
-      "mdi:bee","mdi:bee-flower","mdi:bug","mdi:bug-outline","mdi:butterfly",
-      "mdi:butterfly-outline","mdi:spider","mdi:spider-outline","mdi:snail",
-      "mdi:snail-outline","mdi:turtle","mdi:turtle-outline","mdi:fishbowl",
-      "mdi:fishbowl-outline","mdi:shark","mdi:shark-outline","mdi:whale",
-      "mdi:whale-outline","mdi:dolphin","mdi:seal","mdi:penguin","mdi:penguin-outline",
-      "mdi:owl","mdi:owl-outline","mdi:eagle","mdi:eagle-outline","mdi:parrot",
-      "mdi:cat","mdi:cat-outline","mdi:dog","mdi:dog-side","mdi:dog-service",
-      "mdi:horse","mdi:horse-variant","mdi:horse-variant-outline","mdi:elephant",
-      "mdi:elephant-outline","mdi:snake","mdi:snake-outline","mdi:lizard",
-      "mdi:lizard-outline","mdi:bat","mdi:bat-outline","mdi:spider-web",
-      "mdi:spider-thread","mdi:fire-hydrant","mdi:fire-hydrant-alert",
-      "mdi:fire-hydrant-off","mdi:hydrant","mdi:hydrant-outline",
-      "si:github","si:apple","si:google","si:amazon","si:netflix","si:spotify",
-      "si:twitter","si:facebook","si:instagram","si:youtube","si:discord","si:slack",
-      "si:docker","si:kubernetes","si:nginx","si:apache","si:linux","si:windows",
-      "si:android","si:ios","si:playstation","si:xbox","si:nintendo","si:steam",
-      "si:visa","si:mastercard","si:paypal","si:bitcoin","si:ethereum",
-      "phu:apple-logo","phu:carrot","phu:coffee","phu:fish","phu:hamburger",
-      "phu:ice-cream","phu:orange","phu:pizza","phu:shopping-cart","phu:wine",
-      "fluent:food-apple-24-filled","fluent:food-cake-24-filled","fluent:food-carrot-24-filled",
-      "fluent:food-egg-24-filled","fluent:food-fish-24-filled","fluent:food-pizza-24-filled",
-      "fluent:drink-coffee-24-filled","fluent:drink-wine-24-filled","fluent:drink-beer-24-filled",
-      "hue:lightbulb","hue:lightbulb-group","hue:lightbulb-off","hue:outlet","hue:plug",
-      "hue:motion-sensor","hue:contact-sensor","hue:tap-switch","hue:dimmer-switch",
-      "fas:carrot","fas:apple-alt","fas:lemon","fas:fish","fas:hamburger","fas:pizza-slice",
-      "fas:ice-cream","fas:cookie","fas:candy-cane","fas:mug-hot","fas:wine-glass-alt",
-      "far:lemon","far:apple-alt","far:grin","far:sad-tear","far:smile","far:frown"
-    ];
-
     this._iconMap = {
       eier:"1F95A", ei:"1F95A", apfel:"1F34E", äpfel:"1F34E", banane:"1F34C", bananen:"1F34C",
       birne:"1F350", birnen:"1F350", kiwi:"1F95D", orange:"1F34A", orangen:"1F34A",
@@ -406,7 +266,7 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _getOpenmojiUrl(hex) {
-    return `https://cdn.jsdelivr.net/npm/openmoji@latest/color/svg/${hex}.svg`;
+    return `https://cdn.jsdelivr.net/npm/openmoji@17.0.0/color/svg/${hex}.svg`;
   }
 
   _createOpenmojiImg(hex, size) {
@@ -525,7 +385,7 @@ class ShoppingListCard extends HTMLElement {
   _showToast(msg) {
     const toast = document.createElement("div");
     toast.textContent = msg;
-    toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;z-index:9998;opacity:0;transition:opacity 0.3s ease;";
+    toast.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;z-index:800;opacity:0;transition:opacity 0.3s ease;";
     document.body.appendChild(toast);
     requestAnimationFrame(() => toast.style.opacity = "1");
     setTimeout(() => {
@@ -592,13 +452,23 @@ class ShoppingListCard extends HTMLElement {
   _subscribeChanges() {
     if (this._unsub || !this._hass || !this.isConnected) return;
     const entities = this.config?.lists?.map(l => l.entity) || [];
-    this._unsub = this._hass.connection.subscribeEvents(ev => {
-      if (entities.includes(ev.data.entity_id)) this._fetchAndRender();
-    }, "state_changed");
+    this._hass.connection.subscribeMessage(
+      () => this._fetchAndRender(),
+      { type: "subscribe_entities", entity_ids: entities }
+    ).then(unsub => { this._unsub = unsub; }).catch(() => {
+      this._unsub = this._hass.connection.subscribeEvents(ev => {
+        if (entities.includes(ev.data.entity_id)) this._fetchAndRender();
+      }, "state_changed");
+    });
   }
 
   connectedCallback() { this._subscribeChanges(); }
-  disconnectedCallback() { this._unsub && (this._unsub(), this._unsub = null); }
+  disconnectedCallback() {
+    if (this._unsub) {
+      Promise.resolve(this._unsub).then(fn => fn());
+      this._unsub = null;
+    }
+  }
 
   _lightUpdate() {
     for (const list of this.config.lists) {
@@ -1239,7 +1109,10 @@ class ShoppingListCard extends HTMLElement {
     existing && existing.remove();
     const overlay = document.createElement("div");
     overlay.className = "shopping-list-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", item.summary + " bearbeiten");
+    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:900;";
     overlay.dataset.itemUid = item.uid;
     overlay.dataset.itemEntity = entityId;
     const box = document.createElement("div");
@@ -1288,7 +1161,7 @@ class ShoppingListCard extends HTMLElement {
     iconWrap.style.cssText = "margin-bottom:12px;position:relative;";
     const iconLabel = document.createElement("div");
     iconLabel.style.cssText = "font-size:13px;color:#666;margin-bottom:4px;display:flex;align-items:center;gap:6px;";
-    iconLabel.textContent = "MDI Icon (optional)";
+    iconLabel.textContent = "Icon (optional, z.B. mdi:, fas:, fluent:)";
     iconWrap.appendChild(iconLabel);
 
     const { icon: existingIcon, text: existingText } = this._parseDescription(item.description);
@@ -1304,7 +1177,7 @@ class ShoppingListCard extends HTMLElement {
     iconPreview.style.cssText = "width:28px;height:28px;color:#666;flex-shrink:0;";
     const updatePreview = () => {
       const val = iconInput.value.trim();
-      if (val && val.startsWith("mdi:")) {
+      if (val && /^[a-z]+:/.test(val)) {
         iconPreview.setAttribute("icon", val);
         iconPreview.style.color = "#333";
       } else {
@@ -1344,7 +1217,7 @@ class ShoppingListCard extends HTMLElement {
     saveBtn.addEventListener("click", () => {
       const mdiVal = iconInput.value.trim();
       const descVal = descInput.value.trim();
-      const fullDesc = mdiVal && mdiVal.startsWith("mdi:") ? `[${mdiVal}] ${descVal}` : descVal;
+      const fullDesc = mdiVal && /^[a-z]+:/.test(mdiVal) ? `[${mdiVal}] ${descVal}` : descVal;
       this._updateDescription(entityId, item, fullDesc);
       const items = this._itemsByList[entityId] || [];
       const cached = items.find(i => i.uid === item.uid);
@@ -1372,8 +1245,19 @@ class ShoppingListCard extends HTMLElement {
 
     overlay.appendChild(box);
     overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+    overlay.addEventListener("keydown", e => {
+      if (e.key === "Escape") { overlay.remove(); return; }
+      if (e.key === "Tab") {
+        const focusable = box.querySelectorAll("button, input, [tabindex]:not([tabindex='-1'])");
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
     document.body.appendChild(overlay);
-    descInput.focus();
+    if (!("ontouchstart" in window)) descInput.focus();
   }
 
   static getConfigForm() {
