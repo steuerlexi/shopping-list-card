@@ -1145,11 +1145,11 @@ class ShoppingListCard extends HTMLElement {
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("aria-label", item.summary + " bearbeiten");
-    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:900;";
+    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:900;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);";
     overlay.dataset.itemUid = item.uid;
     overlay.dataset.itemEntity = entityId;
     const box = document.createElement("div");
-    box.style.cssText = "background:var(--sl-bg);border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--sl-border);box-sizing:border-box;color:var(--sl-text);";
+    box.style.cssText = "background:var(--sl-bg);border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--sl-border);box-sizing:border-box;color:var(--sl-text);opacity:1 !important;";
 
     const title = document.createElement("div");
     title.className = "sl-modal-title";
