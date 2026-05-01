@@ -1145,11 +1145,11 @@ class ShoppingListCard extends HTMLElement {
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("aria-label", item.summary + " bearbeiten");
-    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:900;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);";
+    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;z-index:900;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);";
     overlay.dataset.itemUid = item.uid;
     overlay.dataset.itemEntity = entityId;
     const box = document.createElement("div");
-    box.style.cssText = "background:var(--sl-bg);border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--sl-border);box-sizing:border-box;color:var(--sl-text);opacity:1 !important;";
+    box.style.cssText = "background:var(--card-background-color, var(--sl-bg, #fff));border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--divider-color, var(--sl-border, #e8e8e8));box-sizing:border-box;color:var(--primary-text-color, var(--sl-text, #333));opacity:1 !important;";
 
     const title = document.createElement("div");
     title.className = "sl-modal-title";
@@ -1158,7 +1158,7 @@ class ShoppingListCard extends HTMLElement {
     box.appendChild(title);
 
     const hint = document.createElement("div");
-    hint.style.cssText = "font-size:13px;color:var(--sl-text-sec);margin-bottom:8px;";
+    hint.style.cssText = "font-size:13px;color:var(--secondary-text-color, #666);margin-bottom:8px;";
     hint.textContent = "Anmerkungen";
     box.appendChild(hint);
 
@@ -1168,9 +1168,9 @@ class ShoppingListCard extends HTMLElement {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = "+" + qty;
-      btn.style.cssText = "padding:6px 12px;border-radius:16px;border:2px solid var(--sl-input-border);background:var(--sl-hover);color:var(--primary-color, #2e7d32);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
-      btn.addEventListener("mouseenter", () => { btn.style.background = "var(--sl-input-border)"; });
-      btn.addEventListener("mouseleave", () => { btn.style.background = "var(--sl-hover)"; });
+      btn.style.cssText = "padding:6px 12px;border-radius:16px;border:2px solid var(--input-border-color, #c8e6c9);background:var(--primary-background-color, #e8f5e9);color:var(--primary-color, #2e7d32);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
+      btn.addEventListener("mouseenter", () => { btn.style.background = "var(--input-border-color, #c8e6c9)"; });
+      btn.addEventListener("mouseleave", () => { btn.style.background = "var(--primary-background-color, #e8f5e9)"; });
       btn.addEventListener("click", () => {
         const val = descInput.value.trim();
         const addNum = parseInt(qty.replace("x", ""), 10);
@@ -1193,7 +1193,7 @@ class ShoppingListCard extends HTMLElement {
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "margin-bottom:12px;position:relative;";
     const iconLabel = document.createElement("div");
-    iconLabel.style.cssText = "font-size:13px;color:var(--sl-text-sec);margin-bottom:4px;display:flex;align-items:center;gap:6px;";
+    iconLabel.style.cssText = "font-size:13px;color:var(--secondary-text-color, #666);margin-bottom:4px;display:flex;align-items:center;gap:6px;";
     iconLabel.textContent = "Icon (optional, z.B. mdi:, fas:, fluent:)";
     iconWrap.appendChild(iconLabel);
 
@@ -1205,17 +1205,17 @@ class ShoppingListCard extends HTMLElement {
     iconInput.type = "text";
     iconInput.placeholder = "mdi:food-apple";
     iconInput.value = existingIcon || "";
-    iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:2px solid var(--sl-input-border);background:var(--sl-input-bg);color:var(--sl-text);font-size:15px;outline:none;box-sizing:border-box;";
+    iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:2px solid var(--input-border-color, #c8e6c9);background:var(--input-fill-color, #f1f8e9);color:var(--primary-text-color, #333);font-size:15px;outline:none;box-sizing:border-box;";
     const iconPreview = document.createElement("ha-icon");
-    iconPreview.style.cssText = "width:28px;height:28px;color:var(--sl-text-sec);flex-shrink:0;";
+    iconPreview.style.cssText = "width:28px;height:28px;color:var(--secondary-text-color, #666);flex-shrink:0;";
     const updatePreview = () => {
       const val = iconInput.value.trim();
       if (val && /^[a-z]+:/.test(val)) {
         iconPreview.setAttribute("icon", val);
-        iconPreview.style.color = "var(--sl-text)";
+        iconPreview.style.color = "var(--primary-text-color, #333)";
       } else {
         iconPreview.setAttribute("icon", "mdi:image-off");
-        iconPreview.style.color = "var(--sl-text-muted)";
+        iconPreview.style.color = "var(--disabled-text-color, #999)";
       }
     };
     updatePreview();
@@ -1225,7 +1225,7 @@ class ShoppingListCard extends HTMLElement {
     iconWrap.appendChild(iconRow);
 
     const iconClear = document.createElement("div");
-    iconClear.style.cssText = "font-size:11px;color:var(--sl-text-muted);cursor:pointer;margin-top:4px;text-align:right;";
+    iconClear.style.cssText = "font-size:11px;color:var(--disabled-text-color, #999);cursor:pointer;margin-top:4px;text-align:right;";
     iconClear.textContent = "Icon entfernen";
     iconClear.addEventListener("click", () => {
       iconInput.value = "";
@@ -1237,7 +1237,7 @@ class ShoppingListCard extends HTMLElement {
     const descInput = document.createElement("input");
     descInput.type = "text";
     descInput.value = existingText || "";
-    descInput.style.cssText = "width:100%;padding:10px;border-radius:8px;border:2px solid var(--sl-input-border);background:var(--sl-input-bg);color:var(--sl-text);font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;";
+    descInput.style.cssText = "width:100%;padding:10px;border-radius:8px;border:2px solid var(--input-border-color, #c8e6c9);background:var(--input-fill-color, #f1f8e9);color:var(--primary-text-color, #333);font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;";
     box.appendChild(descInput);
 
     const btns = document.createElement("div");
@@ -1246,7 +1246,7 @@ class ShoppingListCard extends HTMLElement {
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.textContent = "Speichern";
-    saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:var(--sl-save);color:var(--sl-save-text);font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);";
+    saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:var(--primary-color, #43A047);color:var(--text-primary-color, #fff);font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);";
     saveBtn.addEventListener("click", () => {
       const mdiVal = iconInput.value.trim();
       const descVal = descInput.value.trim();
@@ -1264,7 +1264,7 @@ class ShoppingListCard extends HTMLElement {
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.textContent = "Abbrechen";
-    cancelBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid var(--sl-input-border);background:transparent;color:var(--sl-text);font-size:15px;cursor:pointer;";
+    cancelBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid var(--input-border-color, #c8e6c9);background:transparent;color:var(--primary-text-color, #333);font-size:15px;cursor:pointer;";
     cancelBtn.addEventListener("click", () => close());
     btns.appendChild(cancelBtn);
     box.appendChild(btns);
@@ -1272,7 +1272,7 @@ class ShoppingListCard extends HTMLElement {
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.textContent = "Löschen";
-    delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:2px solid var(--sl-danger);background:transparent;color:var(--sl-danger);font-size:13px;cursor:pointer;";
+    delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:2px solid var(--error-color, #ef5350);background:transparent;color:var(--error-color, #ef5350);font-size:13px;cursor:pointer;";
     delBtn.addEventListener("click", () => { this._removeItem(entityId, item); close(); });
     box.appendChild(delBtn);
 
