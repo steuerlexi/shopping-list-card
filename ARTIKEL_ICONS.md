@@ -113,7 +113,7 @@
 | Seife | `1F9FC` | Soap |
 | Zahnpasta | `1FAE5` | Toothbrush |
 | Waschmittel | `1F9FC` | Soap |
-| Weichspüler | `1F9FC` | Soap |
+| Weichspüler | `1F9F5` | Lotion Bottle |
 | Spülmittel | `1FAE7` | Bubbles |
 | Schokolade | `1F36B` | Chocolate Bar |
 | Kekse | `1F36A` | Cookie |
@@ -122,6 +122,8 @@
 | Mandeln | `1F330` | Chestnut |
 | TK-Gemüse | `2744` | Snowflake |
 | Müllbeutel | `1F5D1` | Wastebasket |
+| Weintrauben | `1F347` | Grapes |
+| Ofenkäse | `1F9C0` | Cheese Wedge |
 
 ### Neue Artikel (v1.0.15)
 
@@ -200,7 +202,7 @@
 | Pesto | `1F33F` | Herb | Trockenwaren & Vorräte |
 | Polenta | `1F35A` | Cooked Rice | Trockenwaren & Vorräte |
 | Rosinen | `1F347` | Grapes | Trockenwaren & Vorräte |
-| Sahnesteif | `1F9C2` | Salt | Trockenwaren & Vorräte |
+| Sahnesteif | `1F3FA` | Amphora | Trockenwaren & Vorräte |
 | Sojasoße | `1F963` | Bowl with Spoon | Trockenwaren & Vorräte |
 | Sonnenblumenöl | `1F6E2` | Oil Drum | Trockenwaren & Vorräte |
 | Soßenbinder | `1F9C2` | Salt | Trockenwaren & Vorräte |
