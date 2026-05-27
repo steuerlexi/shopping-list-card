@@ -1095,7 +1095,16 @@ class ShoppingListCard extends HTMLElement {
       touchStartY = e.touches[0].clientY;
       startPress();
     }, { passive: true });
-    tile.addEventListener("touchend", () => { endPress(); setTimeout(() => touchHandled = false, 300); });
+    tile.addEventListener("touchend", () => {
+      const wasTap = pressTimer && !longPressFired;
+      endPress();
+      if (wasTap) {
+        const items = this._itemsByList[entityId] || [];
+        const currentItem = items.find(i => i.uid === tile.dataset.uid);
+        if (currentItem) this._toggleItem(entityId, currentItem);
+      }
+      setTimeout(() => touchHandled = false, 300);
+    });
     tile.addEventListener("touchcancel", () => { endPress(); setTimeout(() => touchHandled = false, 300); });
     tile.addEventListener("touchmove", e => {
       if (pressTimer) {
