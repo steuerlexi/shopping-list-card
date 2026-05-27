@@ -176,6 +176,13 @@ class ShoppingListCard extends HTMLElement {
       { key: "getraenke", keys: new Set(["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"]) },
       { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","müllbeutel","mundspülung","nasenspray","papiertüten","parfüm","pflaster","rasierklingen","rasierschaum","räucherstäbchen","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zündhölzer"]) }
     ];
+    this._catLookup = new Map();
+    for (const cat of this._catMap) {
+      for (const key of cat.keys) {
+        this._catLookup.set(key, cat.key);
+      }
+    }
+    this._catLookupEntries = [...this._catLookup.entries()].sort((a, b) => b[0].length - a[0].length);
   }
 
   set hass(hass) {
@@ -267,7 +274,8 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _getOpenmojiUrl(hex) {
-    return `https://cdn.jsdelivr.net/npm/openmoji@17.0.0/color/svg/${hex}.svg`;
+    const base = this.config?.openmoji_base_url || "https://cdn.jsdelivr.net/npm/openmoji@17.0.0/color/svg";
+    return `${base}/${hex}.svg`;
   }
 
   _createOpenmojiImg(hex, size) {
@@ -305,42 +313,24 @@ class ShoppingListCard extends HTMLElement {
 
   _renderItemIcon(container, item, size) {
     const { icon } = this._parseDescription(item?.description);
+    const iconValue = icon || this._getItemIcon(item?.summary || "");
     container.innerHTML = "";
-    if (icon) {
+    if (/^[a-z]+:/.test(String(iconValue))) {
       const el = document.createElement("ha-icon");
-      el.setAttribute("icon", icon);
+      el.setAttribute("icon", iconValue);
       el.style.cssText = `width:${size}px;height:${size}px;color:inherit;`;
       container.appendChild(el);
     } else {
-      const map = this.config?.icon_map || {};
-      const mapped = map[item?.summary];
-      const iconValue = mapped && /^[a-z]+:/.test(String(mapped)) ? mapped : this._getItemIcon(item?.summary || "");
-      if (iconValue && /^[a-z]+:/.test(String(iconValue))) {
-        const el = document.createElement("ha-icon");
-        el.setAttribute("icon", iconValue);
-        el.style.cssText = `width:${size}px;height:${size}px;color:inherit;`;
-        container.appendChild(el);
-      } else {
-        const img = this._createOpenmojiImg(iconValue || "1F6D2", size);
-        container.appendChild(img);
-      }
+      container.appendChild(this._createOpenmojiImg(iconValue || "1F6D2", size));
     }
   }
 
   _getItemCategory(text) {
     const t = text.toLowerCase();
-    let bestMatch = null;
-    let bestLen = 0;
-    for (const cat of this._catMap) {
-      for (const key of cat.keys) {
-        if (key.length <= bestLen) continue;
-        if (t.includes(key)) {
-          bestMatch = cat.key;
-          bestLen = key.length;
-        }
-      }
+    for (const [key, catKey] of this._catLookupEntries) {
+      if (t.includes(key)) return catKey;
     }
-    return bestMatch || "sonstiges";
+    return "sonstiges";
   }
 
   _getCategoryName(key) {
@@ -474,7 +464,9 @@ class ShoppingListCard extends HTMLElement {
     });
   }
 
-  connectedCallback() {}
+  connectedCallback() {
+    if (this._hass) this._subscribeChanges();
+  }
   disconnectedCallback() {
     if (this._unsub) {
       Promise.resolve(this._unsub).then(fn => fn());
@@ -637,11 +629,12 @@ class ShoppingListCard extends HTMLElement {
     };
     addBtn.addEventListener("click", doAdd);
     input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
-    input.addEventListener("blur", () => {
-      setTimeout(() => {
-        if (!acMouseDown) { acDropdown.style.display = "none"; if (!input.value.trim()) this._filterVisible(listWrap, ""); }
-        acMouseDown = false;
-      }, 200);
+    input.addEventListener("focusout", (e) => {
+      if (!acMouseDown && !acDropdown.contains(e.relatedTarget)) {
+        acDropdown.style.display = "none";
+        if (!input.value.trim()) this._filterVisible(listWrap, "");
+      }
+      acMouseDown = false;
     });
     input.addEventListener("focus", () => { if (input.value.trim()) input.dispatchEvent(new Event("input")); });
 
@@ -656,6 +649,9 @@ class ShoppingListCard extends HTMLElement {
     const header = document.createElement("div");
     header.className = "sl-header";
     header.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--sl-border);cursor:pointer;user-select:none;";
+    header.setAttribute("role", "button");
+    header.setAttribute("tabindex", "0");
+    header.setAttribute("aria-expanded", "true");
     const catColor = this._getCategoryColor(cat);
     const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 20);
     catIcon.style.filter = "drop-shadow(0 0 1px rgba(0,0,0,0.2))";
@@ -678,11 +674,16 @@ class ShoppingListCard extends HTMLElement {
     const grid = document.createElement("div");
     grid.className = "sl-grid";
     let collapsed = false;
-    header.addEventListener("click", () => {
+    const toggle = () => {
       collapsed = !collapsed;
       grid.style.display = collapsed ? "none" : "grid";
       grid.dataset.collapsed = collapsed ? "true" : "";
       chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
+      header.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    };
+    header.addEventListener("click", toggle);
+    header.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
     });
 
     for (const item of catItems) {
@@ -817,6 +818,9 @@ class ShoppingListCard extends HTMLElement {
       const header = document.createElement("div");
       header.className = "sl-header";
       header.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--sl-border);cursor:pointer;user-select:none;";
+      header.setAttribute("role", "button");
+      header.setAttribute("tabindex", "0");
+      header.setAttribute("aria-expanded", "true");
       const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 16);
       catIcon.style.filter = "grayscale(100%) opacity(0.6)";
       header.appendChild(catIcon);
@@ -839,11 +843,16 @@ class ShoppingListCard extends HTMLElement {
       grid.className = "sl-grid";
       grid.style.cssText = "gap:8px;padding:8px;transition:max-height 0.3s ease;";
       let collapsed = false;
-      header.addEventListener("click", () => {
+      const toggle = () => {
         collapsed = !collapsed;
         grid.style.display = collapsed ? "none" : "grid";
         grid.dataset.collapsed = collapsed ? "true" : "";
         chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
+        header.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      };
+      header.addEventListener("click", toggle);
+      header.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
       });
 
       for (const text of catTexts) {
@@ -1076,6 +1085,7 @@ class ShoppingListCard extends HTMLElement {
         fireLongPress();
       }, 500);
     };
+    const LONG_PRESS_MOVE_THRESHOLD = 12;
     const endPress = () => {
       if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
     };
@@ -1086,11 +1096,12 @@ class ShoppingListCard extends HTMLElement {
       startPress();
     }, { passive: true });
     tile.addEventListener("touchend", () => { endPress(); setTimeout(() => touchHandled = false, 300); });
+    tile.addEventListener("touchcancel", () => { endPress(); setTimeout(() => touchHandled = false, 300); });
     tile.addEventListener("touchmove", e => {
       if (pressTimer) {
         const dx = e.touches[0].clientX - touchStartX;
         const dy = e.touches[0].clientY - touchStartY;
-        if (Math.sqrt(dx * dx + dy * dy) > 10) endPress();
+        if (Math.sqrt(dx * dx + dy * dy) > LONG_PRESS_MOVE_THRESHOLD) endPress();
       }
     }, { passive: true });
     tile.addEventListener("mousedown", e => {
@@ -1105,11 +1116,10 @@ class ShoppingListCard extends HTMLElement {
       fireLongPress();
     });
     tile.addEventListener("click", () => {
-      if (!longPressFired) {
-        const items = this._itemsByList[entityId] || [];
-        const currentItem = items.find(i => i.uid === tile.dataset.uid);
-        if (currentItem) this._toggleItem(entityId, currentItem);
-      }
+      if (touchHandled || longPressFired) return;
+      const items = this._itemsByList[entityId] || [];
+      const currentItem = items.find(i => i.uid === tile.dataset.uid);
+      if (currentItem) this._toggleItem(entityId, currentItem);
     });
     return tile;
   }
@@ -1260,7 +1270,7 @@ class ShoppingListCard extends HTMLElement {
       if (cached) cached.description = fullDesc;
       this._lastStructHash = "";
       overlay.remove();
-      setTimeout(() => { this._fetchAndRender(); triggerEl && triggerEl.focus(); }, 500);
+      triggerEl && setTimeout(() => triggerEl.focus(), 50);
     });
     btns.appendChild(saveBtn);
 

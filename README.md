@@ -80,6 +80,7 @@ icon_map:
 | `title` | string | `"Einkaufen"` | Card title |
 | `icon_map` | object | `{}` | Override icons for specific items |
 | `show_delete_always` | boolean | `false` | Always show delete button on tiles |
+| `openmoji_base_url` | string | `https://cdn.jsdelivr.net/npm/openmoji@17.0.0/color/svg` | Base URL for OpenMoji SVG icons |
 
 ### Icon Map Example
 
