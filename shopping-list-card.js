@@ -318,7 +318,7 @@ class ShoppingListCard extends HTMLElement {
     if (/^[a-z]+:/.test(String(iconValue))) {
       const el = document.createElement("ha-icon");
       el.setAttribute("icon", iconValue);
-      el.style.cssText = `width:${size}px;height:${size}px;color:inherit;`;
+      el.style.cssText = `display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;color:inherit;`;
       container.appendChild(el);
     } else {
       container.appendChild(this._createOpenmojiImg(iconValue || "1F6D2", size));
