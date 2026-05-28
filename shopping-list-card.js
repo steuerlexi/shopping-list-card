@@ -183,6 +183,30 @@ class ShoppingListCard extends HTMLElement {
       }
     }
     this._catLookupEntries = [...this._catLookup.entries()].sort((a, b) => b[0].length - a[0].length);
+
+    try {
+      const raw = localStorage.getItem("shopping-list-card-icons");
+      this._userIconMap = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      this._userIconMap = {};
+    }
+  }
+
+  _getUserIcon(summary) {
+    return this._userIconMap?.[summary.toLowerCase().trim()] || null;
+  }
+
+  _saveUserIcon(summary, icon) {
+    const key = summary.toLowerCase().trim();
+    if (!key) return;
+    if (icon && /^[a-z]+:/.test(icon)) {
+      this._userIconMap[key] = icon;
+    } else {
+      delete this._userIconMap[key];
+    }
+    try {
+      localStorage.setItem("shopping-list-card-icons", JSON.stringify(this._userIconMap));
+    } catch (e) {}
   }
 
   set hass(hass) {
@@ -296,6 +320,8 @@ class ShoppingListCard extends HTMLElement {
 
   _getItemIcon(text) {
     const t = text.toLowerCase();
+    const userIcon = this._getUserIcon(t);
+    if (userIcon) return userIcon;
     const map = this.config.icon_map || {};
     if (map[text] || map[t]) return map[text] || map[t];
     for (const [key, hex] of this._iconMapEntries) {
@@ -422,7 +448,10 @@ class ShoppingListCard extends HTMLElement {
       this._haptic(60);
       return;
     }
-    this._callService("todo", "add_item", { entity_id: entityId, item: val });
+    const userIcon = this._getUserIcon(val);
+    const data = { entity_id: entityId, item: val };
+    if (userIcon) data.description = `[${userIcon}] `;
+    this._callService("todo", "add_item", data);
     this._haptic(60);
   }
 
@@ -1252,6 +1281,7 @@ class ShoppingListCard extends HTMLElement {
     iconClear.addEventListener("click", () => {
       iconInput.value = "";
       updatePreview();
+      this._saveUserIcon(item.summary, null);
     });
     iconWrap.appendChild(iconClear);
     box.appendChild(iconWrap);
@@ -1273,6 +1303,7 @@ class ShoppingListCard extends HTMLElement {
       const mdiVal = iconInput.value.trim();
       const descVal = descInput.value.trim();
       const fullDesc = mdiVal && /^[a-z]+:/.test(mdiVal) ? `[${mdiVal}] ${descVal}` : descVal;
+      this._saveUserIcon(item.summary, mdiVal);
       this._updateDescription(entityId, item, fullDesc);
       const items = this._itemsByList[entityId] || [];
       const cached = items.find(i => i.uid === item.uid);
