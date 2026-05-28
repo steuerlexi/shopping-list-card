@@ -1039,6 +1039,7 @@ class ShoppingListCard extends HTMLElement {
 
         requestAnimationFrame(() => {
           if (!this.isConnected) return;
+          if (!card.isConnected || this.querySelector("ha-card") !== card) return;
           const frag = document.createDocumentFragment();
           for (const cat of lazyCats) {
             const catItems = groups[cat].filter(i => i.status === "needs_action");
