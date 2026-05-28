@@ -526,7 +526,6 @@ class ShoppingListCard extends HTMLElement {
         const label = tile.querySelector(".sl-label");
         if (label) {
           label.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
-          label.style.textDecoration = isDone ? "line-through" : "none";
         }
 
         const badge = tile.querySelector(".sl-badge");
@@ -835,7 +834,8 @@ class ShoppingListCard extends HTMLElement {
     mirrorTitle.appendChild(clearAll);
     mirrorWrap.appendChild(mirrorTitle);
 
-    for (const cat of order) {
+    const mirrorOrder = [...new Set([...order, ...Object.keys(availByCat)])];
+    for (const cat of mirrorOrder) {
       if (!availByCat[cat]) continue;
       const fullCatTexts = availByCat[cat];
       const isLimited = fullCatTexts.length > maxPerCat;
@@ -1080,7 +1080,7 @@ class ShoppingListCard extends HTMLElement {
 
     const label = document.createElement("div");
     label.className = "sl-label";
-    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";text-decoration:" + (isDone ? "line-through" : "none") + ";max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
+    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
     label.textContent = item.summary;
     tile.appendChild(label);
 
@@ -1180,7 +1180,7 @@ class ShoppingListCard extends HTMLElement {
 
     const label = document.createElement("div");
     label.className = "sl-label";
-    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:var(--sl-text-muted);text-decoration:line-through;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
+    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:var(--sl-text-muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
     label.textContent = text;
     tile.appendChild(label);
 
