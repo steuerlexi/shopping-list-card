@@ -231,11 +231,6 @@ class ShoppingListCard extends HTMLElement {
     const promises = this.config.lists.map(async (list) => {
       const entityId = list.entity;
       try {
-        const state = hass.states[entityId];
-        if (state?.attributes?.todo_items) {
-          this._itemsByList[entityId] = state.attributes.todo_items;
-          return;
-        }
         const res = await hass.callWS({
           type: "call_service",
           domain: "todo",
@@ -1022,41 +1017,13 @@ class ShoppingListCard extends HTMLElement {
 
       const activeOrder = order.filter(k => groups[k].some(i => i.status === "needs_action"));
 
-      // Render first 2 categories immediately, rest lazy
-      const immediateCats = activeOrder.slice(0, 2);
-      const lazyCats = activeOrder.slice(2);
-
-      for (const cat of immediateCats) {
+      for (const cat of activeOrder) {
         const catItems = groups[cat].filter(i => i.status === "needs_action");
         card.appendChild(this._renderCategory(cat, catItems, list, color));
       }
 
-      // Lazy-load remaining categories + mirror
-      if (lazyCats.length || items.length > 0) {
-        const lazyContainer = document.createElement("div");
-        lazyContainer.className = "sl-lazy-container";
-        card.appendChild(lazyContainer);
-
-        requestAnimationFrame(() => {
-          if (!this.isConnected) return;
-          if (!card.isConnected || this.querySelector("ha-card") !== card) return;
-          const frag = document.createDocumentFragment();
-          for (const cat of lazyCats) {
-            const catItems = groups[cat].filter(i => i.status === "needs_action");
-            frag.appendChild(this._renderCategory(cat, catItems, list, color));
-          }
-          const mirror = this._renderMirrorSection(list, items, color, order);
-          if (mirror) frag.appendChild(mirror);
-
-          // Replace placeholder with actual content
-          const placeholder = card.querySelector(".sl-lazy-container");
-          if (placeholder) {
-            placeholder.replaceWith(frag);
-          } else {
-            card.appendChild(frag);
-          }
-        });
-      }
+      const mirror = this._renderMirrorSection(list, items, color, order);
+      if (mirror) card.appendChild(mirror);
     }
     this.replaceChildren(card);
   }
