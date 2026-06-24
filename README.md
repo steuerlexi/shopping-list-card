@@ -8,6 +8,8 @@ A Home Assistant Lovelace custom card for managing shopping lists natively insid
 
 Built entirely on HA's native `todo` platform.
 
+![Screenshot](assets/screenshot.svg)
+
 ---
 
 ## Features
@@ -39,7 +41,7 @@ Built entirely on HA's native `todo` platform.
 
 ### Manual
 
-1. Copy `dist/shopping-list-card.js` to `/config/www/`
+1. Copy `shopping-list-card.js` to `/config/www/`
 2. Add to Lovelace resources:
    ```yaml
    url: /local/shopping-list-card.js

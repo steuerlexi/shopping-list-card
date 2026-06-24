@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="520" viewBox="0 0 420 520">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <!-- Card background -->
+  <rect width="420" height="520" rx="16" fill="#f3f4f6"/>
+  <!-- Header -->
+  <rect x="16" y="16" width="388" height="48" rx="12" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="36" y="48" font-family="system-ui, sans-serif" font-size="18" font-weight="600" fill="#111827">Einkaufen</text>
+  <circle cx="380" cy="40" r="14" fill="#e5e7eb"/>
+  <text x="374" y="45" font-family="system-ui, sans-serif" font-size="14" fill="#6b7280">+</text>
+  <!-- Search bar -->
+  <rect x="16" y="72" width="388" height="40" rx="12" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="36" y="98" font-family="system-ui, sans-serif" font-size="14" fill="#9ca3af">Suchen...</text>
+  <!-- Category: Obst & Gemüse -->
+  <text x="24" y="144" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#16a34a">● Obst &amp; Gemüse</text>
+  <!-- Tile: Äpfel -->
+  <rect x="16" y="156" width="120" height="64" rx="12" fill="#dcfce7" filter="url(#shadow)"/>
+  <text x="36" y="194" font-family="system-ui, sans-serif" font-size="14" fill="#14532d">🍎 Äpfel</text>
+  <!-- Tile: Bananen -->
+  <rect x="148" y="156" width="120" height="64" rx="12" fill="#dcfce7" filter="url(#shadow)"/>
+  <text x="168" y="194" font-family="system-ui, sans-serif" font-size="14" fill="#14532d">🍌 Bananen</text>
+  <!-- Tile: Tomaten -->
+  <rect x="280" y="156" width="120" height="64" rx="12" fill="#dcfce7" filter="url(#shadow)"/>
+  <text x="300" y="194" font-family="system-ui, sans-serif" font-size="14" fill="#14532d">🍅 Tomaten</text>
+  <!-- Category: Milch & Eier -->
+  <text x="24" y="248" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#2563eb">● Milch &amp; Eier</text>
+  <!-- Tile: Milch -->
+  <rect x="16" y="260" width="120" height="64" rx="12" fill="#dbeafe" filter="url(#shadow)"/>
+  <text x="36" y="298" font-family="system-ui, sans-serif" font-size="14" fill="#1e3a8a">🥛 Milch</text>
+  <!-- Tile: Eier -->
+  <rect x="148" y="260" width="120" height="64" rx="12" fill="#dbeafe" filter="url(#shadow)"/>
+  <text x="168" y="298" font-family="system-ui, sans-serif" font-size="14" fill="#1e3a8a">🥚 Eier</text>
+  <!-- Tile: Käse -->
+  <rect x="280" y="260" width="120" height="64" rx="12" fill="#dbeafe" filter="url(#shadow)"/>
+  <text x="300" y="298" font-family="system-ui, sans-serif" font-size="14" fill="#1e3a8a">🧀 Käse</text>
+  <!-- Category: Trockenwaren -->
+  <text x="24" y="352" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#d97706">● Trockenwaren</text>
+  <!-- Tile: Brot -->
+  <rect x="16" y="364" width="120" height="64" rx="12" fill="#fef3c7" filter="url(#shadow)"/>
+  <text x="36" y="402" font-family="system-ui, sans-serif" font-size="14" fill="#78350f">🍞 Brot</text>
+  <!-- Tile: Nudeln -->
+  <rect x="148" y="364" width="120" height="64" rx="12" fill="#fef3c7" filter="url(#shadow)"/>
+  <text x="168" y="402" font-family="system-ui, sans-serif" font-size="14" fill="#78350f">🍝 Nudeln</text>
+  <!-- Tile: Reis -->
+  <rect x="280" y="364" width="120" height="64" rx="12" fill="#fef3c7" filter="url(#shadow)"/>
+  <text x="300" y="402" font-family="system-ui, sans-serif" font-size="14" fill="#78350f">🍚 Reis</text>
+  <!-- Done section -->
+  <rect x="16" y="444" width="388" height="48" rx="12" fill="#e5e7eb"/>
+  <text x="36" y="474" font-family="system-ui, sans-serif" font-size="14" fill="#6b7280">✓ Erledigt (2)</text>
+</svg>
