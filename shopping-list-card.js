@@ -7,6 +7,7 @@ class ShoppingListCard extends HTMLElement {
     this._autocompleteItems = null;
     this._iconMap = null;
     this._catMap = null;
+    this._tileIndex = [];
   }
 
   setConfig(config) {
@@ -35,6 +36,7 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _initCaches() {
+    if (this._cachesReady) return;
     this._autocompleteItems = [...new Set([
       "Apfel","Banane","Bananen","Birne","Kiwi","Orange","Mandarine","Trauben","Weintrauben","Kirschen","Erdbeeren","Himbeeren",
       "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
@@ -190,6 +192,7 @@ class ShoppingListCard extends HTMLElement {
     } catch (e) {
       this._userIconMap = {};
     }
+    this._cachesReady = true;
   }
 
   _getUserIcon(summary) {
@@ -228,6 +231,7 @@ class ShoppingListCard extends HTMLElement {
 
   async _updateItems(hass) {
     if (!hass || !this.config?.lists) return;
+    let fingerprint = 0;
     const promises = this.config.lists.map(async (list) => {
       const entityId = list.entity;
       try {
@@ -241,12 +245,22 @@ class ShoppingListCard extends HTMLElement {
         const resp = res?.result?.response || res?.response;
         const items = resp?.[entityId]?.items || [];
         this._itemsByList[entityId] = items;
+        for (const item of items) {
+          fingerprint = (fingerprint * 31 + this._hashString(item.uid + item.status + item.summary + (item.description || ""))) >>> 0;
+        }
       } catch (e) {
         console.warn("Shopping List Card: Failed to fetch items for", entityId, e);
         this._itemsByList[entityId] = [];
       }
     });
     await Promise.all(promises);
+    this._fingerprint = fingerprint;
+  }
+
+  _hashString(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    return h;
   }
 
   _shouldRender(oldHass, newHass) {
@@ -258,38 +272,38 @@ class ShoppingListCard extends HTMLElement {
       if (!oldState || !newState) return true;
       if (oldState.last_changed !== newState.last_changed) return true;
       if (oldState.last_updated !== newState.last_updated) return true;
-      const oldItems = oldState.attributes?.todo_items || [];
-      const newItems = newState.attributes?.todo_items || [];
-      if (oldItems.length !== newItems.length) return true;
-      const oldHash = oldItems.map(i => i.uid + ":" + i.summary + (i.description || "") + i.status).join("|");
-      const newHash = newItems.map(i => i.uid + ":" + i.summary + (i.description || "") + i.status).join("|");
-      if (oldHash !== newHash) return true;
     }
     return false;
   }
 
-  _filterVisible(listWrap, query) {
-    const card = listWrap.parentElement;
-    const cats = card.querySelectorAll(".sl-cat");
-    for (const cat of cats) {
-      const tiles = cat.querySelectorAll("[data-summary]");
-      let visible = 0;
-      for (const tile of tiles) {
-        const match = !query || tile.dataset.summary.includes(query);
-        tile.style.display = match ? "flex" : "none";
-        if (match) visible++;
-      }
-      const header = cat.querySelector(".sl-header");
-      const grid = cat.querySelector(".sl-grid");
-      if (header) header.style.display = visible > 0 ? "" : "none";
-      if (grid) {
-        if (visible > 0) {
-          grid.style.display = grid.dataset.collapsed === "true" ? "none" : "grid";
-        } else {
-          grid.style.display = "none";
-        }
+  _updateCatVisibility(catWrap, visible) {
+    const header = catWrap.querySelector(".sl-header");
+    const grid = catWrap.querySelector(".sl-grid");
+    if (header) header.style.display = visible > 0 ? "" : "none";
+    if (grid) {
+      if (visible > 0) {
+        grid.style.display = grid.dataset.collapsed === "true" ? "none" : "grid";
+      } else {
+        grid.style.display = "none";
       }
     }
+  }
+
+  _filterVisible(listWrap, query) {
+    const q = query?.toLowerCase() || "";
+    let lastCat = null;
+    let visibleInCat = 0;
+    for (const entry of this._tileIndex || []) {
+      if (entry.cat !== lastCat) {
+        if (lastCat) this._updateCatVisibility(lastCat, visibleInCat);
+        lastCat = entry.cat;
+        visibleInCat = 0;
+      }
+      const match = !q || entry.summary.includes(q);
+      entry.tile.style.display = match ? "flex" : "none";
+      if (match) visibleInCat++;
+    }
+    if (lastCat) this._updateCatVisibility(lastCat, visibleInCat);
   }
 
   _getOpenmojiUrl(hex) {
@@ -710,7 +724,7 @@ class ShoppingListCard extends HTMLElement {
     });
 
     for (const item of catItems) {
-      const tile = this._renderTile(item, list.entity, color);
+      const tile = this._renderTile(item, list.entity, color, catWrap);
       tile.dataset.section = "active";
       grid.appendChild(tile);
     }
@@ -882,11 +896,11 @@ class ShoppingListCard extends HTMLElement {
       for (const text of catTexts) {
         const existing = itemBySummary.get(text.toLowerCase());
         if (existing) {
-          const tile = this._renderTile(existing, list.entity, color);
+          const tile = this._renderTile(existing, list.entity, color, catWrap);
           tile.dataset.section = "mirror";
           grid.appendChild(tile);
         } else {
-          grid.appendChild(this._renderGhostTile(text, list.entity, color));
+          grid.appendChild(this._renderGhostTile(text, list.entity, color, catWrap));
         }
       }
 
@@ -907,11 +921,11 @@ class ShoppingListCard extends HTMLElement {
             const text = fullCatTexts[i];
             const existing = itemBySummary.get(text.toLowerCase());
             if (existing) {
-              const tile = this._renderTile(existing, list.entity, color);
+              const tile = this._renderTile(existing, list.entity, color, catWrap);
               tile.dataset.section = "mirror";
               grid.appendChild(tile);
             } else {
-              grid.appendChild(this._renderGhostTile(text, list.entity, color));
+              grid.appendChild(this._renderGhostTile(text, list.entity, color, catWrap));
             }
           }
         });
@@ -942,16 +956,10 @@ class ShoppingListCard extends HTMLElement {
 
   _render() {
     if (!this.config?.lists) return;
-    const currentSummaries = [];
-    for (const list of this.config.lists) {
-      const items = this._itemsByList[list.entity] || [];
-      for (const item of items) currentSummaries.push(list.entity + "|" + item.uid + "|" + item.summary + "|" + (item.description || "") + "|" + item.status);
-    }
-    currentSummaries.sort();
-    const structHash = currentSummaries.join(";");
+    this._tileIndex = [];
 
     const existingCard = this.querySelector("ha-card");
-    if (existingCard && structHash === this._lastStructHash) {
+    if (existingCard && this._fingerprint === this._lastFingerprint) {
       let sectionChanged = false;
       for (const list of this.config.lists) {
         const items = this._itemsByList[list.entity] || [];
@@ -971,7 +979,7 @@ class ShoppingListCard extends HTMLElement {
         return;
       }
     }
-    this._lastStructHash = structHash;
+    this._lastFingerprint = this._fingerprint;
 
     const card = document.createElement("ha-card");
     card.style.cssText = "padding:12px;display:block;";
@@ -1028,7 +1036,7 @@ class ShoppingListCard extends HTMLElement {
     this.replaceChildren(card);
   }
 
-  _renderTile(item, entityId, color) {
+  _renderTile(item, entityId, color, catWrap) {
     const isDone = item.status === "completed";
     const tile = document.createElement("div");
     tile.className = "sl-tile";
@@ -1127,10 +1135,11 @@ class ShoppingListCard extends HTMLElement {
       const currentItem = items.find(i => i.uid === tile.dataset.uid);
       if (currentItem) this._toggleItem(entityId, currentItem);
     });
+    if (catWrap) this._tileIndex.push({ tile, cat: catWrap, summary: item.summary.toLowerCase() });
     return tile;
   }
 
-  _renderGhostTile(text, entityId, color) {
+  _renderGhostTile(text, entityId, color, catWrap) {
     const tile = document.createElement("div");
     tile.className = "sl-tile sl-ghost";
     tile.dataset.summary = text.toLowerCase();
@@ -1152,6 +1161,7 @@ class ShoppingListCard extends HTMLElement {
     tile.appendChild(label);
 
     tile.addEventListener("click", () => this._addItem(entityId, text));
+    if (catWrap) this._tileIndex.push({ tile, cat: catWrap, summary: text.toLowerCase() });
     return tile;
   }
 
