@@ -1,41 +1,58 @@
+// Shopping List Card v2.0.0 — AppDaemon backend edition (Breaking).
+//
+// Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
+// middleware backend that publishes `sensor.einkaufsliste_backend`. The card
+// fires `einkaufsliste_*` HA events via the WebSocket `fire_event` command and reads the
+// full list from the sensor's `items` attribute. Auto-categorization,
+// auto-dedup and uid-stable removal all happen server-side; the card only
+// renders and emits intents.
+//
+// Config: { type: "custom:shopping-list-card", entity: "sensor.einkaufsliste_backend" }
+// Legacy `todo.*` entities and the old `lists:` array are detected and render
+// a migration warning instead of silently breaking.
+
 class ShoppingListCard extends HTMLElement {
   constructor() {
     super();
-    this._itemsByList = {};
     this._unsub = null;
-    this._debounceTimer = null;
-    this._syncTimer = null;
-    this._syncSeq = 0;
-    this._syncRunning = {};
-    this._localWriteAt = {};
-    this._inFlight = new Set();
     this._autocompleteItems = null;
     this._iconMap = null;
     this._catMap = null;
     this._tileIndex = [];
+    this._items = [];
+    this._prevItems = null;
+    this._fingerprint = 0;
+    this._lastFingerprint = -1;
+    this._entity = null;
+    this._listId = "standard";
+    this._color = "#43A047";
+    this._legacyWarning = null;
   }
 
   setConfig(config) {
-    let lists;
-    if (config.entity) {
-      lists = [{
-        entity: config.entity,
-        name: config.name || config.entity,
-        icon: config.icon || "mdi:cart",
-        color: config.color || "#43A047"
-      }];
-    } else {
-      if (!config.lists || !Array.isArray(config.lists)) {
-        throw new Error('You need to define either "entity" or a "lists" array');
-      }
-      lists = config.lists;
+    if (!config || !config.entity) {
+      throw new Error('Du musst "entity" (sensor.einkaufsliste_backend) konfigurieren.');
     }
+    this._entity = config.entity;
+    this._listId = config.list || "standard";
+    this._color = config.color || "#43A047";
+
+    // Legacy detection: old `todo.*` entity or the removed `lists:` array.
+    let legacy = null;
+    if (Array.isArray(config.lists)) {
+      legacy = "Die alte `lists:`-Konfiguration wird nicht mehr unterstützt. Stelle auf `entity: sensor.einkaufsliste_backend` um (Backend-Setup siehe README).";
+    } else if (typeof config.entity === "string" && config.entity.startsWith("todo.")) {
+      legacy = "Diese Karte benötigt das AppDaemon-Backend (sensor.einkaufsliste_backend). Eine `todo.*`-Entity wird nicht mehr direkt unterstützt. Bitte Backend installieren (siehe README) und `entity: sensor.einkaufsliste_backend` setzen.";
+    }
+    this._legacyWarning = legacy;
+
     this.config = {
       title: "Einkaufen",
       icon_map: {},
-      ...config,
-      lists: lists
+      ...config
     };
+    delete this.config.lists;
+
     this._initCaches();
     if (this._hass) this._fetchAndRender();
   }
@@ -191,30 +208,21 @@ class ShoppingListCard extends HTMLElement {
     }
     this._catLookupEntries = [...this._catLookup.entries()].sort((a, b) => b[0].length - a[0].length);
 
-    try {
-      const raw = localStorage.getItem("shopping-list-card-icons");
-      this._userIconMap = raw ? JSON.parse(raw) : {};
-    } catch (e) {
-      this._userIconMap = {};
-    }
+    // Reverse map: backend publishes category NAME (e.g. "Obst & Gemüse"),
+    // but grouping/icon/color need the canonical key. Fall back to summary scan.
+    this._categoryNameToKey = {
+      "Obst & Gemüse": "obst_gemuese",
+      "Brot & Backwaren": "brot_backwaren",
+      "Milchprodukte & Eier": "milch_eier",
+      "Fleisch & Fisch": "fleisch_fisch",
+      "Trockenwaren": "trockenwaren",
+      "Tiefkühlprodukte": "tiefkuehlprodukte",
+      "Getränke": "getraenke",
+      "Haushalt & Hygiene": "haushalt_hygiene",
+      "Sonstiges": "sonstiges"
+    };
+
     this._cachesReady = true;
-  }
-
-  _getUserIcon(summary) {
-    return this._userIconMap?.[summary.toLowerCase().trim()] || null;
-  }
-
-  _saveUserIcon(summary, icon) {
-    const key = summary.toLowerCase().trim();
-    if (!key) return;
-    if (icon && /^[a-z]+:/.test(icon)) {
-      this._userIconMap[key] = icon;
-    } else {
-      delete this._userIconMap[key];
-    }
-    try {
-      localStorage.setItem("shopping-list-card-icons", JSON.stringify(this._userIconMap));
-    } catch (e) {}
   }
 
   set hass(hass) {
@@ -225,68 +233,21 @@ class ShoppingListCard extends HTMLElement {
     if (!oldHass || this._shouldRender(oldHass, hass)) this._fetchAndRender();
   }
 
-  async _fetchAndRender() {
-    await this._updateItems(this._hass);
+  _fetchAndRender() {
+    this._loadItems();
     this._render();
   }
 
-  async _updateItems(hass) {
-    if (!hass || !this.config?.lists) return;
-    let fingerprint = 0;
-    const promises = this.config.lists.map(async (list) => {
-      const entityId = list.entity;
-      const seq = ++this._syncSeq;
-      try {
-        // Serialize get_items calls per list to avoid race conditions: if a
-        // newer request starts while an older one is still running, drop the
-        // stale result.
-        while (this._syncRunning[entityId]) {
-          await this._syncRunning[entityId];
-        }
-        const promise = hass.callWS({
-          type: "call_service",
-          domain: "todo",
-          service: "get_items",
-          service_data: { entity_id: entityId, status: ["needs_action", "completed"] },
-          return_response: true
-        });
-        this._syncRunning[entityId] = promise.catch(() => {});
-        const res = await promise;
-        this._syncRunning[entityId] = null;
-        if (seq !== this._syncSeq && this._syncSeq - seq >= this.config.lists.length) {
-          // This request was superseded by a newer full refresh cycle.
-          return;
-        }
-        const resp = res?.result?.response || res?.response;
-        const items = resp?.[entityId]?.items || [];
-        this._itemsByList[entityId] = items;
-        for (const item of items) {
-          fingerprint = (fingerprint * 31 + this._hashString(item.uid + item.status + item.summary + (item.description || ""))) >>> 0;
-        }
-      } catch (e) {
-        console.warn("Shopping List Card: Failed to fetch items for", entityId, e);
-        this._syncRunning[entityId] = null;
-        this._itemsByList[entityId] = this._itemsByList[entityId] || [];
-      }
-    });
-    await Promise.all(promises);
-    this._fingerprint = fingerprint;
-  }
-
-  _scheduleSync(delay = 500, entityId, lastUpdated) {
-    // Ignore HA state changes that were triggered by our own recent local write.
-    if (entityId && lastUpdated) {
-      const localWrite = this._localWriteAt[entityId] || 0;
-      const eventTime = new Date(lastUpdated).getTime();
-      if (!isNaN(eventTime) && eventTime <= localWrite) {
-        return;
-      }
+  _loadItems() {
+    const st = this._hass?.states?.[this._entity];
+    if (!st) { this._items = []; return; }
+    const all = Array.isArray(st.attributes?.items) ? st.attributes.items : [];
+    this._items = all.filter(i => (i.list || "standard") === this._listId);
+    let fp = 0;
+    for (const i of this._items) {
+      fp = (fp * 31 + this._hashString(i.uid + "|" + i.status + "|" + i.summary + "|" + (i.quantity || 1) + "|" + (i.icon || ""))) >>> 0;
     }
-    this._syncTimer && clearTimeout(this._syncTimer);
-    this._syncTimer = setTimeout(() => {
-      this._syncTimer = null;
-      this._fetchAndRender();
-    }, delay);
+    this._fingerprint = fp;
   }
 
   _hashString(str) {
@@ -296,15 +257,11 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _shouldRender(oldHass, newHass) {
-    if (!this.config?.lists) return false;
-    for (const list of this.config.lists) {
-      const id = list.entity;
-      const oldState = oldHass.states[id];
-      const newState = newHass.states[id];
-      if (!oldState || !newState) return true;
-      if (oldState.last_changed !== newState.last_changed) return true;
-      if (oldState.last_updated !== newState.last_updated) return true;
-    }
+    const a = oldHass.states?.[this._entity];
+    const b = newHass.states?.[this._entity];
+    if (!a || !b) return true;
+    if (a.last_changed !== b.last_changed) return true;
+    if (a.last_updated !== b.last_updated) return true;
     return false;
   }
 
@@ -361,8 +318,6 @@ class ShoppingListCard extends HTMLElement {
 
   _getItemIcon(text) {
     const t = text.toLowerCase();
-    const userIcon = this._getUserIcon(t);
-    if (userIcon) return userIcon;
     const map = this.config.icon_map || {};
     if (map[text] || map[t]) return map[text] || map[t];
     for (const [key, hex] of this._iconMapEntries) {
@@ -371,16 +326,12 @@ class ShoppingListCard extends HTMLElement {
     return "1F6D2";
   }
 
-  _parseDescription(desc) {
-    if (!desc) return { icon: null, text: "" };
-    const match = desc.match(/^\[([a-z]+:[\w-]+)\]\s*(.*)$/);
-    if (match) return { icon: match[1], text: match[2] };
-    return { icon: null, text: desc };
-  }
-
   _renderItemIcon(container, item, size) {
-    const { icon } = this._parseDescription(item?.description);
-    const iconValue = icon || this._getItemIcon(item?.summary || "");
+    const summary = item?.summary || "";
+    const override = this.config.icon_map?.[summary] || this.config.icon_map?.[String(summary).toLowerCase()];
+    let iconValue = override || item?.icon;
+    if (!iconValue) iconValue = this._getItemIcon(summary);
+    if (!iconValue) iconValue = "1F6D2";
     container.innerHTML = "";
     if (/^[a-z]+:/.test(String(iconValue))) {
       const el = document.createElement("ha-icon");
@@ -388,7 +339,7 @@ class ShoppingListCard extends HTMLElement {
       el.style.cssText = `display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;color:inherit;`;
       container.appendChild(el);
     } else {
-      container.appendChild(this._createOpenmojiImg(iconValue || "1F6D2", size));
+      container.appendChild(this._createOpenmojiImg(iconValue, size));
     }
   }
 
@@ -400,13 +351,19 @@ class ShoppingListCard extends HTMLElement {
     return "sonstiges";
   }
 
+  _itemCategoryKey(item) {
+    const cat = item?.category;
+    if (cat && this._categoryNameToKey[cat]) return this._categoryNameToKey[cat];
+    return this._getItemCategory(item?.summary || "");
+  }
+
   _getCategoryName(key) {
     return {
       obst_gemuese: "Obst & Gemüse",
       brot_backwaren: "Brot & Backwaren",
       milch_eier: "Milchprodukte & Eier",
-      fleisch_fisch: "Fleisch, Fisch & Alternativen",
-      trockenwaren: "Trockenwaren & Vorräte",
+      fleisch_fisch: "Fleisch & Fisch",
+      trockenwaren: "Trockenwaren",
       tiefkuehlprodukte: "Tiefkühlprodukte",
       getraenke: "Getränke",
       haushalt_hygiene: "Haushalt & Hygiene",
@@ -446,9 +403,8 @@ class ShoppingListCard extends HTMLElement {
     return this._autocompleteItems;
   }
 
-  _findItemBySummary(entityId, text) {
-    const items = this._itemsByList[entityId] || [];
-    return items.find(item => item.summary.toLowerCase() === text.toLowerCase()) || null;
+  _findItemBySummary(text) {
+    return this._items.find(item => item.summary.toLowerCase() === text.toLowerCase()) || null;
   }
 
   _showToast(msg) {
@@ -467,166 +423,67 @@ class ShoppingListCard extends HTMLElement {
     if (navigator.vibrate) navigator.vibrate(ms);
   }
 
-  _callService(domain, service, data) {
-    if (!this._hass) return Promise.resolve();
-    return this._hass.callService(domain, service, data).catch(e => {
-      console.warn("Shopping List Card: Service call failed", domain, service, e);
-      this._showToast("Fehler: " + (e.message || "Service-Aufruf fehlgeschlagen"));
+  // Fire an HA bus event so the AppDaemon backend can mutate the list.
+  // HA 2026.x removed the `homeassistant.fire_event` *service*, so we use the
+  // WebSocket `fire_event` command directly (same bridge the PactPilot card
+  // uses on this instance). Browser CustomEvents never reach HA/AppDaemon.
+  _fireEvent(eventType, data) {
+    if (!this._hass?.connection) {
+      console.warn("Shopping List Card: no HA connection, cannot fire", eventType);
+      this._showToast("Fehler: keine HA-Verbindung");
+      return;
+    }
+    this._hass.connection.sendMessagePromise({
+      type: "fire_event",
+      event_type: eventType,
+      event_data: data || {}
+    }).catch(e => {
+      console.warn("Shopping List Card: fire_event failed", eventType, e);
+      this._showToast("Fehler: " + (e.message || "Event fehlgeschlagen"));
     });
   }
 
-  _lockOp(key) {
-    if (this._inFlight.has(key)) return false;
-    this._inFlight.add(key);
-    return true;
-  }
-
-  _unlockOp(key) {
-    this._inFlight.delete(key);
-  }
-
-  _addItem(entityId, text) {
-    const val = text.trim();
+  _addItem(text) {
+    const val = String(text || "").trim();
     if (!val || !this._hass) return;
-    const lockKey = `add:${entityId}:${val.toLowerCase()}`;
-    if (!this._lockOp(lockKey)) return;
-    const existing = this._findItemBySummary(entityId, val);
-    if (existing) {
-      if (existing.status === "needs_action") {
-        this._unlockOp(lockKey);
-        this._showToast("'" + val + "' ist bereits auf der Liste");
-        this._haptic(30);
-        return;
-      }
-      // Optimistic: re-activate locally, then sync with backend.
-      existing.status = "needs_action";
-      delete existing.completed;
-      this._localWriteAt[entityId] = Date.now();
-      this._render();
-      this._callService("todo", "update_item", { entity_id: entityId, item: existing.summary, status: "needs_action" })
-        .then(() => this._fetchAndRender())
-        .finally(() => this._unlockOp(lockKey));
-      this._haptic(60);
-      return;
-    }
-    const userIcon = this._getUserIcon(val);
-    const data = { entity_id: entityId, item: val };
-    if (userIcon) data.description = `[${userIcon}] `;
-    // Optimistic: add a temporary item so the UI feels instant.
-    const tempItem = {
-      summary: val,
-      uid: "__pending__" + Date.now(),
-      status: "needs_action",
-      description: data.description || ""
-    };
-    const items = this._itemsByList[entityId] || [];
-    this._itemsByList[entityId] = [...items, tempItem];
-    this._localWriteAt[entityId] = Date.now();
-    this._render();
-    this._callService("todo", "add_item", data)
-      .then(() => this._fetchAndRender())
-      .finally(() => this._unlockOp(lockKey));
+    this._fireEvent("einkaufsliste_add", { summary: val, quantity: 1, list: this._listId });
     this._haptic(60);
   }
 
-  _toggleItem(entityId, item) {
-    if (!this._hass) return;
-    const lockKey = `toggle:${entityId}:${item.uid}`;
-    if (!this._lockOp(lockKey)) return;
-    // If a stale event fires after the item was already removed/toggled, ignore it.
-    const current = (this._itemsByList[entityId] || []).find(i => i.uid === item.uid);
-    if (!current) {
-      this._unlockOp(lockKey);
-      return;
-    }
-    const status = current.status === "completed" ? "needs_action" : "completed";
-    // Optimistic: flip locally before the service call returns.
-    current.status = status;
-    if (status === "completed") {
-      current.completed = new Date().toISOString();
-    } else {
-      delete current.completed;
-    }
-    this._localWriteAt[entityId] = Date.now();
-    this._render();
-    this._callService("todo", "update_item", { entity_id: entityId, item: current.summary, status: status })
-      .then(() => this._fetchAndRender())
-      .finally(() => this._unlockOp(lockKey));
-    this._haptic(status === "needs_action" ? 40 : 60);
+  _toggleItem(item) {
+    if (!this._hass || !item) return;
+    this._fireEvent("einkaufsliste_toggle", { uid: item.uid });
+    this._haptic(item.status === "needs_action" ? 60 : 40);
   }
 
-  _removeItem(entityId, item) {
-    if (!this._hass) return;
-    const lockKey = `remove:${entityId}:${item.uid}`;
-    if (!this._lockOp(lockKey)) return;
-    // Ignore if the item is already gone (e.g. rapid double-tap or touch+click).
-    if (!(this._itemsByList[entityId] || []).find(i => i.uid === item.uid)) {
-      this._unlockOp(lockKey);
-      return;
-    }
-    // Optimistic: remove locally immediately, strictly by uid so similarly named
-    // items (e.g. 'Banane' and 'Bananen') are not affected.
-    const items = this._itemsByList[entityId] || [];
-    this._itemsByList[entityId] = items.filter(i => i.uid !== item.uid);
-    this._localWriteAt[entityId] = Date.now();
-    this._render();
-    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary })
-      .then(() => this._fetchAndRender())
-      .finally(() => this._unlockOp(lockKey));
+  _removeItem(item) {
+    if (!this._hass || !item) return;
+    this._fireEvent("einkaufsliste_remove", { uid: item.uid });
     this._haptic(40);
   }
 
-  _clearDone(entityId) {
+  _clearDone() {
     if (!this._hass) return;
-    const lockKey = `clear:${entityId}`;
-    if (!this._lockOp(lockKey)) return;
-    // Optimistic: drop completed items locally immediately.
-    const items = this._itemsByList[entityId] || [];
-    this._itemsByList[entityId] = items.filter(i => i.status !== "completed");
-    this._localWriteAt[entityId] = Date.now();
-    this._render();
-    this._callService("todo", "remove_completed_items", { entity_id: entityId })
-      .then(() => this._fetchAndRender())
-      .finally(() => this._unlockOp(lockKey));
+    this._fireEvent("einkaufsliste_clear_completed", { list: this._listId });
     this._haptic(80);
   }
 
-  _updateDescription(entityId, item, desc) {
-    if (!this._hass) return;
-    const lockKey = `desc:${entityId}:${item.uid}`;
-    if (!this._lockOp(lockKey)) return;
-    const current = (this._itemsByList[entityId] || []).find(i => i.uid === item.uid);
-    if (!current) {
-      this._unlockOp(lockKey);
-      return;
-    }
-    current.description = desc;
-    this._localWriteAt[entityId] = Date.now();
-    this._render();
-    this._callService("todo", "update_item", { entity_id: entityId, item: current.summary, description: desc })
-      .then(() => this._fetchAndRender())
-      .finally(() => this._unlockOp(lockKey));
+  _updateQuantity(item, delta) {
+    if (!this._hass || !item) return;
+    const q = Math.max(0, (item.quantity || 1) + delta);
+    this._fireEvent("einkaufsliste_update", { uid: item.uid, quantity: q });
     this._haptic(40);
   }
 
   _subscribeChanges() {
     if (this._unsub || !this._hass || !this.isConnected) return;
-    const entities = this.config?.lists?.map(l => l.entity) || [];
+    const entities = [this._entity];
     this._hass.connection.subscribeMessage(
-      (msg) => {
-        for (const entityId of entities) {
-          const state = msg[entityId];
-          if (state?.last_updated) {
-            this._scheduleSync(400, entityId, state.last_updated);
-          }
-        }
-      },
+      () => { this._fetchAndRender(); },
       { type: "subscribe_entities", entity_ids: entities }
     ).then(unsub => { this._unsub = unsub; }).catch(() => {
       this._unsub = this._hass.connection.subscribeEvents(ev => {
-        if (entities.includes(ev.data.entity_id) && ev.data?.new_state?.last_updated) {
-          this._scheduleSync(400, ev.data.entity_id, ev.data.new_state.last_updated);
-        }
+        if (ev.data?.entity_id === this._entity) this._fetchAndRender();
       }, "state_changed");
     });
   }
@@ -642,55 +499,42 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _lightUpdate() {
-    if (!this.config?.lists) return;
-    for (const list of this.config.lists) {
-      const items = this._itemsByList[list.entity] || [];
-      const itemMap = new Map();
-      for (const item of items) itemMap.set(item.uid, item);
-      const color = list.color || "#43A047";
+    const itemMap = new Map();
+    for (const item of this._items) itemMap.set(item.uid, item);
+    const color = this._color;
 
-      const tiles = this.querySelectorAll(`[data-entity="${list.entity}"].sl-tile`);
-      for (const tile of tiles) {
-        const item = itemMap.get(tile.dataset.uid);
-        if (!item) continue;
-        if (tile.dataset.status === item.status) continue;
+    const tiles = this.querySelectorAll(".sl-tile:not(.sl-ghost)");
+    for (const tile of tiles) {
+      const item = itemMap.get(tile.dataset.uid);
+      if (!item) continue;
+      const isDone = item.status === "completed";
+      const qty = String(item.quantity || 1);
+      if (tile.dataset.status === item.status && tile.dataset.qty === qty) continue;
+      tile.dataset.status = item.status;
+      tile.dataset.qty = qty;
+      tile.style.background = isDone ? "var(--sl-bg)" : color;
+      tile.style.border = isDone ? "2px solid var(--sl-border)" : "none";
+      tile.style.opacity = isDone ? "0.55" : "1";
 
-        const isDone = item.status === "completed";
-        tile.dataset.status = item.status;
-        tile.style.background = isDone ? "var(--sl-bg)" : color;
-        tile.style.border = isDone ? "2px solid var(--sl-border)" : "none";
-        tile.style.opacity = isDone ? "0.55" : "1";
+      const label = tile.querySelector(".sl-label");
+      if (label) label.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
 
-        const label = tile.querySelector(".sl-label");
-        if (label) {
-          label.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
+      // Quantity badge ("Nx") — replaces the old free-text description badge.
+      let badge = tile.querySelector(".sl-badge");
+      const showBadge = (item.quantity || 1) > 1;
+      if (showBadge) {
+        const txt = (item.quantity || 1) + "x";
+        if (!badge) {
+          badge = document.createElement("div");
+          badge.className = "sl-badge";
+          badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
+          tile.appendChild(badge);
         }
-
-        const badge = tile.querySelector(".sl-badge");
-        if (badge) {
-          badge.style.background = isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)";
-          badge.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
-        }
-
-        const { text: newDescText } = this._parseDescription(item.description || "");
-        const oldDescText = tile.querySelector(".sl-badge")?.textContent || "";
-        if (oldDescText !== newDescText) {
-          if (!newDescText) {
-            const b = tile.querySelector(".sl-badge");
-            b && b.remove();
-          } else {
-            let b = tile.querySelector(".sl-badge");
-            if (b) {
-              b.textContent = newDescText;
-            } else {
-              b = document.createElement("div");
-              b.className = "sl-badge";
-              b.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
-              b.textContent = newDescText;
-              tile.appendChild(b);
-            }
-          }
-        }
+        badge.textContent = txt;
+        badge.style.background = isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)";
+        badge.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
+      } else if (badge) {
+        badge.remove();
       }
     }
 
@@ -704,22 +548,23 @@ class ShoppingListCard extends HTMLElement {
       const visible = grid.querySelectorAll('.sl-tile:not(.sl-ghost)[data-status="needs_action"]').length;
       countEl.textContent = visible;
     }
-
-    const modal = document.querySelector(".shopping-list-modal");
-    if (modal) {
-      const modalUid = modal.dataset.itemUid;
-      const modalEntity = modal.dataset.itemEntity;
-      if (modalUid && modalEntity) {
-        const items = this._itemsByList[modalEntity] || [];
-        if (!items.some(i => i.uid === modalUid)) { modal.remove(); }
-      }
-    }
   }
 
-  _renderSearchBar(list) {
+  _pruneStaleModal() {
+    const modal = document.querySelector(".shopping-list-modal");
+    if (!modal) return;
+    const uid = modal.dataset.itemUid;
+    if (!uid) return;
+    const cur = this._items.find(i => i.uid === uid);
+    if (!cur) { modal.remove(); return; }
+    const qtyEl = modal.querySelector(".sl-modal-qty");
+    if (qtyEl) qtyEl.textContent = String(cur.quantity || 1);
+  }
+
+  _renderSearchBar() {
     const listWrap = document.createElement("div");
     listWrap.style.cssText = "margin-bottom:14px;position:relative;";
-    const color = list.color || "#43A047";
+    const color = this._color;
 
     const searchWrap = document.createElement("div");
     searchWrap.style.cssText = "display:flex;align-items:center;background:var(--sl-bg-input);border-radius:12px;padding:0 12px;border:1px solid var(--sl-border);";
@@ -739,18 +584,17 @@ class ShoppingListCard extends HTMLElement {
     searchWrap.appendChild(addBtn);
     listWrap.appendChild(searchWrap);
 
-    const hasItems = (this._itemsByList[list.entity] || []).length > 0;
-    if (!hasItems) {
-      const loadingRow = document.createElement("div");
-      loadingRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:8px 4px;color:var(--sl-text-muted);font-size:13px;";
-      const spin = document.createElement("ha-icon");
-      spin.setAttribute("icon", "mdi:loading");
-      spin.style.cssText = "width:16px;height:16px;color:var(--sl-text-muted);animation:sl-spin 1s linear infinite;";
-      loadingRow.appendChild(spin);
-      const lt = document.createElement("span");
-      lt.textContent = "Artikel werden geladen...";
-      loadingRow.appendChild(lt);
-      listWrap.appendChild(loadingRow);
+    if (this._items.length === 0) {
+      const emptyRow = document.createElement("div");
+      emptyRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:8px 4px;color:var(--sl-text-muted);font-size:13px;";
+      const ic = document.createElement("ha-icon");
+      ic.setAttribute("icon", "mdi:cart-outline");
+      ic.style.cssText = "width:16px;height:16px;color:var(--sl-text-muted);";
+      emptyRow.appendChild(ic);
+      const t = document.createElement("span");
+      t.textContent = "Noch nichts auf der Liste – unten tippen oder oben eingeben.";
+      emptyRow.appendChild(t);
+      listWrap.appendChild(emptyRow);
     }
 
     const acDropdown = document.createElement("div");
@@ -769,18 +613,18 @@ class ShoppingListCard extends HTMLElement {
         acDropdown.innerHTML = "";
         this._filterVisible(listWrap, val);
         if (!val) { acDropdown.style.display = "none"; return; }
-        const matches = acItems.filter(it => {
-          const existing = this._findItemBySummary(list.entity, it);
+          const matches = acItems.filter(it => {
+          const existing = this._findItemBySummary(it);
           return it.toLowerCase().includes(val) && !(existing && existing.status === "needs_action");
         }).slice(0, 8);
-      if (matches.length) {
+        if (matches.length) {
         matches.forEach(m => {
           const row = document.createElement("div");
           row.style.cssText = "padding:10px 16px;cursor:pointer;font-size:15px;color:var(--sl-text);border-bottom:1px solid var(--sl-border);";
           row.textContent = m;
           row.addEventListener("mouseenter", () => row.style.background = "var(--sl-hover)");
           row.addEventListener("mouseleave", () => row.style.background = "var(--sl-bg)");
-          row.addEventListener("click", () => { this._addItem(list.entity, m); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); });
+          row.addEventListener("click", () => { this._addItem(m); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); });
           acDropdown.appendChild(row);
         });
         acDropdown.style.display = "block";
@@ -791,7 +635,7 @@ class ShoppingListCard extends HTMLElement {
     });
 
     const doAdd = () => {
-      if (input.value.trim()) { this._addItem(list.entity, input.value); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); }
+      if (input.value.trim()) { this._addItem(input.value); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); }
     };
     addBtn.addEventListener("click", doAdd);
     input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
@@ -807,7 +651,7 @@ class ShoppingListCard extends HTMLElement {
     return listWrap;
   }
 
-  _renderCategory(cat, catItems, list, color) {
+  _renderCategory(cat, catItems) {
     const catWrap = document.createElement("div");
     catWrap.className = "sl-cat";
     catWrap.style.marginBottom = "16px";
@@ -852,8 +696,9 @@ class ShoppingListCard extends HTMLElement {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
     });
 
+    const color = this._color;
     for (const item of catItems) {
-      const tile = this._renderTile(item, list.entity, color, catWrap);
+      const tile = this._renderTile(item, catWrap);
       tile.dataset.section = "active";
       grid.appendChild(tile);
     }
@@ -892,7 +737,7 @@ class ShoppingListCard extends HTMLElement {
           tileAc.innerHTML = "";
           if (!v) { tileAc.style.display = "none"; return; }
           const matches = allItems.filter(it => {
-            const existing = this._findItemBySummary(list.entity, it);
+            const existing = this._findItemBySummary(it);
             return it.toLowerCase().includes(v) && !(existing && existing.status === "needs_action");
           }).slice(0, 6);
           if (matches.length) {
@@ -902,7 +747,7 @@ class ShoppingListCard extends HTMLElement {
               row.textContent = m;
               row.addEventListener("mouseenter", () => row.style.background = "var(--sl-hover)");
               row.addEventListener("mouseleave", () => row.style.background = "var(--sl-bg)");
-              row.addEventListener("click", () => { this._addItem(list.entity, m); resetTile(); });
+              row.addEventListener("click", () => { this._addItem(m); resetTile(); });
               tileAc.appendChild(row);
             });
             tileAc.style.display = "block";
@@ -910,7 +755,7 @@ class ShoppingListCard extends HTMLElement {
             tileAc.style.display = "none";
           }
         });
-        tileInput.addEventListener("keydown", e => { if (e.key === "Enter") { this._addItem(list.entity, tileInput.value); resetTile(); } });
+        tileInput.addEventListener("keydown", e => { if (e.key === "Enter") { this._addItem(tileInput.value); resetTile(); } });
         tileInput.addEventListener("blur", () => { setTimeout(() => { if (!tileAcMouseDown && tileInput) resetTile(); tileAcMouseDown = false; }, 300); });
         addTile.appendChild(tileInput);
         addTile.appendChild(tileAc);
@@ -922,7 +767,7 @@ class ShoppingListCard extends HTMLElement {
     return catWrap;
   }
 
-  _renderMirrorSection(list, items, color, order, maxPerCat = 20) {
+  _renderMirrorSection(items, order, maxPerCat = 20) {
     const onListSummaries = new Set(items.filter(i => i.status === "needs_action").map(i => i.summary.toLowerCase()));
     const itemBySummary = new Map();
     for (const item of items) itemBySummary.set(item.summary.toLowerCase(), item);
@@ -933,8 +778,7 @@ class ShoppingListCard extends HTMLElement {
       if (onListSummaries.has(text.toLowerCase())) continue;
       allAvail.push(text);
     }
-    const allItems = this._itemsByList[list.entity] || [];
-    const completedExtras = allItems.filter(i => i.status === "completed" && !acLower.has(i.summary.toLowerCase()) && !onListSummaries.has(i.summary.toLowerCase()));
+    const completedExtras = items.filter(i => i.status === "completed" && !acLower.has(i.summary.toLowerCase()) && !onListSummaries.has(i.summary.toLowerCase()));
     for (const ci of completedExtras) {
       if (!allAvail.includes(ci.summary)) allAvail.push(ci.summary);
     }
@@ -952,6 +796,7 @@ class ShoppingListCard extends HTMLElement {
       if (availByCat[cat] && availByCat[cat].length > maxPerCat) { hasAnyLimit = true; break; }
     }
 
+    const color = this._color;
     const mirrorWrap = document.createElement("div");
     mirrorWrap.style.cssText = "margin-top:24px;padding-top:16px;border-top:2px dashed var(--sl-border);";
 
@@ -968,7 +813,7 @@ class ShoppingListCard extends HTMLElement {
     const clearAll = document.createElement("div");
     clearAll.textContent = "erledigte löschen";
     clearAll.style.cssText = "font-size:11px;color:var(--sl-text-muted);cursor:pointer;";
-    clearAll.addEventListener("click", () => this._clearDone(list.entity));
+    clearAll.addEventListener("click", () => this._clearDone());
     mirrorTitle.appendChild(clearAll);
     mirrorWrap.appendChild(mirrorTitle);
 
@@ -1025,11 +870,11 @@ class ShoppingListCard extends HTMLElement {
       for (const text of catTexts) {
         const existing = itemBySummary.get(text.toLowerCase());
         if (existing) {
-          const tile = this._renderTile(existing, list.entity, color, catWrap);
+          const tile = this._renderTile(existing, catWrap);
           tile.dataset.section = "mirror";
           grid.appendChild(tile);
         } else {
-          grid.appendChild(this._renderGhostTile(text, list.entity, color, catWrap));
+          grid.appendChild(this._renderGhostTile(text, catWrap));
         }
       }
 
@@ -1050,11 +895,11 @@ class ShoppingListCard extends HTMLElement {
             const text = fullCatTexts[i];
             const existing = itemBySummary.get(text.toLowerCase());
             if (existing) {
-              const tile = this._renderTile(existing, list.entity, color, catWrap);
+              const tile = this._renderTile(existing, catWrap);
               tile.dataset.section = "mirror";
               grid.appendChild(tile);
             } else {
-              grid.appendChild(this._renderGhostTile(text, list.entity, color, catWrap));
+              grid.appendChild(this._renderGhostTile(text, catWrap));
             }
           }
         });
@@ -1074,7 +919,7 @@ class ShoppingListCard extends HTMLElement {
       showAll.addEventListener("mouseenter", () => { showAll.style.background = "var(--sl-hover)"; showAll.style.borderColor = color; });
       showAll.addEventListener("mouseleave", () => { showAll.style.background = "var(--sl-bg-input)"; showAll.style.borderColor = "var(--sl-border)"; });
       showAll.addEventListener("click", () => {
-        const newMirror = this._renderMirrorSection(list, items, color, order, Infinity);
+        const newMirror = this._renderMirrorSection(items, order, Infinity);
         if (newMirror) mirrorWrap.replaceWith(newMirror);
       });
       mirrorWrap.appendChild(showAll);
@@ -1084,27 +929,24 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _render() {
-    if (!this.config?.lists) return;
+    if (!this.config) return;
     this._tileIndex = [];
 
     const existingCard = this.querySelector("ha-card");
     if (existingCard && this._fingerprint === this._lastFingerprint) {
       let sectionChanged = false;
-      for (const list of this.config.lists) {
-        const items = this._itemsByList[list.entity] || [];
-        const itemMap = new Map();
-        for (const item of items) itemMap.set(item.uid, item);
-        const tiles = existingCard.querySelectorAll(`[data-entity="${list.entity}"].sl-tile:not(.sl-ghost)`);
-        for (const tile of tiles) {
-          const item = itemMap.get(tile.dataset.uid);
-          if (!item) continue;
-          const expected = item.status === "needs_action" ? "active" : "mirror";
-          if (tile.dataset.section !== expected) { sectionChanged = true; break; }
-        }
-        if (sectionChanged) break;
+      const itemMap = new Map();
+      for (const item of this._items) itemMap.set(item.uid, item);
+      const tiles = existingCard.querySelectorAll(".sl-tile:not(.sl-ghost)");
+      for (const tile of tiles) {
+        const item = itemMap.get(tile.dataset.uid);
+        if (!item) continue;
+        const expected = item.status === "needs_action" ? "active" : "mirror";
+        if (tile.dataset.section !== expected) { sectionChanged = true; break; }
       }
       if (!sectionChanged) {
         this._lightUpdate();
+        this._pruneStaleModal();
         return;
       }
     }
@@ -1135,44 +977,62 @@ class ShoppingListCard extends HTMLElement {
     `;
     card.appendChild(style);
 
-    for (const list of this.config.lists) {
-      const items = this._itemsByList[list.entity] || [];
-      const color = list.color || "#43A047";
-
-      const listWrap = this._renderSearchBar(list);
-      card.appendChild(listWrap);
-
-      const groups = {};
-      for (const item of items) {
-        const cat = this._getItemCategory(item.summary);
-        if (!groups[cat]) groups[cat] = [];
-        groups[cat].push(item);
-      }
-
-      const order = ["obst_gemuese","brot_backwaren","milch_eier","fleisch_fisch","trockenwaren","tiefkuehlprodukte","getraenke","haushalt_hygiene","sonstiges"].filter(k => groups[k]?.length > 0);
-      for (const k of Object.keys(groups)) if (!order.includes(k)) order.push(k);
-
-      const activeOrder = order.filter(k => groups[k].some(i => i.status === "needs_action"));
-
-      for (const cat of activeOrder) {
-        const catItems = groups[cat].filter(i => i.status === "needs_action");
-        card.appendChild(this._renderCategory(cat, catItems, list, color));
-      }
-
-      const mirror = this._renderMirrorSection(list, items, color, order);
-      if (mirror) card.appendChild(mirror);
+    if (this._legacyWarning) {
+      const warn = document.createElement("div");
+      warn.style.cssText = "padding:10px 12px;margin-bottom:12px;border-radius:10px;background:var(--error-color, #ef5350)22;border:1px solid var(--error-color, #ef5350);color:var(--error-color, #ef5350);font-size:13px;line-height:1.4;";
+      warn.textContent = this._legacyWarning;
+      card.appendChild(warn);
     }
+
+    const sensorState = this._hass?.states?.[this._entity];
+    if (!sensorState) {
+      const missing = document.createElement("div");
+      missing.style.cssText = "padding:16px;text-align:center;color:var(--sl-text-muted);font-size:14px;line-height:1.5;";
+      missing.textContent = "Sensor „" + (this._entity || "?") + "“ nicht gefunden. Läuft das AppDaemon-Backend? Siehe README (Installation).";
+      card.appendChild(missing);
+      this.replaceChildren(card);
+      this._pruneStaleModal();
+      return;
+    }
+
+    const items = this._items;
+    const color = this._color;
+
+    card.appendChild(this._renderSearchBar());
+
+    const groups = {};
+    for (const item of items) {
+      const cat = this._itemCategoryKey(item);
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(item);
+    }
+
+    const order = ["obst_gemuese","brot_backwaren","milch_eier","fleisch_fisch","trockenwaren","tiefkuehlprodukte","getraenke","haushalt_hygiene","sonstiges"].filter(k => groups[k]?.length > 0);
+    for (const k of Object.keys(groups)) if (!order.includes(k)) order.push(k);
+
+    const activeOrder = order.filter(k => groups[k].some(i => i.status === "needs_action"));
+
+    for (const cat of activeOrder) {
+      const catItems = groups[cat].filter(i => i.status === "needs_action");
+      card.appendChild(this._renderCategory(cat, catItems));
+    }
+
+    const mirror = this._renderMirrorSection(items, order);
+    if (mirror) card.appendChild(mirror);
+
     this.replaceChildren(card);
+    this._pruneStaleModal();
   }
 
-  _renderTile(item, entityId, color, catWrap) {
+  _renderTile(item, catWrap) {
     const isDone = item.status === "completed";
+    const color = this._color;
     const tile = document.createElement("div");
     tile.className = "sl-tile";
     tile.dataset.uid = item.uid;
     tile.dataset.summary = item.summary.toLowerCase();
-    tile.dataset.entity = entityId;
     tile.dataset.status = item.status;
+    tile.dataset.qty = String(item.quantity || 1);
     tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:" + (isDone ? "var(--sl-bg)" : color) + ";border:" + (isDone ? "2px solid var(--sl-border)" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
     tile.addEventListener("mouseenter", () => { if (tile.dataset.status !== "completed") tile.style.background = "var(--sl-save)"; });
     tile.addEventListener("mouseleave", () => { tile.style.background = tile.dataset.status === "completed" ? "var(--sl-bg)" : color; });
@@ -1188,15 +1048,12 @@ class ShoppingListCard extends HTMLElement {
     label.textContent = item.summary;
     tile.appendChild(label);
 
-    if (item.description) {
-      const { text: descText } = this._parseDescription(item.description);
-      if (descText) {
-        const badge = document.createElement("div");
-        badge.className = "sl-badge";
-        badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
-        badge.textContent = descText;
-        tile.appendChild(badge);
-      }
+    if ((item.quantity || 1) > 1) {
+      const badge = document.createElement("div");
+      badge.className = "sl-badge";
+      badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
+      badge.textContent = (item.quantity || 1) + "x";
+      tile.appendChild(badge);
     }
 
     let pressTimer = null;
@@ -1208,9 +1065,8 @@ class ShoppingListCard extends HTMLElement {
       if (longPressFired) return;
       longPressFired = true;
       this._haptic(80);
-      const items = this._itemsByList[entityId] || [];
-      const currentItem = items.find(i => i.uid === tile.dataset.uid);
-      if (currentItem) this._showEditModal(currentItem, entityId, tile);
+      const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
+      if (currentItem) this._showEditModal(currentItem, tile);
     };
     const startPress = () => {
       longPressFired = false;
@@ -1233,9 +1089,8 @@ class ShoppingListCard extends HTMLElement {
       const wasTap = pressTimer && !longPressFired;
       endPress();
       if (wasTap) {
-        const items = this._itemsByList[entityId] || [];
-        const currentItem = items.find(i => i.uid === tile.dataset.uid);
-        if (currentItem) this._toggleItem(entityId, currentItem);
+        const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
+        if (currentItem) this._toggleItem(currentItem);
       }
       setTimeout(() => touchHandled = false, 300);
     });
@@ -1260,19 +1115,18 @@ class ShoppingListCard extends HTMLElement {
     });
     tile.addEventListener("click", () => {
       if (touchHandled || longPressFired) return;
-      const items = this._itemsByList[entityId] || [];
-      const currentItem = items.find(i => i.uid === tile.dataset.uid);
-      if (currentItem) this._toggleItem(entityId, currentItem);
+      const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
+      if (currentItem) this._toggleItem(currentItem);
     });
     if (catWrap) this._tileIndex.push({ tile, cat: catWrap, summary: item.summary.toLowerCase() });
     return tile;
   }
 
-  _renderGhostTile(text, entityId, color, catWrap) {
+  _renderGhostTile(text, catWrap) {
+    const color = this._color;
     const tile = document.createElement("div");
     tile.className = "sl-tile sl-ghost";
     tile.dataset.summary = text.toLowerCase();
-    tile.dataset.entity = entityId;
     tile.dataset.status = "ghost";
     tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:var(--sl-bg);border:2px dashed var(--sl-border);opacity:0.65;cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
     tile.addEventListener("mouseenter", () => { tile.style.background = "var(--sl-hover)"; tile.style.borderColor = color; tile.style.opacity = "0.9"; });
@@ -1280,7 +1134,7 @@ class ShoppingListCard extends HTMLElement {
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
-    this._renderItemIcon(iconWrap, { summary: text, description: null }, 36);
+    this._renderItemIcon(iconWrap, { summary: text, icon: null }, 36);
     tile.appendChild(iconWrap);
 
     const label = document.createElement("div");
@@ -1289,12 +1143,12 @@ class ShoppingListCard extends HTMLElement {
     label.textContent = text;
     tile.appendChild(label);
 
-    tile.addEventListener("click", () => this._addItem(entityId, text));
+    tile.addEventListener("click", () => this._addItem(text));
     if (catWrap) this._tileIndex.push({ tile, cat: catWrap, summary: text.toLowerCase() });
     return tile;
   }
 
-  _showEditModal(item, entityId, triggerEl) {
+  _showEditModal(item, triggerEl) {
     const existing = document.querySelector(".shopping-list-modal");
     existing && existing.remove();
     const close = () => { overlay.remove(); triggerEl && triggerEl.focus(); };
@@ -1305,143 +1159,88 @@ class ShoppingListCard extends HTMLElement {
     overlay.setAttribute("aria-label", item.summary + " bearbeiten");
     overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;z-index:900;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);";
     overlay.dataset.itemUid = item.uid;
-    overlay.dataset.itemEntity = entityId;
     const box = document.createElement("div");
     box.style.cssText = "background:var(--card-background-color, var(--sl-bg, #fff));border-radius:16px;padding:20px;width:min(300px,92vw);max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--divider-color, var(--sl-border, #e8e8e8));box-sizing:border-box;color:var(--primary-text-color, var(--sl-text, #333));opacity:1 !important;";
 
     const title = document.createElement("div");
     title.className = "sl-modal-title";
-    title.style.cssText = "font-size:17px;font-weight:600;margin-bottom:12px;color:var(--primary-color, #2e7d32);";
+    title.style.cssText = "font-size:17px;font-weight:600;margin-bottom:14px;color:var(--primary-color, #2e7d32);";
     title.textContent = item.summary;
     box.appendChild(title);
 
-    const hint = document.createElement("div");
-    hint.style.cssText = "font-size:13px;color:var(--secondary-text-color, #666);margin-bottom:8px;";
-    hint.textContent = "Anmerkungen";
-    box.appendChild(hint);
+    const qtyLabel = document.createElement("div");
+    qtyLabel.style.cssText = "font-size:13px;color:var(--secondary-text-color, #666);margin-bottom:8px;";
+    qtyLabel.textContent = "Menge";
+    box.appendChild(qtyLabel);
+
+    const qtyRow = document.createElement("div");
+    qtyRow.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:14px;";
+    const qtyValue = document.createElement("div");
+    qtyValue.className = "sl-modal-qty";
+    qtyValue.style.cssText = "font-size:22px;font-weight:700;color:var(--primary-color, #2e7d32);min-width:40px;text-align:center;";
+    qtyValue.textContent = String(item.quantity || 1);
+    qtyRow.appendChild(qtyValue);
+
+    const minusBtn = document.createElement("button");
+    minusBtn.type = "button";
+    minusBtn.textContent = "−1";
+    minusBtn.style.cssText = "padding:6px 12px;border-radius:16px;border:2px solid var(--error-color, #ef5350);background:transparent;color:var(--error-color, #ef5350);font-size:13px;font-weight:600;cursor:pointer;";
+    minusBtn.addEventListener("click", () => {
+      const cur = this._items.find(i => i.uid === item.uid);
+      if (!cur) { close(); return; }
+      this._updateQuantity(cur, -1);
+      qtyValue.textContent = String(Math.max(0, (cur.quantity || 1) - 1));
+    });
+    qtyRow.appendChild(minusBtn);
+    box.appendChild(qtyRow);
 
     const quickWrap = document.createElement("div");
-    quickWrap.style.cssText = "display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;";
-    for (const qty of ["1x", "2x", "5x", "10x"]) {
+    quickWrap.style.cssText = "display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;";
+    for (const n of [1, 2, 5, 10]) {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.textContent = "+" + qty;
+      btn.textContent = "+" + n;
       btn.style.cssText = "padding:6px 12px;border-radius:16px;border:2px solid var(--input-border-color, #c8e6c9);background:var(--primary-background-color, #e8f5e9);color:var(--primary-color, #2e7d32);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.1s;";
       btn.addEventListener("mouseenter", () => { btn.style.background = "var(--input-border-color, #c8e6c9)"; });
       btn.addEventListener("mouseleave", () => { btn.style.background = "var(--primary-background-color, #e8f5e9)"; });
       btn.addEventListener("click", () => {
-        const val = descInput.value.trim();
-        const addNum = parseInt(qty.replace("x", ""), 10);
-        const existingMatch = val.match(/^(\d+)x?\s*(.*)$/);
-        if (existingMatch) {
-          const currentNum = parseInt(existingMatch[1], 10);
-          const rest = existingMatch[2];
-          descInput.value = (currentNum + addNum) + "x" + (rest ? " " + rest : "");
-        } else if (!val) {
-          descInput.value = qty;
-        } else {
-          descInput.value = qty + " " + val;
-        }
-        descInput.focus();
+        const cur = this._items.find(i => i.uid === item.uid);
+        if (!cur) { close(); return; }
+        this._updateQuantity(cur, n);
+        qtyValue.textContent = String((cur.quantity || 1) + n);
       });
       quickWrap.appendChild(btn);
     }
     box.appendChild(quickWrap);
 
-    const iconWrap = document.createElement("div");
-    iconWrap.style.cssText = "margin-bottom:12px;position:relative;";
-    const iconLabel = document.createElement("div");
-    iconLabel.style.cssText = "font-size:13px;color:var(--secondary-text-color, #666);margin-bottom:4px;display:flex;align-items:center;gap:6px;";
-    iconLabel.textContent = "Icon (optional, z.B. mdi:, fas:, fluent:)";
-    iconWrap.appendChild(iconLabel);
-
-    const { icon: existingIcon, text: existingText } = this._parseDescription(item.description);
-
-    const iconRow = document.createElement("div");
-    iconRow.style.cssText = "display:flex;align-items:center;gap:8px;";
-    const iconInput = document.createElement("input");
-    iconInput.type = "text";
-    iconInput.placeholder = "mdi:food-apple";
-    iconInput.value = existingIcon || "";
-    iconInput.style.cssText = "flex:1;padding:10px;border-radius:8px;border:2px solid var(--input-border-color, #c8e6c9);background:var(--input-fill-color, #f1f8e9);color:var(--primary-text-color, #333);font-size:15px;outline:none;box-sizing:border-box;";
-    const iconPreview = document.createElement("ha-icon");
-    iconPreview.style.cssText = "width:28px;height:28px;color:var(--secondary-text-color, #666);flex-shrink:0;";
-    const updatePreview = () => {
-      const val = iconInput.value.trim();
-      if (val && /^[a-z]+:/.test(val)) {
-        iconPreview.setAttribute("icon", val);
-        iconPreview.style.color = "var(--primary-text-color, #333)";
-      } else {
-        iconPreview.setAttribute("icon", "mdi:image-off");
-        iconPreview.style.color = "var(--disabled-text-color, #999)";
-      }
-    };
-    updatePreview();
-    iconInput.addEventListener("input", updatePreview);
-    iconRow.appendChild(iconInput);
-    iconRow.appendChild(iconPreview);
-    iconWrap.appendChild(iconRow);
-
-    const iconClear = document.createElement("div");
-    iconClear.style.cssText = "font-size:11px;color:var(--disabled-text-color, #999);cursor:pointer;margin-top:4px;text-align:right;";
-    iconClear.textContent = "Icon entfernen";
-    iconClear.addEventListener("click", () => {
-      iconInput.value = "";
-      updatePreview();
-      this._saveUserIcon(item.summary, null);
-    });
-    iconWrap.appendChild(iconClear);
-    box.appendChild(iconWrap);
-
-    const descInput = document.createElement("input");
-    descInput.type = "text";
-    descInput.value = existingText || "";
-    descInput.style.cssText = "width:100%;padding:10px;border-radius:8px;border:2px solid var(--input-border-color, #c8e6c9);background:var(--input-fill-color, #f1f8e9);color:var(--primary-text-color, #333);font-size:15px;outline:none;margin-bottom:16px;box-sizing:border-box;";
-    box.appendChild(descInput);
-
     const btns = document.createElement("div");
     btns.style.cssText = "display:flex;gap:8px;";
 
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.textContent = "Speichern";
-    saveBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:none;background:var(--primary-color, #43A047);color:var(--text-primary-color, #fff);font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);";
-    saveBtn.addEventListener("click", () => {
-      const mdiVal = iconInput.value.trim();
-      const descVal = descInput.value.trim();
-      const fullDesc = mdiVal && /^[a-z]+:/.test(mdiVal) ? `[${mdiVal}] ${descVal}` : descVal;
-      this._saveUserIcon(item.summary, mdiVal);
-      this._updateDescription(entityId, item, fullDesc);
-      const items = this._itemsByList[entityId] || [];
-      const cached = items.find(i => i.uid === item.uid);
-      if (cached) cached.description = fullDesc;
-      this._lastStructHash = "";
-      overlay.remove();
-      triggerEl && setTimeout(() => triggerEl.focus(), 50);
-    });
-    btns.appendChild(saveBtn);
-
-    const cancelBtn = document.createElement("button");
-    cancelBtn.type = "button";
-    cancelBtn.textContent = "Abbrechen";
-    cancelBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid var(--input-border-color, #c8e6c9);background:transparent;color:var(--primary-text-color, #333);font-size:15px;cursor:pointer;";
-    cancelBtn.addEventListener("click", () => close());
-    btns.appendChild(cancelBtn);
-    box.appendChild(btns);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = "Schließen";
+    closeBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:1px solid var(--input-border-color, #c8e6c9);background:transparent;color:var(--primary-text-color, #333);font-size:15px;cursor:pointer;";
+    closeBtn.addEventListener("click", () => close());
+    btns.appendChild(closeBtn);
 
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.textContent = "Löschen";
-    delBtn.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;border:2px solid var(--error-color, #ef5350);background:transparent;color:var(--error-color, #ef5350);font-size:13px;cursor:pointer;";
-    delBtn.addEventListener("click", () => { this._removeItem(entityId, item); close(); });
-    box.appendChild(delBtn);
+    delBtn.style.cssText = "flex:1;padding:10px;border-radius:8px;border:2px solid var(--error-color, #ef5350);background:transparent;color:var(--error-color, #ef5350);font-size:15px;font-weight:600;cursor:pointer;";
+    delBtn.addEventListener("click", () => {
+      const cur = this._items.find(i => i.uid === item.uid);
+      if (cur) this._removeItem(cur);
+      close();
+    });
+    btns.appendChild(delBtn);
+    box.appendChild(btns);
 
     overlay.appendChild(box);
     overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
     overlay.addEventListener("keydown", e => {
       if (e.key === "Escape") { close(); return; }
       if (e.key === "Tab") {
-        const focusable = box.querySelectorAll("button, input, [tabindex]:not([tabindex='-1'])");
+        const focusable = box.querySelectorAll("button, [tabindex]:not([tabindex='-1'])");
         if (!focusable.length) return;
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
@@ -1450,20 +1249,19 @@ class ShoppingListCard extends HTMLElement {
       }
     });
     document.body.appendChild(overlay);
-    if (!("ontouchstart" in window)) descInput.focus();
   }
 
   static getConfigForm() {
     return {
       schema: [
         { name: "title", required: true, selector: { text: {} } },
-        { name: "entity", selector: { entity: { domain: "todo" } } }
+        { name: "entity", selector: { entity: { domain: "sensor" } } }
       ]
     };
   }
 
   static getStubConfig() {
-    return { title: "Einkaufen", entity: "todo.einkaufen" };
+    return { title: "Einkaufen", entity: "sensor.einkaufsliste_backend" };
   }
 
   getCardSize() { return 4; }
@@ -1474,6 +1272,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "shopping-list-card",
   name: "Shopping List",
-  description: "Multi-list shopping card with todo integration",
+  description: "Einkaufsliste mit AppDaemon-Backend (auto-Kategorisierung, auto-Dedup)",
   preview: true
 });

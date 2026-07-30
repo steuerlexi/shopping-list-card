@@ -1,0 +1,19 @@
+# AppDaemon module registration for the Shopping-List-Card backend.
+#
+# Deploy (one-time):
+#   1. Copy apps/einkaufsliste_backend.py  ->  /addon_configs/a0d7b954_appdaemon/apps/
+#   2. Append this block                  ->  /addon_configs/a0d7b954_appdaemon/apps/apps.yaml
+#   3. Place artikel_katalog.json         ->  /addon_configs/a0d7b954_appdaemon/apps/
+#   4. Restart the AppDaemon add-on (Settings -> Apps -> AppDaemon -> Restart)
+#
+# After the first deploy, editing the .py file hot-reloads automatically
+# (AppDaemon watches the apps dir). Editing artikel_katalog.json takes effect
+# after sending an `einkaufsliste_reload_catalog` event or restarting AppDaemon.
+
+einkaufsliste_backend:
+  module: einkaufsliste_backend
+  class: EinkaufslisteBackend
+  # Optional: override where the persistent list (einkaufsliste.json) is stored.
+  # Default: /config/appdaemon_data/einkaufsliste/  (created automatically)
+  # The catalog (artikel_katalog.json) always lives next to the app module.
+  # data_dir: /config/appdaemon_data/einkaufsliste
