@@ -229,7 +229,7 @@ class ShoppingListCard extends HTMLElement {
     this._render();
   }
 
-  async _updateItems(hass, force = false) {
+  async _updateItems(hass) {
     if (!hass || !this.config?.lists) return;
     let fingerprint = 0;
     const promises = this.config.lists.map(async (list) => {
@@ -242,12 +242,6 @@ class ShoppingListCard extends HTMLElement {
         while (this._syncRunning[entityId]) {
           await this._syncRunning[entityId];
         }
-        // Fast path: if we already have cached items and this is a background
-        // sync, skip the network round-trip when nothing changed locally.
-        if (!force && this._itemsByList[entityId]?.length && this._pendingSync[entityId] === false) {
-          return;
-        }
-        this._pendingSync[entityId] = false;
         const promise = hass.callWS({
           type: "call_service",
           domain: "todo",
