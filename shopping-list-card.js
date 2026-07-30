@@ -7,7 +7,7 @@ class ShoppingListCard extends HTMLElement {
     this._syncTimer = null;
     this._syncSeq = 0;
     this._syncRunning = {};
-    this._pendingSync = {};
+    this._localWriteAt = {};
     this._autocompleteItems = null;
     this._iconMap = null;
     this._catMap = null;
@@ -272,7 +272,15 @@ class ShoppingListCard extends HTMLElement {
     this._fingerprint = fingerprint;
   }
 
-  _scheduleSync(delay = 500) {
+  _scheduleSync(delay = 500, entityId, lastUpdated) {
+    // Ignore HA state changes that were triggered by our own recent local write.
+    if (entityId && lastUpdated) {
+      const localWrite = this._localWriteAt[entityId] || 0;
+      const eventTime = new Date(lastUpdated).getTime();
+      if (!isNaN(eventTime) && eventTime <= localWrite) {
+        return;
+      }
+    }
     this._syncTimer && clearTimeout(this._syncTimer);
     this._syncTimer = setTimeout(() => {
       this._syncTimer = null;
@@ -479,9 +487,9 @@ class ShoppingListCard extends HTMLElement {
       // Optimistic: re-activate locally, then sync with backend.
       existing.status = "needs_action";
       delete existing.completed;
-      this._pendingSync[entityId] = true;
+      this._localWriteAt[entityId] = Date.now();
       this._render();
-      this._callService("todo", "update_item", { entity_id: entityId, item: existing.summary, status: "needs_action" }).then(() => this._scheduleSync(200));
+      this._callService("todo", "update_item", { entity_id: entityId, item: existing.summary, status: "needs_action" }).then(() => this._fetchAndRender());
       this._haptic(60);
       return;
     }
@@ -497,9 +505,9 @@ class ShoppingListCard extends HTMLElement {
     };
     const items = this._itemsByList[entityId] || [];
     this._itemsByList[entityId] = [...items, tempItem];
-    this._pendingSync[entityId] = true;
+    this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "add_item", data).then(() => this._scheduleSync(200));
+    this._callService("todo", "add_item", data).then(() => this._fetchAndRender());
     this._haptic(60);
   }
 
@@ -513,9 +521,9 @@ class ShoppingListCard extends HTMLElement {
     } else {
       delete item.completed;
     }
-    this._pendingSync[entityId] = true;
+    this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status }).then(() => this._scheduleSync(200));
+    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status }).then(() => this._fetchAndRender());
     this._haptic(status === "needs_action" ? 40 : 60);
   }
 
@@ -524,9 +532,9 @@ class ShoppingListCard extends HTMLElement {
     // Optimistic: remove locally immediately.
     const items = this._itemsByList[entityId] || [];
     this._itemsByList[entityId] = items.filter(i => i.uid !== item.uid && i.summary.toLowerCase() !== item.summary.toLowerCase());
-    this._pendingSync[entityId] = true;
+    this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary }).then(() => this._scheduleSync(200));
+    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary }).then(() => this._fetchAndRender());
     this._haptic(40);
   }
 
@@ -535,18 +543,18 @@ class ShoppingListCard extends HTMLElement {
     // Optimistic: drop completed items locally immediately.
     const items = this._itemsByList[entityId] || [];
     this._itemsByList[entityId] = items.filter(i => i.status !== "completed");
-    this._pendingSync[entityId] = true;
+    this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "remove_completed_items", { entity_id: entityId }).then(() => this._scheduleSync(200));
+    this._callService("todo", "remove_completed_items", { entity_id: entityId }).then(() => this._fetchAndRender());
     this._haptic(80);
   }
 
   _updateDescription(entityId, item, desc) {
     if (!this._hass) return;
     item.description = desc;
-    this._pendingSync[entityId] = true;
+    this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc }).then(() => this._scheduleSync(200));
+    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc }).then(() => this._fetchAndRender());
     this._haptic(40);
   }
 
@@ -554,11 +562,20 @@ class ShoppingListCard extends HTMLElement {
     if (this._unsub || !this._hass || !this.isConnected) return;
     const entities = this.config?.lists?.map(l => l.entity) || [];
     this._hass.connection.subscribeMessage(
-      () => this._scheduleSync(400),
+      (msg) => {
+        for (const entityId of entities) {
+          const state = msg[entityId];
+          if (state?.last_updated) {
+            this._scheduleSync(400, entityId, state.last_updated);
+          }
+        }
+      },
       { type: "subscribe_entities", entity_ids: entities }
     ).then(unsub => { this._unsub = unsub; }).catch(() => {
       this._unsub = this._hass.connection.subscribeEvents(ev => {
-        if (entities.includes(ev.data.entity_id)) this._scheduleSync(400);
+        if (entities.includes(ev.data.entity_id) && ev.data?.new_state?.last_updated) {
+          this._scheduleSync(400, ev.data.entity_id, ev.data.new_state.last_updated);
+        }
       }, "state_changed");
     });
   }
