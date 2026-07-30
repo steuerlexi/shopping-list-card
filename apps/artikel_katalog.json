@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-30",
+  "version": "2026-07-31",
   "icon_format": "openmoji_hex",
   "icon_url": "https://cdn.jsdelivr.net/npm/openmoji@latest/color/svg/{hex}.svg",
   "categories": [
@@ -15,7 +15,7 @@
   ],
   "artikel": [
     {"name": "Apfel",        "aliases": ["Äpfel"],                                   "category": "obst_gemuese",      "icon": "1F34E"},
-    {"name": "Banane",       "aliases": ["Bananen"],                                 "category": "obst_gemuese",      "icon": "1F34C"},
+    {"name": "Bananen",    "aliases": [],                                            "category": "obst_gemuese",      "icon": "1F34C"},
     {"name": "Birne",        "aliases": ["Birnen"],                                  "category": "obst_gemuese",      "icon": "1F350"},
     {"name": "Kiwi",         "aliases": [],                                          "category": "obst_gemuese",      "icon": "1F95D"},
     {"name": "Orange",       "aliases": ["Orangen", "Mandarine", "Mandarinen", "Clementine", "Grapefruit", "Pampelmuse"], "category": "obst_gemuese", "icon": "1F34A"},
