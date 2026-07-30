@@ -8,6 +8,7 @@ class ShoppingListCard extends HTMLElement {
     this._syncSeq = 0;
     this._syncRunning = {};
     this._localWriteAt = {};
+    this._inFlight = new Set();
     this._autocompleteItems = null;
     this._iconMap = null;
     this._catMap = null;
@@ -474,12 +475,25 @@ class ShoppingListCard extends HTMLElement {
     });
   }
 
+  _lockOp(key) {
+    if (this._inFlight.has(key)) return false;
+    this._inFlight.add(key);
+    return true;
+  }
+
+  _unlockOp(key) {
+    this._inFlight.delete(key);
+  }
+
   _addItem(entityId, text) {
     const val = text.trim();
     if (!val || !this._hass) return;
+    const lockKey = `add:${entityId}:${val.toLowerCase()}`;
+    if (!this._lockOp(lockKey)) return;
     const existing = this._findItemBySummary(entityId, val);
     if (existing) {
       if (existing.status === "needs_action") {
+        this._unlockOp(lockKey);
         this._showToast("'" + val + "' ist bereits auf der Liste");
         this._haptic(30);
         return;
@@ -489,7 +503,9 @@ class ShoppingListCard extends HTMLElement {
       delete existing.completed;
       this._localWriteAt[entityId] = Date.now();
       this._render();
-      this._callService("todo", "update_item", { entity_id: entityId, item: existing.summary, status: "needs_action" }).then(() => this._fetchAndRender());
+      this._callService("todo", "update_item", { entity_id: entityId, item: existing.summary, status: "needs_action" })
+        .then(() => this._fetchAndRender())
+        .finally(() => this._unlockOp(lockKey));
       this._haptic(60);
       return;
     }
@@ -507,54 +523,89 @@ class ShoppingListCard extends HTMLElement {
     this._itemsByList[entityId] = [...items, tempItem];
     this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "add_item", data).then(() => this._fetchAndRender());
+    this._callService("todo", "add_item", data)
+      .then(() => this._fetchAndRender())
+      .finally(() => this._unlockOp(lockKey));
     this._haptic(60);
   }
 
   _toggleItem(entityId, item) {
     if (!this._hass) return;
-    const status = item.status === "completed" ? "needs_action" : "completed";
+    const lockKey = `toggle:${entityId}:${item.uid}`;
+    if (!this._lockOp(lockKey)) return;
+    // If a stale event fires after the item was already removed/toggled, ignore it.
+    const current = (this._itemsByList[entityId] || []).find(i => i.uid === item.uid);
+    if (!current) {
+      this._unlockOp(lockKey);
+      return;
+    }
+    const status = current.status === "completed" ? "needs_action" : "completed";
     // Optimistic: flip locally before the service call returns.
-    item.status = status;
+    current.status = status;
     if (status === "completed") {
-      item.completed = new Date().toISOString();
+      current.completed = new Date().toISOString();
     } else {
-      delete item.completed;
+      delete current.completed;
     }
     this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status }).then(() => this._fetchAndRender());
+    this._callService("todo", "update_item", { entity_id: entityId, item: current.summary, status: status })
+      .then(() => this._fetchAndRender())
+      .finally(() => this._unlockOp(lockKey));
     this._haptic(status === "needs_action" ? 40 : 60);
   }
 
   _removeItem(entityId, item) {
     if (!this._hass) return;
-    // Optimistic: remove locally immediately.
+    const lockKey = `remove:${entityId}:${item.uid}`;
+    if (!this._lockOp(lockKey)) return;
+    // Ignore if the item is already gone (e.g. rapid double-tap or touch+click).
+    if (!(this._itemsByList[entityId] || []).find(i => i.uid === item.uid)) {
+      this._unlockOp(lockKey);
+      return;
+    }
+    // Optimistic: remove locally immediately, strictly by uid so similarly named
+    // items (e.g. 'Banane' and 'Bananen') are not affected.
     const items = this._itemsByList[entityId] || [];
-    this._itemsByList[entityId] = items.filter(i => i.uid !== item.uid && i.summary.toLowerCase() !== item.summary.toLowerCase());
+    this._itemsByList[entityId] = items.filter(i => i.uid !== item.uid);
     this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary }).then(() => this._fetchAndRender());
+    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary })
+      .then(() => this._fetchAndRender())
+      .finally(() => this._unlockOp(lockKey));
     this._haptic(40);
   }
 
   _clearDone(entityId) {
     if (!this._hass) return;
+    const lockKey = `clear:${entityId}`;
+    if (!this._lockOp(lockKey)) return;
     // Optimistic: drop completed items locally immediately.
     const items = this._itemsByList[entityId] || [];
     this._itemsByList[entityId] = items.filter(i => i.status !== "completed");
     this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "remove_completed_items", { entity_id: entityId }).then(() => this._fetchAndRender());
+    this._callService("todo", "remove_completed_items", { entity_id: entityId })
+      .then(() => this._fetchAndRender())
+      .finally(() => this._unlockOp(lockKey));
     this._haptic(80);
   }
 
   _updateDescription(entityId, item, desc) {
     if (!this._hass) return;
-    item.description = desc;
+    const lockKey = `desc:${entityId}:${item.uid}`;
+    if (!this._lockOp(lockKey)) return;
+    const current = (this._itemsByList[entityId] || []).find(i => i.uid === item.uid);
+    if (!current) {
+      this._unlockOp(lockKey);
+      return;
+    }
+    current.description = desc;
     this._localWriteAt[entityId] = Date.now();
     this._render();
-    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc }).then(() => this._fetchAndRender());
+    this._callService("todo", "update_item", { entity_id: entityId, item: current.summary, description: desc })
+      .then(() => this._fetchAndRender())
+      .finally(() => this._unlockOp(lockKey));
     this._haptic(40);
   }
 
