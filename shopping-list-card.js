@@ -1112,6 +1112,12 @@ class ShoppingListCard extends HTMLElement {
 
     const card = document.createElement("ha-card");
     card.style.cssText = "padding:12px;display:block;";
+    if (!this._versionBadge) {
+      this._versionBadge = document.createElement("div");
+      this._versionBadge.textContent = "SLC v1.0.74";
+      this._versionBadge.style.cssText = "position:absolute;top:4px;right:8px;font-size:10px;color:var(--disabled-text-color,#999);opacity:0.7;pointer-events:none;";
+      this.appendChild(this._versionBadge);
+    }
     card.style.setProperty("--sl-bg", "var(--card-background-color, #fff)");
     card.style.setProperty("--sl-bg-input", "var(--input-fill-color, var(--card-background-color, #fafafa))");
     card.style.setProperty("--sl-text", "var(--primary-text-color, #333)");
