@@ -1,4 +1,4 @@
-// Shopping List Card v2.0.0 — AppDaemon backend edition (Breaking).
+// Shopping List Card v2.0.1 — AppDaemon backend edition (stale-tile fix).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -476,16 +476,24 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _subscribeChanges() {
-    if (this._unsub || !this._hass || !this.isConnected) return;
+    if ((this._unsub || this._unsubEvents) || !this._hass || !this.isConnected) return;
     const entities = [this._entity];
+    // Primary: compressed entity subscription (efficient). BUT it may not
+    // deliver attribute-only updates for AppDaemon REST-set states — e.g.
+    // deleting a *completed* item doesn't change the active count (state),
+    // only the `items` attribute, so subscribe_entities can skip it and leave
+    // a stale tile in the DOM. The state_changed subscription below closes
+    // that gap.
     this._hass.connection.subscribeMessage(
       () => { this._fetchAndRender(); },
       { type: "subscribe_entities", entity_ids: entities }
-    ).then(unsub => { this._unsub = unsub; }).catch(() => {
-      this._unsub = this._hass.connection.subscribeEvents(ev => {
-        if (ev.data?.entity_id === this._entity) this._fetchAndRender();
-      }, "state_changed");
-    });
+    ).then(unsub => { this._unsub = unsub; }).catch(() => { this._unsub = null; });
+    // Secondary: state_changed fires reliably for EVERY set_state, including
+    // attribute-only changes. Filtered to our entity. The fingerprint check in
+    // _render() collapses duplicate renders when both subscriptions fire.
+    this._unsubEvents = this._hass.connection.subscribeEvents(ev => {
+      if (ev.data?.entity_id === this._entity) this._fetchAndRender();
+    }, "state_changed");
   }
 
   connectedCallback() {
@@ -495,6 +503,10 @@ class ShoppingListCard extends HTMLElement {
     if (this._unsub) {
       Promise.resolve(this._unsub).then(fn => fn());
       this._unsub = null;
+    }
+    if (this._unsubEvents) {
+      Promise.resolve(this._unsubEvents).then(fn => fn());
+      this._unsubEvents = null;
     }
   }
 
@@ -506,7 +518,7 @@ class ShoppingListCard extends HTMLElement {
     const tiles = this.querySelectorAll(".sl-tile:not(.sl-ghost)");
     for (const tile of tiles) {
       const item = itemMap.get(tile.dataset.uid);
-      if (!item) continue;
+      if (!item) { tile.remove(); continue; } // stale tile (item deleted in backend)
       const isDone = item.status === "completed";
       const qty = String(item.quantity || 1);
       if (tile.dataset.status === item.status && tile.dataset.qty === qty) continue;
@@ -940,7 +952,7 @@ class ShoppingListCard extends HTMLElement {
       const tiles = existingCard.querySelectorAll(".sl-tile:not(.sl-ghost)");
       for (const tile of tiles) {
         const item = itemMap.get(tile.dataset.uid);
-        if (!item) continue;
+        if (!item) { sectionChanged = true; break; } // stale tile -> force full rebuild
         const expected = item.status === "needs_action" ? "active" : "mirror";
         if (tile.dataset.section !== expected) { sectionChanged = true; break; }
       }
