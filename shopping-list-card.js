@@ -4,6 +4,10 @@ class ShoppingListCard extends HTMLElement {
     this._itemsByList = {};
     this._unsub = null;
     this._debounceTimer = null;
+    this._syncTimer = null;
+    this._syncSeq = 0;
+    this._syncRunning = {};
+    this._pendingSync = {};
     this._autocompleteItems = null;
     this._iconMap = null;
     this._catMap = null;
@@ -221,27 +225,43 @@ class ShoppingListCard extends HTMLElement {
   }
 
   async _fetchAndRender() {
-    this._debounceTimer && clearTimeout(this._debounceTimer);
-    this._debounceTimer = setTimeout(async () => {
-      this._debounceTimer = null;
-      await this._updateItems(this._hass);
-      this._render();
-    }, 0);
+    await this._updateItems(this._hass);
+    this._render();
   }
 
-  async _updateItems(hass) {
+  async _updateItems(hass, force = false) {
     if (!hass || !this.config?.lists) return;
     let fingerprint = 0;
     const promises = this.config.lists.map(async (list) => {
       const entityId = list.entity;
+      const seq = ++this._syncSeq;
       try {
-        const res = await hass.callWS({
+        // Serialize get_items calls per list to avoid race conditions: if a
+        // newer request starts while an older one is still running, drop the
+        // stale result.
+        while (this._syncRunning[entityId]) {
+          await this._syncRunning[entityId];
+        }
+        // Fast path: if we already have cached items and this is a background
+        // sync, skip the network round-trip when nothing changed locally.
+        if (!force && this._itemsByList[entityId]?.length && this._pendingSync[entityId] === false) {
+          return;
+        }
+        this._pendingSync[entityId] = false;
+        const promise = hass.callWS({
           type: "call_service",
           domain: "todo",
           service: "get_items",
           service_data: { entity_id: entityId, status: ["needs_action", "completed"] },
           return_response: true
         });
+        this._syncRunning[entityId] = promise.catch(() => {});
+        const res = await promise;
+        this._syncRunning[entityId] = null;
+        if (seq !== this._syncSeq && this._syncSeq - seq >= this.config.lists.length) {
+          // This request was superseded by a newer full refresh cycle.
+          return;
+        }
         const resp = res?.result?.response || res?.response;
         const items = resp?.[entityId]?.items || [];
         this._itemsByList[entityId] = items;
@@ -250,11 +270,20 @@ class ShoppingListCard extends HTMLElement {
         }
       } catch (e) {
         console.warn("Shopping List Card: Failed to fetch items for", entityId, e);
-        this._itemsByList[entityId] = [];
+        this._syncRunning[entityId] = null;
+        this._itemsByList[entityId] = this._itemsByList[entityId] || [];
       }
     });
     await Promise.all(promises);
     this._fingerprint = fingerprint;
+  }
+
+  _scheduleSync(delay = 500) {
+    this._syncTimer && clearTimeout(this._syncTimer);
+    this._syncTimer = setTimeout(() => {
+      this._syncTimer = null;
+      this._fetchAndRender();
+    }, delay);
   }
 
   _hashString(str) {
@@ -453,39 +482,77 @@ class ShoppingListCard extends HTMLElement {
         this._haptic(30);
         return;
       }
-      this._callService("todo", "update_item", { entity_id: entityId, item: existing.summary, status: "needs_action" });
+      // Optimistic: re-activate locally, then sync with backend.
+      existing.status = "needs_action";
+      delete existing.completed;
+      this._pendingSync[entityId] = true;
+      this._render();
+      this._callService("todo", "update_item", { entity_id: entityId, item: existing.summary, status: "needs_action" }).then(() => this._scheduleSync(200));
       this._haptic(60);
       return;
     }
     const userIcon = this._getUserIcon(val);
     const data = { entity_id: entityId, item: val };
     if (userIcon) data.description = `[${userIcon}] `;
-    this._callService("todo", "add_item", data);
+    // Optimistic: add a temporary item so the UI feels instant.
+    const tempItem = {
+      summary: val,
+      uid: "__pending__" + Date.now(),
+      status: "needs_action",
+      description: data.description || ""
+    };
+    const items = this._itemsByList[entityId] || [];
+    this._itemsByList[entityId] = [...items, tempItem];
+    this._pendingSync[entityId] = true;
+    this._render();
+    this._callService("todo", "add_item", data).then(() => this._scheduleSync(200));
     this._haptic(60);
   }
 
   _toggleItem(entityId, item) {
     if (!this._hass) return;
     const status = item.status === "completed" ? "needs_action" : "completed";
-    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status });
+    // Optimistic: flip locally before the service call returns.
+    item.status = status;
+    if (status === "completed") {
+      item.completed = new Date().toISOString();
+    } else {
+      delete item.completed;
+    }
+    this._pendingSync[entityId] = true;
+    this._render();
+    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, status: status }).then(() => this._scheduleSync(200));
     this._haptic(status === "needs_action" ? 40 : 60);
   }
 
   _removeItem(entityId, item) {
     if (!this._hass) return;
-    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary });
+    // Optimistic: remove locally immediately.
+    const items = this._itemsByList[entityId] || [];
+    this._itemsByList[entityId] = items.filter(i => i.uid !== item.uid && i.summary.toLowerCase() !== item.summary.toLowerCase());
+    this._pendingSync[entityId] = true;
+    this._render();
+    this._callService("todo", "remove_item", { entity_id: entityId, item: item.summary }).then(() => this._scheduleSync(200));
     this._haptic(40);
   }
 
   _clearDone(entityId) {
     if (!this._hass) return;
-    this._callService("todo", "remove_completed_items", { entity_id: entityId });
+    // Optimistic: drop completed items locally immediately.
+    const items = this._itemsByList[entityId] || [];
+    this._itemsByList[entityId] = items.filter(i => i.status !== "completed");
+    this._pendingSync[entityId] = true;
+    this._render();
+    this._callService("todo", "remove_completed_items", { entity_id: entityId }).then(() => this._scheduleSync(200));
     this._haptic(80);
   }
 
   _updateDescription(entityId, item, desc) {
     if (!this._hass) return;
-    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc });
+    item.description = desc;
+    this._pendingSync[entityId] = true;
+    this._render();
+    this._callService("todo", "update_item", { entity_id: entityId, item: item.summary, description: desc }).then(() => this._scheduleSync(200));
     this._haptic(40);
   }
 
@@ -493,11 +560,11 @@ class ShoppingListCard extends HTMLElement {
     if (this._unsub || !this._hass || !this.isConnected) return;
     const entities = this.config?.lists?.map(l => l.entity) || [];
     this._hass.connection.subscribeMessage(
-      () => this._fetchAndRender(),
+      () => this._scheduleSync(400),
       { type: "subscribe_entities", entity_ids: entities }
     ).then(unsub => { this._unsub = unsub; }).catch(() => {
       this._unsub = this._hass.connection.subscribeEvents(ev => {
-        if (entities.includes(ev.data.entity_id)) this._fetchAndRender();
+        if (entities.includes(ev.data.entity_id)) this._scheduleSync(400);
       }, "state_changed");
     });
   }
