@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.1 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.2 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
