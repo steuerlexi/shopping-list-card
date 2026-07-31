@@ -1,4 +1,4 @@
-// Shopping List Card v2.0.6 — AppDaemon backend edition (category banner images).
+// Shopping List Card v2.0.7 — AppDaemon backend edition (category banner images).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -885,13 +885,14 @@ class ShoppingListCard extends HTMLElement {
     const useBanner = this.config?.category_banner_mode === true;
     if (useBanner) {
       // Banner-style category header: animated background image + dark overlay,
-      // ensuring count/chevron remain readable.
-      header.style.cssText = "position:relative;overflow:hidden;display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;cursor:pointer;user-select:none;min-height:52px;";
+      // ensuring count/chevron remain readable. Fixed aspect-ratio via CSS class
+      // keeps the banner proportional on desktop and mobile.
+      header.className = "sl-header sl-banner-header";
       const banner = document.createElement("img");
       banner.className = "sl-cat-banner";
       banner.src = this._getCategoryBannerUrl(cat);
       banner.alt = "";
-      banner.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;animation:sl-cat-banner 18s ease-in-out infinite alternate;";
+      banner.style.cssText = "animation:sl-cat-banner 18s ease-in-out infinite alternate;";
       banner.onerror = () => { banner.style.display = "none"; };
       header.appendChild(banner);
       const overlay = document.createElement("div");
@@ -1118,12 +1119,13 @@ class ShoppingListCard extends HTMLElement {
       chevron.setAttribute("icon", "mdi:chevron-down");
 
       if (useBanner) {
-        header.style.cssText = "position:relative;overflow:hidden;display:flex;align-items:center;gap:8px;padding:" + headerPadding + ";border-radius:12px;cursor:pointer;user-select:none;min-height:42px;";
+        header.className = "sl-header sl-banner-header";
+        header.style.padding = headerPadding;
         const banner = document.createElement("img");
         banner.className = "sl-cat-banner";
         banner.src = this._getCategoryBannerUrl(cat);
         banner.alt = "";
-        banner.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;animation:sl-cat-banner 18s ease-in-out infinite alternate;opacity:0.85;";
+        banner.style.cssText = "animation:sl-cat-banner 18s ease-in-out infinite alternate;opacity:0.85;";
         banner.onerror = () => { banner.style.display = "none"; };
         header.appendChild(banner);
         const overlay = document.createElement("div");
@@ -1292,7 +1294,11 @@ class ShoppingListCard extends HTMLElement {
       .sl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px;padding:12px;}
       @media (max-width:400px){.sl-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;padding:8px;}}
       @media (max-width:320px){.sl-grid{grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;}}
-      @keyframes sl-cat-banner{0%{transform:scale(1) translate(0,0);}100%{transform:scale(1.08) translate(-2%,-1%);}}
+      .sl-banner-header{position:relative;overflow:hidden;display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;cursor:pointer;user-select:none;aspect-ratio:6/1;min-height:48px;max-height:92px;}
+      @media (max-width:600px){.sl-banner-header{aspect-ratio:5/1;min-height:44px;}}
+      @media (max-width:420px){.sl-banner-header{aspect-ratio:4.5/1;min-height:40px;}}
+      .sl-cat-banner{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0;}
+      @keyframes sl-cat-banner{0%{transform:scale(1) translate(0,0);}100%{transform:scale(1.05) translate(-1%,-0.5%);}}
     `;
     card.appendChild(style);
 
@@ -1326,8 +1332,12 @@ class ShoppingListCard extends HTMLElement {
       groups[cat].push(item);
     }
 
-    const order = ["obst_gemuese","brot_backwaren","milch_eier","fleisch_fisch","trockenwaren","tiefkuehlprodukte","getraenke","haushalt_hygiene","sonstiges"].filter(k => groups[k]?.length > 0);
-    for (const k of Object.keys(groups)) if (!order.includes(k)) order.push(k);
+    const defaultOrder = (this.config?.category_order || [
+      "obst_gemuese","brot_backwaren","trockenwaren","milch_eier","fleisch_fisch",
+      "getraenke","tiefkuehlprodukte","haushalt_hygiene"
+    ]).filter(k => k !== "sonstiges");
+    const order = [...new Set([...defaultOrder, ...Object.keys(groups).filter(k => k !== "sonstiges"),
+      ...(groups["sonstiges"]?.length > 0 ? ["sonstiges"] : [])])].filter(k => groups[k]?.length > 0);
 
     const activeOrder = order.filter(k => groups[k].some(i => i.status === "needs_action"));
 
