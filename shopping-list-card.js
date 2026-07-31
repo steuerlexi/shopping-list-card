@@ -738,10 +738,12 @@ class ShoppingListCard extends HTMLElement {
       tile.style.border = isDone ? "2px solid var(--sl-border)" : "none";
       tile.style.opacity = isDone ? "0.55" : "1";
 
-      const label = tile.querySelector(".sl-label");
-      if (label) label.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
+      const labelOverlay = tile.querySelector(".sl-label-overlay");
+      if (labelOverlay) labelOverlay.style.background = isDone
+        ? "linear-gradient(0deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 70%, transparent 100%)"
+        : "linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%)";
 
-      // Quantity badge ("Nx") — replaces the old free-text description badge.
+      // Quantity badge ("Nx") — absolute positioned top-right.
       let badge = tile.querySelector(".sl-badge");
       const showBadge = (item.quantity || 1) > 1;
       if (showBadge) {
@@ -749,11 +751,11 @@ class ShoppingListCard extends HTMLElement {
         if (!badge) {
           badge = document.createElement("div");
           badge.className = "sl-badge";
-          badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
+          badge.style.cssText = "position:absolute;top:4px;right:4px;z-index:3;display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(0,0,0,0.35)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:700;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;backdrop-filter:blur(2px);";
           tile.appendChild(badge);
         }
         badge.textContent = txt;
-        badge.style.background = isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)";
+        badge.style.background = isDone ? "var(--sl-border)" : "rgba(0,0,0,0.35)";
         badge.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
       } else if (badge) {
         badge.remove();
@@ -1362,25 +1364,29 @@ class ShoppingListCard extends HTMLElement {
     tile.dataset.summary = item.summary.toLowerCase();
     tile.dataset.status = item.status;
     tile.dataset.qty = String(item.quantity || 1);
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:" + (isDone ? "var(--sl-bg)" : color) + ";border:" + (isDone ? "2px solid var(--sl-border)" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;border-radius:12px;background:" + (isDone ? "var(--sl-bg)" : color) + ";border:" + (isDone ? "2px solid var(--sl-border)" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:96px;position:relative;overflow:hidden;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
     tile.addEventListener("mouseenter", () => { if (tile.dataset.status !== "completed") tile.style.background = "var(--sl-save)"; });
     tile.addEventListener("mouseleave", () => { tile.style.background = tile.dataset.status === "completed" ? "var(--sl-bg)" : color; });
 
     const iconWrap = document.createElement("div");
-    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
-    this._renderItemIcon(iconWrap, item, 36);
+    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;";
+    this._renderItemIcon(iconWrap, item, 56);
     tile.appendChild(iconWrap);
 
+    const labelOverlay = document.createElement("div");
+    labelOverlay.className = "sl-label-overlay";
+    labelOverlay.style.cssText = "position:absolute;left:0;right:0;bottom:0;padding:4px 6px;background:linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);z-index:2;";
     const label = document.createElement("div");
     label.className = "sl-label";
-    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
+    label.style.cssText = "font-size:10px;font-weight:600;text-align:center;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;text-shadow:0 1px 2px rgba(0,0,0,0.5);";
     label.textContent = item.summary;
-    tile.appendChild(label);
+    labelOverlay.appendChild(label);
+    tile.appendChild(labelOverlay);
 
     if ((item.quantity || 1) > 1) {
       const badge = document.createElement("div");
       badge.className = "sl-badge";
-      badge.style.cssText = "display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(255,255,255,0.25)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;";
+      badge.style.cssText = "position:absolute;top:4px;right:4px;z-index:3;display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(0,0,0,0.35)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:700;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;backdrop-filter:blur(2px);";
       badge.textContent = (item.quantity || 1) + "x";
       tile.appendChild(badge);
     }
