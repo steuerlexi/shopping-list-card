@@ -423,24 +423,51 @@ class ShoppingListCard extends HTMLElement {
     if (navigator.vibrate) navigator.vibrate(ms);
   }
 
-  // Fire an HA bus event so the AppDaemon backend can mutate the list.
-  // HA 2026.x removed the `homeassistant.fire_event` *service*, so we use the
-  // WebSocket `fire_event` command directly (same bridge the PactPilot card
-  // uses on this instance). Browser CustomEvents never reach HA/AppDaemon.
+  // Send a command to the AppDaemon backend. Non-admin users cannot use the
+  // WebSocket `fire_event` command (it returns "Unauthorized"), so we write a
+  // JSON payload into input_text.einkaufsliste_command via the regular
+  // input_text/set_value service, which AppDaemon listens to with listen_state.
+  // The backend clears the input after executing the command.
   _fireEvent(eventType, data) {
-    if (!this._hass?.connection) {
-      console.warn("Shopping List Card: no HA connection, cannot fire", eventType);
+    if (!this._hass) {
+      console.warn("Shopping List Card: no HA connection, cannot send", eventType);
       this._showToast("Fehler: keine HA-Verbindung");
       return;
     }
-    this._hass.connection.sendMessagePromise({
-      type: "fire_event",
-      event_type: eventType,
-      event_data: data || {}
-    }).catch(e => {
-      console.warn("Shopping List Card: fire_event failed", eventType, e);
-      this._showToast("Fehler: " + (e.message || "Event fehlgeschlagen"));
-    });
+    const payload = JSON.stringify({ event: eventType, data: data || {} });
+    const call = (fn) => {
+      try {
+        fn();
+      } catch (e) {
+        console.warn("Shopping List Card: command send failed", eventType, e);
+        this._showToast("Fehler: " + (e.message || "Befehl fehlgeschlagen"));
+      }
+    };
+
+    if (typeof this._hass.callService === "function") {
+      call(() => this._hass.callService("input_text", "set_value", {
+        entity_id: "input_text.einkaufsliste_command",
+        value: payload
+      }));
+      return;
+    }
+
+    // Fallback for very old card runtimes: try the WebSocket fire_event command.
+    // This requires admin privileges and will fail for non-admin users.
+    if (this._hass?.connection) {
+      this._hass.connection.sendMessagePromise({
+        type: "fire_event",
+        event_type: eventType,
+        event_data: data || {}
+      }).catch(e => {
+        console.warn("Shopping List Card: fire_event failed", eventType, e);
+        this._showToast("Fehler: " + (e.message || "Event fehlgeschlagen"));
+      });
+      return;
+    }
+
+    console.warn("Shopping List Card: no way to send command", eventType);
+    this._showToast("Fehler: keine HA-Verbindung");
   }
 
   _addItem(text) {

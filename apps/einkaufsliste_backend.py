@@ -48,6 +48,7 @@ import uuid
 
 
 SENSOR_ID = "sensor.einkaufsliste_backend"
+COMMAND_INPUT = "input_text.einkaufsliste_command"
 DEFAULT_LIST = "standard"
 # OpenMoji HEX codepoints + category colors, aligned with artikel_katalog.json.
 # Used only when the catalog file is missing/corrupt; the real catalog is the
@@ -93,6 +94,10 @@ class EinkaufslisteBackend(hass.Hass):
         self.listen_event(self._on_clear_all, "einkaufsliste_clear_all")
         self.listen_event(self._on_import, "einkaufsliste_import")
         self.listen_event(self._on_reload_catalog, "einkaufsliste_reload_catalog")
+
+        # Non-admin users cannot use the WebSocket fire_event command, so the
+        # card also supports writing JSON commands into input_text.einkaufsliste_command.
+        self.listen_state(self._on_command_input, COMMAND_INPUT)
 
         self._publish()
         self.log("Einkaufsliste backend started (%d items, catalog %s)"
@@ -482,6 +487,51 @@ class EinkaufslisteBackend(hass.Hass):
         self._publish()
         self.log("catalog reloaded (%s), re-categorized %d items"
                  % (self._catalog_version, len(self._items)))
+
+    def _on_command_input(self, entity, attribute, old, new, **kwargs):
+        """Handle commands written into input_text.einkaufsliste_command.
+
+        Allows non-admin users to drive the backend: the card calls the
+        input_text/set_value service (allowed for regular users) with a JSON
+        payload, AppDaemon reads it, executes the command and clears the input.
+        """
+        if not new or str(new).strip() == "":
+            return
+        raw = str(new).strip()
+        self.log("command input: %s" % raw)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            self.log("command input invalid JSON: %s" % e, level="WARNING")
+            self._clear_command_input()
+            return
+
+        event_type = data.get("event")
+        payload = data.get("data", {})
+        if event_type == "einkaufsliste_add":
+            self._on_add(event_type, payload)
+        elif event_type == "einkaufsliste_remove":
+            self._on_remove(event_type, payload)
+        elif event_type == "einkaufsliste_toggle":
+            self._on_toggle(event_type, payload)
+        elif event_type == "einkaufsliste_update":
+            self._on_update(event_type, payload)
+        elif event_type == "einkaufsliste_clear_completed":
+            self._on_clear_completed(event_type, payload)
+        elif event_type == "einkaufsliste_clear_all":
+            self._on_clear_all(event_type, payload)
+        elif event_type == "einkaufsliste_reload_catalog":
+            self._on_reload_catalog(event_type, payload)
+        else:
+            self.log("command input unknown event: %s" % event_type, level="WARNING")
+
+        self._clear_command_input()
+
+    def _clear_command_input(self):
+        try:
+            self.set_state(COMMAND_INPUT, state="")
+        except Exception as e:
+            self.log("failed to clear command input: %s" % e, level="WARNING")
 
     def _on_import(self, event_name, data, **kwargs):
         """One-shot migration from a native todo entity (default todo.einkaufsliste)."""
