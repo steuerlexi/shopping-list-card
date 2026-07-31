@@ -1,6 +1,7 @@
 # macOS
 .DS_Store
 ._.DS_Store
+._*
 
 # Python (AppDaemon backend)
 __pycache__/
@@ -11,3 +12,6 @@ __pycache__/
 
 # Stray HACS default-repo skeleton clone (separate git repo, not part of this card)
 /default/
+
+# Samba temp files
+.smbdelete*
