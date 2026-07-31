@@ -62,7 +62,22 @@ Dateinamen:
 
 Wenn eine Datei fehlt, greift die Karte auf ihr eingebautes SVG-Fallback zurück.
 
+## Animationen für Kategorie-Icons
+
+Animierte Kategorie-Icons werden als **inline SVG** geladen, damit CSS-Animationen funktionieren. Unterstützt werden:
+
+- **SVG mit CSS-Animationen** (`<style>` im SVG mit `@keyframes`)
+- **SVG mit SMIL-Animationen** (`<animate>`, `<animateTransform>`)
+
+**Nicht unterstützt:** After Effects `.aep` Projektdateien. Du musst ein `.aep` zuerst exportieren, z. B.:
+
+- **Adobe After Effects** → Bodymovin/Lottie-Plugin → **animiertes SVG** oder Lottie JSON (nur SVG wird von der Karte unterstützt)
+- Alternativ: Tools wie **SVGator**, **LottieFiles**, oder **Rive** → Export als animiertes SVG
+
+Das exportierte SVG kommt nach `categories/animated/<kategorie>.svg`.
+
 ## Wichtig
 
 - Nach dem Hochladen neuer SVGs: **Dashboard/Companion-App Cache leeren**.
+- v2.1.3+ zwingt jedes SVG in eine feste Größe (`preserveAspectRatio="xMidYMid meet"`), damit alle Icons einheitlich skalieren — egal ob die SVG-Datei unterschiedliche `width`/`height` Attribute hat.
 - Änderungen an `mapping.json` erfordern keinen HA-Neustart, nur einen Seiten-Refresh.
