@@ -1,4 +1,4 @@
-// Shopping List Card v2.0.5 — AppDaemon backend edition (category banner images).
+// Shopping List Card v2.0.6 — AppDaemon backend edition (category banner images).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -1108,8 +1108,17 @@ class ShoppingListCard extends HTMLElement {
       header.className = "sl-header";
       const showCatLabels = this.config?.show_category_labels === true;
       const useBanner = this.config?.category_banner_mode === true;
+      const contentStyle = useBanner ? "position:relative;z-index:2;" : "";
+      const catIconSize = useBanner ? 22 : (showCatLabels ? 16 : 22);
+      const countColor = useBanner ? "#fff" : "var(--sl-text-muted)";
+      const headerPadding = useBanner ? "8px 12px" : "6px 4px";
+
+      // Chevron is declared early so the collapse toggle can reference it.
+      const chevron = document.createElement("ha-icon");
+      chevron.setAttribute("icon", "mdi:chevron-down");
+
       if (useBanner) {
-        header.style.cssText = "position:relative;overflow:hidden;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;cursor:pointer;user-select:none;min-height:42px;";
+        header.style.cssText = "position:relative;overflow:hidden;display:flex;align-items:center;gap:8px;padding:" + headerPadding + ";border-radius:12px;cursor:pointer;user-select:none;min-height:42px;";
         const banner = document.createElement("img");
         banner.className = "sl-cat-banner";
         banner.src = this._getCategoryBannerUrl(cat);
@@ -1120,64 +1129,44 @@ class ShoppingListCard extends HTMLElement {
         const overlay = document.createElement("div");
         overlay.style.cssText = "position:absolute;inset:0;background:linear-gradient(90deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.35) 100%);z-index:1;border-radius:12px;";
         header.appendChild(overlay);
-        const contentStyle = "position:relative;z-index:2;";
-        const catIconWrap = document.createElement("div");
-        catIconWrap.style.cssText = contentStyle + "display:flex;align-items:center;justify-content:center;color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));";
-        this._renderCategoryIcon(catIconWrap, cat, 22);
-        const catIconEl = catIconWrap.firstElementChild;
-        if (catIconEl) catIconEl.style.filter = "drop-shadow(0 0 1px rgba(0,0,0,0.4))";
-        header.appendChild(catIconWrap);
-        if (showCatLabels) {
-          const catName = document.createElement("div");
-          catName.style.cssText = contentStyle + "font-weight:600;font-size:13px;flex:1;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);";
-          catName.textContent = this._getCategoryName(cat);
-          header.appendChild(catName);
-        } else {
-          const spacer = document.createElement("div");
-          spacer.style.cssText = contentStyle + "flex:1;";
-          header.appendChild(spacer);
-        }
-        const count = document.createElement("div");
-        count.className = "sl-count";
-        count.style.cssText = contentStyle + "font-size:11px;color:#fff;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,0.5);";
-        count.textContent = fullCatTexts.length;
-        header.appendChild(count);
-        const chevron = document.createElement("ha-icon");
-        chevron.setAttribute("icon", "mdi:chevron-down");
-        chevron.style.cssText = contentStyle + "color:#fff;width:16px;height:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));";
-        header.appendChild(chevron);
       } else {
-        header.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--sl-border);cursor:pointer;user-select:none;";
+        header.style.cssText = "display:flex;align-items:center;gap:8px;padding:" + headerPadding + ";border-bottom:1px solid var(--sl-border);cursor:pointer;user-select:none;";
         header.setAttribute("role", "button");
         header.setAttribute("tabindex", "0");
         header.setAttribute("aria-expanded", "true");
-        const catIconSize = showCatLabels ? 16 : 22;
-        const catIconWrap = document.createElement("div");
-        catIconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;color:var(--sl-text-muted);";
-        this._renderCategoryIcon(catIconWrap, cat, catIconSize);
-        const catIconEl = catIconWrap.firstElementChild;
-        if (catIconEl) catIconEl.style.filter = "grayscale(100%) opacity(0.6)";
-        header.appendChild(catIconWrap);
-        if (showCatLabels) {
-          const catName = document.createElement("div");
-          catName.style.cssText = "font-weight:500;font-size:12px;flex:1;color:var(--sl-text-muted);";
-          catName.textContent = this._getCategoryName(cat);
-          header.appendChild(catName);
-        } else {
-          const spacer = document.createElement("div");
-          spacer.style.cssText = "flex:1;";
-          header.appendChild(spacer);
-        }
-        const count = document.createElement("div");
-        count.className = "sl-count";
-        count.style.cssText = "font-size:11px;color:var(--sl-text-muted);font-weight:400;";
-        count.textContent = fullCatTexts.length;
-        header.appendChild(count);
-        const chevron = document.createElement("ha-icon");
-        chevron.setAttribute("icon", "mdi:chevron-down");
-        chevron.style.cssText = "color:var(--sl-text-muted);width:16px;height:16px;";
-        header.appendChild(chevron);
       }
+
+      const catIconWrap = document.createElement("div");
+      catIconWrap.style.cssText = contentStyle + (useBanner
+        ? "display:flex;align-items:center;justify-content:center;color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));"
+        : "display:flex;align-items:center;justify-content:center;color:var(--sl-text-muted);");
+      this._renderCategoryIcon(catIconWrap, cat, catIconSize);
+      const catIconEl = catIconWrap.firstElementChild;
+      if (catIconEl) catIconEl.style.filter = useBanner ? "drop-shadow(0 0 1px rgba(0,0,0,0.4))" : "grayscale(100%) opacity(0.6)";
+      header.appendChild(catIconWrap);
+
+      if (showCatLabels) {
+        const catName = document.createElement("div");
+        catName.style.cssText = contentStyle + (useBanner
+          ? "font-weight:600;font-size:13px;flex:1;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);"
+          : "font-weight:500;font-size:12px;flex:1;color:var(--sl-text-muted);");
+        catName.textContent = this._getCategoryName(cat);
+        header.appendChild(catName);
+      } else {
+        const spacer = document.createElement("div");
+        spacer.style.cssText = contentStyle + "flex:1;";
+        header.appendChild(spacer);
+      }
+
+      const count = document.createElement("div");
+      count.className = "sl-count";
+      count.style.cssText = contentStyle + "font-size:11px;color:" + countColor + ";font-weight:" + (useBanner ? "700" : "400") + ";" + (useBanner ? "text-shadow:0 1px 2px rgba(0,0,0,0.5);" : "");
+      count.textContent = fullCatTexts.length;
+      header.appendChild(count);
+
+      chevron.style.cssText = contentStyle + (useBanner
+        ? "color:#fff;width:16px;height:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));"
+        : "color:var(--sl-text-muted);width:16px;height:16px;");
       header.appendChild(chevron);
       catWrap.appendChild(header);
 
