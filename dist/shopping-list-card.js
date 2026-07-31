@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.2 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.3 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -411,19 +411,20 @@ class ShoppingListCard extends HTMLElement {
         tmp.innerHTML = text.trim();
         const svg = tmp.querySelector("svg");
         if (!svg) return false;
-        // Explicit pixel size keeps the icon sharp even when the outer container
-        // has no intrinsic size (e.g. banner category icons).
-        if (size && size > 0) {
-          svg.style.width = size + "px";
-          svg.style.height = size + "px";
-        } else {
-          svg.style.width = "100%";
-          svg.style.height = "100%";
-        }
+        // Force a uniform rendered size regardless of the SVG's own width/height
+        // attributes or internal styles. The wrapper guarantees the footprint,
+        // the SVG fills it with preserved aspect ratio.
+        const finalSize = (size && size > 0) ? size : 24;
+        svg.style.width = "100%";
+        svg.style.height = "100%";
         svg.style.display = "block";
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
         svg.style.flexShrink = "0";
+        const wrap = document.createElement("div");
+        wrap.style.cssText = `display:flex;align-items:center;justify-content:center;width:${finalSize}px;height:${finalSize}px;flex-shrink:0;`;
+        wrap.appendChild(svg);
         container.innerHTML = "";
-        container.appendChild(svg);
+        container.appendChild(wrap);
         return true;
       })
       .catch(() => false);
@@ -600,13 +601,20 @@ class ShoppingListCard extends HTMLElement {
       }).then(loaded => {
         if (loaded) return;
         if (!fallbackSvg) return;
-        const wrapper = document.createElement("div");
-        wrapper.innerHTML = fallbackSvg.trim();
-        const svg = wrapper.querySelector("svg");
+        const tmp = document.createElement("div");
+        tmp.innerHTML = fallbackSvg.trim();
+        const svg = tmp.querySelector("svg");
         if (svg) {
-          svg.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0;${options}`;
+          svg.style.width = "100%";
+          svg.style.height = "100%";
+          svg.style.display = "block";
+          svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+          svg.style.flexShrink = "0";
+          const wrap = document.createElement("div");
+          wrap.style.cssText = `display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;flex-shrink:0;${options}`;
+          wrap.appendChild(svg);
           container.innerHTML = "";
-          container.appendChild(svg);
+          container.appendChild(wrap);
         }
       });
       return;
