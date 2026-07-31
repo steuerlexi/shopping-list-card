@@ -1,4 +1,4 @@
-// Shopping List Card v2.0.1 — AppDaemon backend edition (stale-tile fix).
+// Shopping List Card v2.0.4 — AppDaemon backend edition (inline animated category icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -222,6 +222,113 @@ class ShoppingListCard extends HTMLElement {
       "Sonstiges": "sonstiges"
     };
 
+    // Animated inline SVG category icons. Embedded directly so CSS animations
+    // run reliably (img/ha-icon cannot animate). Replace individual SVGs by
+    // editing the strings below; the key names must stay stable.
+    this._categorySvgs = {
+      obst_gemuese: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .sl-cat-swing { animation: sl-cat-swing 2.5s ease-in-out infinite; transform-origin: 12px 5px; }
+          @keyframes sl-cat-swing { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+        </style>
+        <g class="sl-cat-swing">
+          <path d="M12 6c-3 0-5.5 2-5.5 5.5S9 18 12 18s5.5-3 5.5-6.5S15 6 12 6z"/>
+          <path d="M12 6c0-1.5.5-3 1.5-4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <path d="M12 6c2-.5 3.5-.5 4.5.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+        </g>
+      </svg>`,
+      brot_backwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .sl-cat-rise { animation: sl-cat-rise 2s ease-in-out infinite; transform-origin: center bottom; }
+          @keyframes sl-cat-rise { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.08); } }
+        </style>
+        <g class="sl-cat-rise">
+          <path d="M5 9c0-3 3-5 7-5s7 2 7 5v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9z"/>
+          <path d="M8 9c0-1 1.5-2 4-2s4 1 4 2" stroke="rgba(255,255,255,0.4)" stroke-width="1" fill="none"/>
+        </g>
+      </svg>`,
+      milch_eier: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .sl-cat-tilt { animation: sl-cat-tilt 3s ease-in-out infinite; transform-origin: center bottom; }
+          @keyframes sl-cat-tilt { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+        </style>
+        <g class="sl-cat-tilt">
+          <path d="M7 5h10l2 4v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9l2-4z"/>
+          <circle cx="12" cy="17" r="2" fill="rgba(255,255,255,0.5)"/>
+        </g>
+      </svg>`,
+      fleisch_fisch: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .sl-cat-meat { animation: sl-cat-pulse 2s ease-in-out infinite; transform-origin: center; }
+          .sl-cat-steam { animation: sl-cat-steam 2s ease-in-out infinite; }
+          @keyframes sl-cat-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+          @keyframes sl-cat-steam { 0%,100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+        </style>
+        <g class="sl-cat-meat">
+          <path d="M7 11c0-3 2.5-6 6-6s6 3 6 6-2.5 6-6 6-6-3-6-6z"/>
+          <path d="M9 14l-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+        </g>
+        <path class="sl-cat-steam" d="M9 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none"/>
+        <path class="sl-cat-steam" d="M15 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none" style="animation-delay:0.5s"/>
+      </svg>`,
+      trockenwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .sl-cat-wiggle { animation: sl-cat-wiggle 2.2s ease-in-out infinite; transform-origin: center bottom; }
+          @keyframes sl-cat-wiggle { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+        </style>
+        <g class="sl-cat-wiggle">
+          <path d="M4 7h16l2 4v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z"/>
+          <path d="M4 7l2-3h12l2 3" stroke="currentColor" stroke-width="1.5" fill="none"/>
+        </g>
+      </svg>`,
+      tiefkuehlprodukte: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .sl-cat-flake { animation: sl-cat-spin 4s linear infinite; transform-origin: center; }
+          .sl-cat-dot { animation: sl-cat-fade 1.8s ease-in-out infinite; }
+          @keyframes sl-cat-spin { to { transform: rotate(360deg); } }
+          @keyframes sl-cat-fade { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+        </style>
+        <g class="sl-cat-flake">
+          <path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none"/>
+        </g>
+        <circle class="sl-cat-dot" cx="8" cy="8" r="1"/>
+        <circle class="sl-cat-dot" cx="16" cy="8" r="1" style="animation-delay:0.4s"/>
+        <circle class="sl-cat-dot" cx="12" cy="16" r="1" style="animation-delay:0.8s"/>
+      </svg>`,
+      getraenke: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .sl-cat-bubble { animation: sl-cat-bubble 1.6s ease-in-out infinite; }
+          @keyframes sl-cat-bubble { 0%,100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-3px); opacity: 1; } }
+        </style>
+        <path d="M7 3h10l1 4v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7l1-4z"/>
+        <circle class="sl-cat-bubble" cx="10" cy="14" r="1"/>
+        <circle class="sl-cat-bubble" cx="14" cy="11" r="1.2" style="animation-delay:0.5s"/>
+        <circle class="sl-cat-bubble" cx="12" cy="17" r="0.8" style="animation-delay:1s"/>
+      </svg>`,
+      haushalt_hygiene: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .sl-cat-scrub { animation: sl-cat-scrub 1.5s ease-in-out infinite; transform-origin: bottom right; }
+          @keyframes sl-cat-scrub { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-10deg); } }
+        </style>
+        <g class="sl-cat-scrub">
+          <path d="M7 4h10v4H7z"/>
+          <path d="M8 8l-1 9h10l-1-9"/>
+          <path d="M10 17h4" stroke="currentColor" stroke-width="2" fill="none"/>
+        </g>
+      </svg>`,
+      sonstiges: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .sl-cat-wag { animation: sl-cat-wag 2s ease-in-out infinite; transform-origin: center bottom; }
+          @keyframes sl-cat-wag { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
+        </style>
+        <g class="sl-cat-wag">
+          <path d="M5 6h2l2 11h8l2-9H7"/>
+          <circle cx="10" cy="19" r="1.5"/>
+          <circle cx="17" cy="19" r="1.5"/>
+        </g>
+      </svg>`
+    };
+
     this._cachesReady = true;
   }
 
@@ -372,6 +479,11 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _getCategoryIcon(key) {
+    // Returns the OpenMoji hex code used by legacy category_icon_mode "openmoji".
+    // Default "inline" mode uses _categorySvgs instead.
+    if (this.config?.category_icon_mode === "fam" || this.config?.category_icon_mode === "local") {
+      return key || "sonstiges";
+    }
     return {
       obst_gemuese: "1F955",
       brot_backwaren: "1F35E",
@@ -383,6 +495,72 @@ class ShoppingListCard extends HTMLElement {
       haushalt_hygiene: "1F9F9",
       sonstiges: "1F6D2"
     }[key] || "1F6D2";
+  }
+
+  _renderCategoryIcon(container, key, size, options = "") {
+    const mode = this.config?.category_icon_mode || "inline";
+    container.innerHTML = "";
+    key = key || "sonstiges";
+    if (mode === "inline") {
+      // Default: embedded animated SVG. Animations only work when the SVG is
+      // part of the DOM, not when referenced via img or ha-icon.
+      const svgHtml = this._categorySvgs?.[key] || this._categorySvgs?.sonstiges;
+      if (svgHtml) {
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = svgHtml.trim();
+        const svg = wrapper.firstElementChild;
+        if (svg) {
+          svg.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0;${options}`;
+          container.appendChild(svg);
+          return;
+        }
+      }
+      // Fallback to OpenMoji if the inline SVG map is missing.
+      const img = this._createOpenmojiImg(this._getCategoryIcon(key), size);
+      if (options) img.style.cssText += options;
+      container.appendChild(img);
+      return;
+    }
+    if (mode === "fam") {
+      const iconSet = window.customIcons?.fam;
+      let svgBody = null;
+      if (iconSet && typeof iconSet.getIcon === "function") {
+        const icon = iconSet.getIcon(key);
+        if (icon && icon.path) svgBody = icon.path;
+      }
+      if (svgBody) {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.setAttribute("fill", "currentColor");
+        svg.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0;${options}`;
+        svg.innerHTML = svgBody;
+        container.appendChild(svg);
+        return;
+      }
+      const el = document.createElement("ha-icon");
+      el.setAttribute("icon", `fam:${key}`);
+      el.style.cssText = `display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;color:inherit;${options}`;
+      container.appendChild(el);
+      return;
+    }
+    if (mode === "local") {
+      const base = this.config?.category_icon_base_url || this.config?.openmoji_base_url || "/local/icons";
+      const img = document.createElement("img");
+      img.src = `${base}/${key || "sonstiges"}.svg`;
+      img.style.width = size + "px";
+      img.style.height = size + "px";
+      img.style.flexShrink = "0";
+      img.style.objectFit = "contain";
+      img.style.cssText += options;
+      img.alt = "";
+      img.onerror = () => { img.src = `${base}/sonstiges.svg`; };
+      container.appendChild(img);
+      return;
+    }
+    // legacy openmoji
+    const img = this._createOpenmojiImg(this._getCategoryIcon(key), size);
+    if (options) img.style.cssText += options;
+    container.appendChild(img);
   }
 
   _getCategoryColor(key) {
@@ -702,13 +880,24 @@ class ShoppingListCard extends HTMLElement {
     header.setAttribute("tabindex", "0");
     header.setAttribute("aria-expanded", "true");
     const catColor = this._getCategoryColor(cat);
-    const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 20);
-    catIcon.style.filter = "drop-shadow(0 0 1px rgba(0,0,0,0.2))";
-    header.appendChild(catIcon);
-    const catName = document.createElement("div");
-    catName.style.cssText = "font-weight:500;font-size:14px;flex:1;color:" + catColor;
-    catName.textContent = this._getCategoryName(cat);
-    header.appendChild(catName);
+    const showCatLabels = this.config?.show_category_labels === true;
+    const catIconSize = showCatLabels ? 20 : 28;
+    const catIconWrap = document.createElement("div");
+    catIconWrap.style.cssText = `display:flex;align-items:center;justify-content:center;color:${catColor};`;
+    this._renderCategoryIcon(catIconWrap, cat, catIconSize);
+    const catIconEl = catIconWrap.firstElementChild;
+    if (catIconEl) catIconEl.style.filter = "drop-shadow(0 0 1px rgba(0,0,0,0.2))";
+    header.appendChild(catIconWrap);
+    if (showCatLabels) {
+      const catName = document.createElement("div");
+      catName.style.cssText = "font-weight:500;font-size:14px;flex:1;color:" + catColor;
+      catName.textContent = this._getCategoryName(cat);
+      header.appendChild(catName);
+    } else {
+      const spacer = document.createElement("div");
+      spacer.style.cssText = "flex:1;";
+      header.appendChild(spacer);
+    }
     const count = document.createElement("div");
     count.className = "sl-count";
     count.style.cssText = "font-size:12px;color:var(--sl-text-muted);font-weight:400;";
@@ -872,13 +1061,24 @@ class ShoppingListCard extends HTMLElement {
       header.setAttribute("role", "button");
       header.setAttribute("tabindex", "0");
       header.setAttribute("aria-expanded", "true");
-      const catIcon = this._createOpenmojiImg(this._getCategoryIcon(cat), 16);
-      catIcon.style.filter = "grayscale(100%) opacity(0.6)";
-      header.appendChild(catIcon);
-      const catName = document.createElement("div");
-      catName.style.cssText = "font-weight:500;font-size:12px;flex:1;color:var(--sl-text-muted);";
-      catName.textContent = this._getCategoryName(cat);
-      header.appendChild(catName);
+      const showCatLabels = this.config?.show_category_labels === true;
+      const catIconSize = showCatLabels ? 16 : 22;
+      const catIconWrap = document.createElement("div");
+      catIconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;color:var(--sl-text-muted);";
+      this._renderCategoryIcon(catIconWrap, cat, catIconSize);
+      const catIconEl = catIconWrap.firstElementChild;
+      if (catIconEl) catIconEl.style.filter = "grayscale(100%) opacity(0.6)";
+      header.appendChild(catIconWrap);
+      if (showCatLabels) {
+        const catName = document.createElement("div");
+        catName.style.cssText = "font-weight:500;font-size:12px;flex:1;color:var(--sl-text-muted);";
+        catName.textContent = this._getCategoryName(cat);
+        header.appendChild(catName);
+      } else {
+        const spacer = document.createElement("div");
+        spacer.style.cssText = "flex:1;";
+        header.appendChild(spacer);
+      }
       const count = document.createElement("div");
       count.className = "sl-count";
       count.style.cssText = "font-size:11px;color:var(--sl-text-muted);font-weight:400;";
@@ -1009,7 +1209,6 @@ class ShoppingListCard extends HTMLElement {
     card.style.setProperty("--sl-save-text", "var(--text-primary-color, #fff)");
     const style = document.createElement("style");
     style.textContent = `
-      @keyframes sl-spin{to{transform:rotate(360deg)}}
       .sl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px;padding:12px;}
       @media (max-width:400px){.sl-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;padding:8px;}}
       @media (max-width:320px){.sl-grid{grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;}}
