@@ -881,7 +881,7 @@ class ShoppingListCard extends HTMLElement {
     const header = document.createElement("div");
     header.className = "sl-header";
     const catColor = this._getCategoryColor(cat);
-    const showCatLabels = this.config?.show_category_labels === true;
+    const showCatLabels = this.config?.show_category_labels !== false;
     const useBanner = this.config?.category_banner_mode === true;
     if (useBanner) {
       // Banner-style category header: animated background image + dark overlay,
@@ -1076,7 +1076,7 @@ class ShoppingListCard extends HTMLElement {
 
     const color = this._color;
     const mirrorWrap = document.createElement("div");
-    mirrorWrap.style.cssText = "margin-top:24px;padding-top:16px;border-top:2px dashed var(--sl-border);";
+    mirrorWrap.style.cssText = "margin-top:32px;padding-top:20px;border-top:3px solid var(--sl-border);";
 
     const mirrorTitle = document.createElement("div");
     mirrorTitle.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:0 4px;";
@@ -1107,7 +1107,7 @@ class ShoppingListCard extends HTMLElement {
 
       const header = document.createElement("div");
       header.className = "sl-header";
-      const showCatLabels = this.config?.show_category_labels === true;
+      const showCatLabels = this.config?.show_category_labels !== false;
       const useBanner = this.config?.category_banner_mode === true;
       const contentStyle = useBanner ? "position:relative;z-index:2;" : "";
       const catIconSize = useBanner ? 22 : (showCatLabels ? 16 : 22);
