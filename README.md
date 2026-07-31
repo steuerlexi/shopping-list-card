@@ -116,7 +116,7 @@ title: "Einkaufen"
 | `list` | string | `"standard"` | List key (multi-list support; default list is `standard`) |
 | `color` | string | `"#43A047"` | Active-tile accent color (CSS color) |
 | `icon_map` | object | `{}` | Per-summary icon override, keyed by article name (filename or URL). Takes precedence over the catalog/mapping. |
-| `icon_base_url` | string | `/local/shopping-list-card/icons` | Base path for local SVG icons |
+| `icon_base_url` | string | `/local/shopping-list-card` | Base path for local SVG icons (items/ and categories/ subfolders) |
 | `category_icon_mode` | string | `"inline"` | Category icon source: `inline` (local SVG with built-in animated fallback), `fam`, `local`, `openmoji` |
 | `category_banner_mode` | boolean | `false` | Use full-width banner images for category headers |
 | `category_banner_base_url` | string | `/local/shopping-list-card/categories` | Base path for category banner PNGs |
@@ -140,20 +140,19 @@ icon_map:
 ## Icons (v2.1.0+)
 
 Starting with **v2.1.0** the card loads article and category icons as local SVG
-files from `/config/www/shopping-list-card/icons/`:
+files from `/config/www/shopping-list-card/`:
 
 ```
 /config/www/shopping-list-card/
-├── icons/
-│   ├── items/
-│   │   ├── apfel.svg
-│   │   ├── banane.svg
-│   │   └── mapping.json
-│   └── categories/
-│       ├── obst_gemuese.svg
-│       ├── brot_backwaren.svg
-│       └── animated/
-│           └── obst_gemuese.svg
+├── items/
+│   ├── apfel.svg
+│   ├── banane.svg
+│   └── mapping.json
+├── categories/
+│   ├── obst_gemuese.svg
+│   ├── brot_backwaren.svg
+│   └── animated/
+│       └── obst_gemuese.svg
 ```
 
 - Article icons are resolved in this order: `icon_map` → backend catalog icon

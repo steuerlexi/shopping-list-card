@@ -367,7 +367,7 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _getLocalIconBaseUrl() {
-    return this.config?.icon_base_url || "/local/shopping-list-card/icons";
+    return this.config?.icon_base_url || "/local/shopping-list-card";
   }
 
   _loadItemIconMapping() {

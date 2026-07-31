@@ -1,16 +1,14 @@
 # Shopping List Card — Lokale SVG-Icons (v2.1.0+)
 
-Ab **v2.1.0** lädt die Karte Artikel- und Kategorie-Icons als lokale SVG-Dateien von `/config/www/shopping-list-card/icons/`.
+Ab **v2.1.0** lädt die Karte Artikel- und Kategorie-Icons als lokale SVG-Dateien von `/config/www/shopping-list-card/`.
 
 ## Ordnerstruktur
 
 ```
 /config/www/shopping-list-card/
-├── icons/
-│   ├── items/           # Artikel-Icons (z. B. apple.svg, milk.svg)
-│   └── categories/      # Kategorie-Icons (z. B. obst_gemuese.svg, milch_eier.svg)
-│       └── animated/    # Optional: animierte Kategorie-Varianten
-└── categories/          # Banner-Hintergründe (*.png) – bleibt unverändert
+├── items/               # Artikel-Icons + mapping.json
+├── categories/          # Kategorie-Icons (*.svg) + Banner-Hintergründe (*.png)
+│   └── animated/        # Optional: animierte Kategorie-Varianten
 ```
 
 ## Dateiformat
@@ -24,12 +22,12 @@ Die Karte sucht zu jedem Artikel ein Icon in dieser Reihenfolge:
 
 1. `icon_map` in der Karten-Konfiguration (`type: custom:shopping-list-card`, z. B. `icon_map: {"Apfel": "apple.svg"}`)
 2. `items/icon` Attribut vom Backend (wenn du den Katalog darauf umstellst)
-3. `/local/shopping-list-card/icons/items/mapping.json` (empfohlen)
+3. `/local/shopping-list-card/items/mapping.json` (empfohlen)
 4. Fallback: `sonstiges.svg`
 
 ### mapping.json
 
-Beispiel (`/config/www/shopping-list-card/icons/items/mapping.json`):
+Beispiel (`/config/www/shopping-list-card/items/mapping.json`):
 
 ```json
 {
