@@ -34,7 +34,7 @@ server-side AppDaemon backend as the single source of truth.
   mutates the persistent list, auto-categorizes and de-duplicates, and publishes
   the full list back onto `sensor.einkaufsliste_backend`.
 - The **catalog** (`apps/artikel_katalog.json`) is the editable knowledge base:
-  categories, article aliases, and OpenMoji icons. Edit it to teach the backend
+  categories, article aliases, and icon filenames. Edit it to teach the backend
   new articles — no card edit, no HA restart needed (see
   [Katalog pflegen](#katalog-pflegen)).
 
@@ -42,7 +42,7 @@ server-side AppDaemon backend as the single source of truth.
 
 ## Features
 
-- **Tile grid view** — responsive tiles with OpenMoji color-SVG icons
+- **Tile grid view** — responsive tiles with local SVG icons (auto-fallback when a file is missing)
 - **Server-side auto-categorization** — Obst & Gemüse, Milchprodukte & Eier,
   Fleisch, Trockenwaren, Getränke, Haushalt & Hygiene, … (shared across all
   devices, persisted)
@@ -115,8 +115,13 @@ title: "Einkaufen"
 | `title` | string | `"Einkaufen"` | Card title |
 | `list` | string | `"standard"` | List key (multi-list support; default list is `standard`) |
 | `color` | string | `"#43A047"` | Active-tile accent color (CSS color) |
-| `icon_map` | object | `{}` | Per-summary icon override, keyed by article name (HEX code or URL). Takes precedence over the catalog icon. |
-| `openmoji_base_url` | string | `https://cdn.jsdelivr.net/npm/openmoji@17.0.0/color/svg` | Base URL for OpenMoji SVG icons |
+| `icon_map` | object | `{}` | Per-summary icon override, keyed by article name (filename or URL). Takes precedence over the catalog/mapping. |
+| `icon_base_url` | string | `/local/shopping-list-card/icons` | Base path for local SVG icons |
+| `category_icon_mode` | string | `"inline"` | Category icon source: `inline` (local SVG with built-in animated fallback), `fam`, `local`, `openmoji` |
+| `category_banner_mode` | boolean | `false` | Use full-width banner images for category headers |
+| `category_banner_base_url` | string | `/local/shopping-list-card/categories` | Base path for category banner PNGs |
+| `show_category_labels` | boolean | `true` | Show category names on headers |
+| `category_order` | array | supermarket aisle order | Override category display order |
 
 ### Example
 
@@ -125,9 +130,44 @@ type: custom:shopping-list-card
 entity: sensor.einkaufsliste_backend
 title: "Einkaufen"
 color: "#2E7D32"
+category_banner_mode: true
 icon_map:
-  "Spezialartikel": "1F31F"
+  "Spezialartikel": "spezial.svg"
 ```
+
+---
+
+## Icons (v2.1.0+)
+
+Starting with **v2.1.0** the card loads article and category icons as local SVG
+files from `/config/www/shopping-list-card/icons/`:
+
+```
+/config/www/shopping-list-card/
+├── icons/
+│   ├── items/
+│   │   ├── apfel.svg
+│   │   ├── banane.svg
+│   │   └── mapping.json
+│   └── categories/
+│       ├── obst_gemuese.svg
+│       ├── brot_backwaren.svg
+│       └── animated/
+│           └── obst_gemuese.svg
+```
+
+- Article icons are resolved in this order: `icon_map` → backend catalog icon
+  field (if it already is a filename/URL) → `items/mapping.json` → filename
+  guess from the summary.
+- Missing files fall back to `items/sonstiges.svg`.
+- Category icons: `categories/animated/{key}.svg` is tried first, then
+  `categories/{key}.svg`; if both are missing the card uses the built-in
+  animated SVG fallback.
+- Animated SVGs are embedded inline so CSS/SMIL animations run; static SVGs can
+  be simple files.
+- PNG/JPG article images are also supported, but SVG is recommended.
+
+See [`ICONS.md`](ICONS.md) for a quick-start mapping template.
 
 ---
 

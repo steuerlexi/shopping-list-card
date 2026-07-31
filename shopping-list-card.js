@@ -1,4 +1,4 @@
-// Shopping List Card v2.0.7 — AppDaemon backend edition (category banner images).
+// Shopping List Card v2.1.0 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -27,6 +27,8 @@ class ShoppingListCard extends HTMLElement {
     this._listId = "standard";
     this._color = "#43A047";
     this._legacyWarning = null;
+    this._itemIconMapping = {};
+    this._categoryIconCache = {};
   }
 
   setConfig(config) {
@@ -54,6 +56,7 @@ class ShoppingListCard extends HTMLElement {
     delete this.config.lists;
 
     this._initCaches();
+    this._loadItemIconMapping();
     if (this._hass) this._fetchAndRender();
   }
 
@@ -363,6 +366,69 @@ class ShoppingListCard extends HTMLElement {
     return h;
   }
 
+  _getLocalIconBaseUrl() {
+    return this.config?.icon_base_url || "/local/shopping-list-card/icons";
+  }
+
+  _loadItemIconMapping() {
+    if (this._itemIconMappingLoading) return;
+    this._itemIconMappingLoading = true;
+    const url = `${this._getLocalIconBaseUrl()}/items/mapping.json`;
+    fetch(url, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && typeof data === "object") {
+          this._itemIconMapping = data;
+          if (this._hass) this._fetchAndRender();
+        }
+      })
+      .catch(() => { /* mapping.json is optional */ });
+  }
+
+  _resolveItemIconFile(item) {
+    const summary = item?.summary || "";
+    const lower = String(summary).toLowerCase();
+    // 1. explicit config override
+    const cfg = this.config?.icon_map || {};
+    if (cfg[summary] || cfg[lower]) return cfg[summary] || cfg[lower];
+    // 2. backend icon field (treat as filename if it looks like one)
+    const backendIcon = item?.icon;
+    if (backendIcon && /\.(svg|png|jpg|jpeg)$/i.test(String(backendIcon))) return String(backendIcon);
+    // 3. mapping.json
+    if (this._itemIconMapping[summary]) return this._itemIconMapping[summary];
+    if (this._itemIconMapping[lower]) return this._itemIconMapping[lower];
+    // 4. exact filename guess from summary (e.g. "Erdbeeren" -> "erdbeeren.svg")
+    const guessed = lower.replace(/\s+/g, "_").replace(/[ä]/g, "ae").replace(/[ö]/g, "oe").replace(/[ü]/g, "ue").replace(/[ß]/g, "ss").replace(/[^a-z0-9_]/g, "") + ".svg";
+    return guessed;
+  }
+
+  _loadSvgInline(url, container, size) {
+    return fetch(url, { cache: "default" })
+      .then(r => r.ok ? r.text() : null)
+      .then(text => {
+        if (!text || !text.trim().toLowerCase().startsWith("<svg")) return false;
+        const tmp = document.createElement("div");
+        tmp.innerHTML = text.trim();
+        const svg = tmp.querySelector("svg");
+        if (!svg) return false;
+        // Explicit pixel size keeps the icon sharp even when the outer container
+        // has no intrinsic size (e.g. banner category icons).
+        if (size && size > 0) {
+          svg.style.width = size + "px";
+          svg.style.height = size + "px";
+        } else {
+          svg.style.width = "100%";
+          svg.style.height = "100%";
+        }
+        svg.style.display = "block";
+        svg.style.flexShrink = "0";
+        container.innerHTML = "";
+        container.appendChild(svg);
+        return true;
+      })
+      .catch(() => false);
+  }
+
   _shouldRender(oldHass, newHass) {
     const a = oldHass.states?.[this._entity];
     const b = newHass.states?.[this._entity];
@@ -436,17 +502,32 @@ class ShoppingListCard extends HTMLElement {
   _renderItemIcon(container, item, size) {
     const summary = item?.summary || "";
     const override = this.config.icon_map?.[summary] || this.config.icon_map?.[String(summary).toLowerCase()];
-    let iconValue = override || item?.icon;
-    if (!iconValue) iconValue = this._getItemIcon(summary);
-    if (!iconValue) iconValue = "1F6D2";
+    let iconValue = override;
+    if (!iconValue) {
+      const backendIcon = item?.icon;
+      if (/\.(svg|png|jpg|jpeg)$/i.test(String(backendIcon))) iconValue = backendIcon;
+    }
+    if (!iconValue) iconValue = this._resolveItemIconFile(item);
+    if (!iconValue || !/\.(svg|png|jpg|jpeg)$/i.test(String(iconValue))) iconValue = "sonstiges.svg";
+    const base = this._getLocalIconBaseUrl();
+    const url = iconValue.startsWith("http") || iconValue.startsWith("/") ? iconValue : `${base}/items/${iconValue}`;
+    const fallback = `${base}/items/sonstiges.svg`;
     container.innerHTML = "";
-    if (/^[a-z]+:/.test(String(iconValue))) {
-      const el = document.createElement("ha-icon");
-      el.setAttribute("icon", iconValue);
-      el.style.cssText = `display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;color:inherit;`;
-      container.appendChild(el);
+    if (/\.(svg)$/i.test(url)) {
+      // Inline SVG preferred: allows future CSS/SMIL animations and consistent scaling.
+      this._loadSvgInline(url, container, size).then(loaded => {
+        if (!loaded) this._loadSvgInline(fallback, container, size);
+      });
     } else {
-      container.appendChild(this._createOpenmojiImg(iconValue, size));
+      const img = document.createElement("img");
+      img.src = url;
+      img.style.width = size + "px";
+      img.style.height = size + "px";
+      img.style.flexShrink = "0";
+      img.style.objectFit = "contain";
+      img.alt = "";
+      img.onerror = () => { img.src = fallback; };
+      container.appendChild(img);
     }
   }
 
@@ -507,23 +588,27 @@ class ShoppingListCard extends HTMLElement {
     container.innerHTML = "";
     key = key || "sonstiges";
     if (mode === "inline") {
-      // Default: embedded animated SVG. Animations only work when the SVG is
-      // part of the DOM, not when referenced via img or ha-icon.
-      const svgHtml = this._categorySvgs?.[key] || this._categorySvgs?.sonstiges;
-      if (svgHtml) {
+      const base = this._getLocalIconBaseUrl();
+      const animatedUrl = `${base}/categories/animated/${key}.svg`;
+      const staticUrl = `${base}/categories/${key}.svg`;
+      const fallbackSvg = this._categorySvgs?.[key] || this._categorySvgs?.sonstiges;
+      // Try animated variant first, then static local SVG, then built-in fallback.
+      // Inline loading enables CSS/SMIL animations inside the SVG.
+      this._loadSvgInline(animatedUrl, container, size).then(loaded => {
+        if (loaded) return true;
+        return this._loadSvgInline(staticUrl, container, size);
+      }).then(loaded => {
+        if (loaded) return;
+        if (!fallbackSvg) return;
         const wrapper = document.createElement("div");
-        wrapper.innerHTML = svgHtml.trim();
-        const svg = wrapper.firstElementChild;
+        wrapper.innerHTML = fallbackSvg.trim();
+        const svg = wrapper.querySelector("svg");
         if (svg) {
           svg.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0;${options}`;
+          container.innerHTML = "";
           container.appendChild(svg);
-          return;
         }
-      }
-      // Fallback to OpenMoji if the inline SVG map is missing.
-      const img = this._createOpenmojiImg(this._getCategoryIcon(key), size);
-      if (options) img.style.cssText += options;
-      container.appendChild(img);
+      });
       return;
     }
     if (mode === "fam") {
