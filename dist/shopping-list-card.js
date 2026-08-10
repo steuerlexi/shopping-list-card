@@ -113,7 +113,7 @@ class ShoppingListCard extends HTMLElement {
       cheddar:"1F9C0", fleisch:"1F969", steak:"1F969", hähnchen:"1F357", pute:"1F357",
       ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"1F32D", bratwürstchen:"1F32D", salami:"1F32D",
       mettwurst:"1F32D", aufschnitt:"1F953", steak:"1F969", steaks:"1F969", rindersteak:"1F969", rindersteaks:"1F969", beefsteak:"1F969",
-      putensteak:"1F357", putensteaks:"1F357", schweinesteak:"1F969", schweinesteaks:"1F969", schweinskotelett:"1F969",
+      putensteak:"putensteak.svg", putensteaks:"putensteak.svg", schweinesteak:"schweinesteak.svg", schweinesteaks:"schweinesteak.svg", schweinskotelett:"schweinesteak.svg",
       schnitzel:"1F969", hackfleisch:"1F356", fisch:"1F41F", lachs:"1F41F",
       thunfisch:"1F41F", forelle:"1F41F", scholle:"1F41F", makrele:"1F41F", garnelen:"1F990",
       krabben:"1F990", tofu:"1F96C", "tk-gemüse":"2744", seitan:"1F969", vegan:"1F96C", vegetarisch:"1F96C",
