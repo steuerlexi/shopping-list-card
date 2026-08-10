@@ -128,7 +128,7 @@ class ShoppingListCard extends HTMLElement {
       fanta:"1F964", apfelschorle:"1F964", saft:"1F9C3", orangensaft:"1F9C3", kapseln:"2615",
       kakao:"2615", tiefkühl:"2744", tiefkühlpizza:"1F355", pizza:"1F355", frikassee:"1F963",
       fischstäbchen:"1F41F", pommes:"1F35F", eis:"1F366", eiskrem:"1F366",
-      toilettenpapier:"1F9FB", küchenrolle:"1F9FB", papier:"1F4C4", taschentuch:"1F9FB",
+      toilettenpapier:"1F9FB", küchenrolle:"papierhandtuch.svg", kuechenrolle:"papierhandtuch.svg", papier:"1F4C4", taschentuch:"1F9FB",
       waschmittel:"1F9FC", spülmittel:"1FAE7", spüli:"1FAE7", zahnpasta:"1FAE5",
       zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"1F9FC",
       deodorant:"1F9F4", rasierer:"1FA92", dusch:"1F6BF", bad:"1F6BF", weichspüler:"1F9F5",
@@ -416,7 +416,11 @@ class ShoppingListCard extends HTMLElement {
     // 3. mapping.json
     if (this._itemIconMapping[summary]) return this._itemIconMapping[summary];
     if (this._itemIconMapping[lower]) return this._itemIconMapping[lower];
-    // 4. exact filename guess from summary (e.g. "Erdbeeren" -> "erdbeeren.svg")
+    // 4. built-in icon map for local SVG filenames (overrides the automatic guess)
+    for (const [key, val] of this._iconMapEntries) {
+      if (lower.includes(key) && /\.(svg|png|jpg|jpeg)$/i.test(String(val))) return String(val);
+    }
+    // 5. exact filename guess from summary (e.g. "Erdbeeren" -> "erdbeeren.svg")
     const guessed = lower.replace(/\s+/g, "_").replace(/[ä]/g, "ae").replace(/[ö]/g, "oe").replace(/[ü]/g, "ue").replace(/[ß]/g, "ss").replace(/[^a-z0-9_]/g, "") + ".svg";
     return guessed;
   }
