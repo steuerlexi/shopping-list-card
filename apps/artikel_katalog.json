@@ -18,7 +18,7 @@
     {"name": "Bananen",    "aliases": [],                                            "category": "obst_gemuese",      "icon": "1F34C"},
     {"name": "Birne",        "aliases": ["Birnen"],                                  "category": "obst_gemuese",      "icon": "1F350"},
     {"name": "Kiwi",         "aliases": [],                                          "category": "obst_gemuese",      "icon": "1F95D"},
-    {"name": "Orange",       "aliases": ["Orangen", "Mandarine", "Mandarinen", "Clementine", "Grapefruit", "Pampelmuse"], "category": "obst_gemuese", "icon": "1F34A"},
+    {"name": "Orange",       "aliases": ["Orangen", "Clementine", "Grapefruit", "Pampelmuse"], "category": "obst_gemuese", "icon": "1F34A"},
     {"name": "Trauben",      "aliases": ["Traube", "Weintrauben"],                   "category": "obst_gemuese",      "icon": "1F347"},
     {"name": "Kirschen",     "aliases": ["Kirsche"],                                 "category": "obst_gemuese",      "icon": "1F352"},
     {"name": "Erdbeeren",    "aliases": ["Erdbeere", "Himbeeren", "Himbeere", "Johannisbeeren", "Preiselbeeren", "Stachelbeeren"], "category": "obst_gemuese", "icon": "1F353"},
@@ -57,7 +57,6 @@
 
     {"name": "Hähnchen",     "aliases": ["Hähnchenbrust", "Hähnchenkeule", "Pute", "Putenbrust", "Putenschnitzel", "Ente", "Schnitzel"], "category": "fleisch_fisch", "icon": "1F357"},
     {"name": "Hackfleisch",  "aliases": ["Rinderhack", "Rinderfilet", "Rinderroulade", "Leber", "Lunge", "Kalbfleisch"], "category": "fleisch_fisch", "icon": "1F969"},
-    {"name": "Wurst",        "aliases": ["Salami", "Mettwurst"],                      "category": "fleisch_fisch",     "icon": "1F354"},
     {"name": "Schinken",     "aliases": ["Speck", "Kassler"],                        "category": "fleisch_fisch",     "icon": "1F953"},
     {"name": "Fisch",        "aliases": ["Lachs", "Thunfisch", "Forelle", "Scholle", "Makrele", "Zander", "Rollmops", "Fischstäbchen"], "category": "fleisch_fisch", "icon": "1F41F"},
     {"name": "Garnelen",     "aliases": ["Krabben"],                                 "category": "fleisch_fisch",     "icon": "1F990"},
