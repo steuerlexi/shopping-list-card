@@ -1325,11 +1325,11 @@ class ShoppingListCard extends HTMLElement {
         banner.className = "sl-cat-banner";
         banner.src = this._getCategoryBannerUrl(cat);
         banner.alt = "";
-        banner.style.cssText = "animation:sl-cat-banner 18s ease-in-out infinite alternate;opacity:0.85;";
+        banner.style.cssText = "animation:sl-cat-banner 18s ease-in-out infinite alternate;opacity:0.55;filter:grayscale(25%);";
         banner.onerror = () => { banner.style.display = "none"; };
         header.appendChild(banner);
         const overlay = document.createElement("div");
-        overlay.style.cssText = "position:absolute;inset:0;background:linear-gradient(90deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.35) 100%);z-index:1;border-radius:12px;";
+        overlay.style.cssText = "position:absolute;inset:0;background:linear-gradient(90deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 60%, rgba(0,0,0,0.25) 100%);z-index:1;border-radius:12px;";
         header.appendChild(overlay);
       } else {
         header.style.cssText = "display:flex;align-items:center;gap:8px;padding:" + headerPadding + ";border-bottom:1px solid var(--sl-border);cursor:pointer;user-select:none;";
