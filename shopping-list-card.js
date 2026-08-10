@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.7 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.8 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -63,14 +63,14 @@ class ShoppingListCard extends HTMLElement {
   _initCaches() {
     if (this._cachesReady) return;
     this._autocompleteItems = [...new Set([
-      "Apfel","Bananen","Birne","Kiwi","Orange","Mandarine","Trauben","Weintrauben","Kirschen","Erdbeeren","Himbeeren",
+      "Apfel","Bananen","Birne","Kiwi","Orange","Mandarine","Weintrauben","Kirschen","Erdbeeren","Himbeeren",
       "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
       "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln",
       "Knoblauch","Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants",
       "Milch","Joghurt","Sahne","Butter","Käse","Schafskäse","Ofenkäse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen",
-      "Hackfleisch","Schnitzel","Wurst","Schinken","Aufschnitt","Steaks","Fisch","Lachs","Garnelen","Tofu","Bratwürstchen","Nudeln","Spaghetti",
+      "Hackfleisch","Schnitzel","Schinken","Aufschnitt","Steaks","Fisch","Lachs","Garnelen","Tofu","Bratwürstchen","Nudeln","Spaghetti",
       "Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig","Ketchup","Mayonnaise","Senf","Honig",
-      "Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Wein","Weißwein","Rotwein",
+      "Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Weißwein","Rotwein",
       "Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo","Duschgel","Seife","Zahnpasta","Waschmittel",
       "Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse","Mandeln","TK-Gemüse","Müllbeutel",
       "Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel","Heidelbeeren",
@@ -1469,8 +1469,14 @@ class ShoppingListCard extends HTMLElement {
     tile.dataset.status = item.status;
     tile.dataset.qty = String(item.quantity || 1);
     tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;border-radius:12px;background:" + (isDone ? "var(--sl-bg)" : color) + ";border:" + (isDone ? "2px solid var(--sl-border)" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:96px;position:relative;overflow:hidden;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
-    tile.addEventListener("mouseenter", () => { if (tile.dataset.status !== "completed") tile.style.background = "var(--sl-save)"; });
-    tile.addEventListener("mouseleave", () => { tile.style.background = tile.dataset.status === "completed" ? "var(--sl-bg)" : color; });
+    // v2.1.8: Vereinheitlichtes Hover-Modell (Opazität 0.8) für alle drei Kachel-Arten.
+    // Bisher war das Hover der aktiven Kacheln unsichtbar (var(--sl-save) == #43A047
+    // == eigene Kachelgrün) und das der erledigten durch den completed-Guard ganz
+    // deaktiviert — nur Ghost-Kacheln hellten auf. Jetzt dimmt Aktiv (1.0→0.8,
+    // "Press"-Feedback) und Erledigte hellen auf (0.55→0.8), analog zu den Ghosts.
+    // Hintergrund bleibt unverändert; nur opacity wird beim Hover berührt.
+    tile.addEventListener("mouseenter", () => { tile.style.opacity = "0.8"; });
+    tile.addEventListener("mouseleave", () => { tile.style.opacity = tile.dataset.status === "completed" ? "0.55" : "1"; });
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;";
