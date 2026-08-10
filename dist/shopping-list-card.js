@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.6 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.7 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -1562,20 +1562,25 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _renderGhostTile(text, catWrap) {
-    // v2.1.6: Ghost-Kacheln (Katalog-Artikel, die noch nicht auf der Liste stehen)
-    // erhalten dasselbe Chrome wie aktive _renderTile-Kacheln (vollerfarbener
-    // Hintergrund, 56px-Icon, weißes Overlay-Label unten, kein gestrichelter
-    // Rahmen), damit das Backlog einheitlich aussieht. Die `sl-ghost`-Klasse
-    // bleibt erhalten, damit die Refresh-Logik (`.sl-tile:not(.sl-ghost)`)
-    // Ghost-Kacheln weiterhin vom diff/Update echter Items ausnimmt.
-    const color = this._color;
+    // v2.1.7: Ghost-Kacheln (Katalog-Artikel, die noch nicht auf der Liste stehen)
+    // übernehmen exakt das Chrome der ERLEDIGTEN _renderTile-Kachel (neutraler
+    // Hintergrund var(--sl-bg), 2px-Rahmen, opacity 0.55, 56px-Icon, weißes
+    // Overlay-Label unten) — NICHT das der grünen Aktiv-Kachel. v2.1.6 hatte die
+    // Ghosts grün eingefärbt, was im Backlog fälschlich als "aktiver Listen-
+    // eintrag" las (z. B. Kirschen). Angleich an die erledigte Kachel (Avocado)
+    // harmonisiert das gesamte Backlog zu einem ruhigen "verfügbar"-Look, ohne
+    // grüne/aktive Kacheln. Die `sl-ghost`-Klasse bleibt erhalten, damit die
+    // Refresh-Logik (`.sl-tile:not(.sl-ghost)`) Ghost-Kacheln weiterhin vom
+    // diff/Update echter Items ausnimmt. Hover hellt dezent auf (0.55→0.8)
+    // statt den Hintergrund grün/var(--sl-save) zu setzen, damit die
+    // harmonisierte Optik beim Mouse-over erhalten bleibt.
     const tile = document.createElement("div");
     tile.className = "sl-tile sl-ghost";
     tile.dataset.summary = text.toLowerCase();
     tile.dataset.status = "ghost";
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;border-radius:12px;background:" + color + ";border:none;opacity:1;cursor:pointer;min-height:96px;position:relative;overflow:hidden;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
-    tile.addEventListener("mouseenter", () => { tile.style.background = "var(--sl-save)"; });
-    tile.addEventListener("mouseleave", () => { tile.style.background = color; });
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;border-radius:12px;background:var(--sl-bg);border:2px solid var(--sl-border);opacity:0.55;cursor:pointer;min-height:96px;position:relative;overflow:hidden;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
+    tile.addEventListener("mouseenter", () => { tile.style.opacity = "0.8"; });
+    tile.addEventListener("mouseleave", () => { tile.style.opacity = "0.55"; });
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;";
