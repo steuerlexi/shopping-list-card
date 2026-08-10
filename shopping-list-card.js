@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.10 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.11 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -29,6 +29,14 @@ class ShoppingListCard extends HTMLElement {
     this._legacyWarning = null;
     this._itemIconMapping = {};
     this._categoryIconCache = {};
+    // Performance caches: these are rebuilt per card instance, so a page
+    // refresh clears them. That keeps newly-added /local/ SVGs and mapping.json
+    // changes discoverable while avoiding repeated work during renders.
+    this._translitCache = new Map();
+    this._categoryCache = new Map();
+    this._svgTextCache = new Map();
+    this._svgInFlight = new Map();
+    this._autocompleteCatCache = new Map();
   }
 
   setConfig(config) {
@@ -335,6 +343,14 @@ class ShoppingListCard extends HTMLElement {
       </svg>`
     };
 
+    // Mirror section calls _getItemCategory for every autocomplete article on
+    // every full render. Pre-compute the categories once here after the lookup
+    // tables are built.
+    this._autocompleteCatCache = new Map();
+    for (const text of this._autocompleteItems) {
+      this._autocompleteCatCache.set(text, this._getItemCategory(text));
+    }
+
     this._cachesReady = true;
   }
 
@@ -405,43 +421,63 @@ class ShoppingListCard extends HTMLElement {
     return guessed;
   }
 
+  // Parse an SVG text string into a sized wrapper and inject it into container.
+  // Returns true on success. Kept separate from the fetch layer so both the
+  // in-memory SVG cache and in-flight request deduplication can reuse it.
+  _applySvgText(text, container, size) {
+    if (!text) return false;
+    // Flaticon SVGs often start with <?xml + generator comments; strip
+    // everything before the first <svg so innerHTML parses cleanly.
+    const idx = text.toLowerCase().indexOf("<svg");
+    if (idx < 0) return false;
+    const tmp = document.createElement("div");
+    tmp.innerHTML = text.slice(idx);
+    const svg = tmp.querySelector("svg");
+    if (!svg) return false;
+    // Force a uniform rendered size regardless of the SVG's own width/height
+    // attributes or internal styles. The wrapper guarantees the footprint,
+    // the SVG fills it with preserved aspect ratio.
+    const finalSize = (size && size > 0) ? size : 24;
+    svg.style.width = "100%";
+    svg.style.height = "100%";
+    svg.style.display = "block";
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    svg.style.flexShrink = "0";
+    const wrap = document.createElement("div");
+    wrap.style.cssText = `display:flex;align-items:center;justify-content:center;width:${finalSize}px;height:${finalSize}px;flex-shrink:0;`;
+    wrap.appendChild(svg);
+    container.innerHTML = "";
+    container.appendChild(wrap);
+    return true;
+  }
+
   _loadSvgInline(url, container, size) {
     // cache: "no-store" — HA stamps 404s for missing /local/ files with
     // max-age=2678400 (31 days). When icons are added later, a browser that
-    // cached the old 404 would keep replaying it and never see the new file,
-    // falling back to sonstiges.svg for everything. no-store forces a fresh
-    // fetch every render so newly-uploaded SVGs appear immediately. The ~116
-    // SVGs are tiny and served from the local HA host, so the per-render cost
-    // is negligible. (mapping.json already uses no-store for the same reason.)
-    return fetch(url, { cache: "no-store" })
-      .then(r => r.ok ? r.text() : null)
-      .then(text => {
-        if (!text) return false;
-        // Flaticon SVGs often start with <?xml + generator comments; strip
-        // everything before the first <svg so innerHTML parses cleanly.
-        const idx = text.toLowerCase().indexOf("<svg");
-        if (idx < 0) return false;
-        const tmp = document.createElement("div");
-        tmp.innerHTML = text.slice(idx);
-        const svg = tmp.querySelector("svg");
-        if (!svg) return false;
-        // Force a uniform rendered size regardless of the SVG's own width/height
-        // attributes or internal styles. The wrapper guarantees the footprint,
-        // the SVG fills it with preserved aspect ratio.
-        const finalSize = (size && size > 0) ? size : 24;
-        svg.style.width = "100%";
-        svg.style.height = "100%";
-        svg.style.display = "block";
-        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-        svg.style.flexShrink = "0";
-        const wrap = document.createElement("div");
-        wrap.style.cssText = `display:flex;align-items:center;justify-content:center;width:${finalSize}px;height:${finalSize}px;flex-shrink:0;`;
-        wrap.appendChild(svg);
-        container.innerHTML = "";
-        container.appendChild(wrap);
-        return true;
-      })
-      .catch(() => false);
+    // cached the old 404 would keep replaying it and never see the new file.
+    // We keep no-store on the wire but add a per-instance RAM cache for
+    // successful SVG texts and deduplicate in-flight requests so the same
+    // URL isn't fetched 20 times in parallel during a full render.
+    const cached = this._svgTextCache.get(url);
+    if (cached && cached.ok) {
+      return Promise.resolve(this._applySvgText(cached.text, container, size));
+    }
+    let flight = this._svgInFlight.get(url);
+    if (!flight) {
+      flight = fetch(url, { cache: "no-store" })
+        .then(r => r.ok ? r.text() : null)
+        .then(text => {
+          this._svgInFlight.delete(url);
+          if (text) this._svgTextCache.set(url, { ok: true, text });
+          return text;
+        })
+        .catch(() => {
+          this._svgInFlight.delete(url);
+          return null;
+        });
+      this._svgInFlight.set(url, flight);
+    }
+    return flight.then(text => this._applySvgText(text, container, size));
   }
 
   _shouldRender(oldHass, newHass) {
@@ -557,8 +593,12 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _translit(s) {
-    return String(s).toLowerCase()
+    const key = String(s);
+    if (this._translitCache.has(key)) return this._translitCache.get(key);
+    const out = key.toLowerCase()
       .replace(/[ä]/g, "ae").replace(/[ö]/g, "oe").replace(/[ü]/g, "ue").replace(/[ß]/g, "ss");
+    this._translitCache.set(key, out);
+    return out;
   }
 
   // Reduce a (already lowercased) keyword to a stem by transliterating umlauts
@@ -579,11 +619,13 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _getItemCategory(text) {
-    const t = String(text || "").toLowerCase();
+    const key = String(text || "").toLowerCase();
+    if (this._categoryCache.has(key)) return this._categoryCache.get(key);
     // Pass 1: exact-keyword substring (unchanged). Catches exact words and
     // compounds that contain a full keyword verbatim ("Tomatenmark" <- "tomate").
-    for (const [key, catKey] of this._catLookupEntries) {
-      if (t.includes(key)) return catKey;
+    let result = "sonstiges";
+    for (const [k, catKey] of this._catLookupEntries) {
+      if (key.includes(k)) { result = catKey; break; }
     }
     // Pass 2: stem/substring match on the transliterated input. Catches
     // compounds that drop an inflection letter ("Erdbeerjoghurt" matches stem
@@ -591,11 +633,14 @@ class ShoppingListCard extends HTMLElement {
     // matches stem "kaes" from keyword "käse"). Longest stems first to prefer
     // the most specific category. Pass 1 takes priority, so stems only decide
     // words the exact pass missed.
-    const n = this._translit(t);
-    for (const [stem, catKey] of this._stemCatEntries) {
-      if (n.includes(stem)) return catKey;
+    if (result === "sonstiges") {
+      const n = this._translit(key);
+      for (const [stem, catKey] of this._stemCatEntries) {
+        if (n.includes(stem)) { result = catKey; break; }
+      }
     }
-    return "sonstiges";
+    this._categoryCache.set(key, result);
+    return result;
   }
 
   _itemCategoryKey(item) {
@@ -1217,7 +1262,9 @@ class ShoppingListCard extends HTMLElement {
 
     const availByCat = {};
     for (const text of allAvail) {
-      const cat = this._getItemCategory(text);
+      // Use the pre-computed autocomplete category cache; fall back to the
+      // live lookup for completed extras that aren't in the autocomplete list.
+      const cat = this._autocompleteCatCache.get(text) || this._getItemCategory(text);
       if (!availByCat[cat]) availByCat[cat] = [];
       availByCat[cat].push(text);
     }

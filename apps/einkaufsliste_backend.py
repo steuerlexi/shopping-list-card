@@ -69,6 +69,11 @@ FALLBACK_ICON = "1F6D2"  # OpenMoji shopping cart — used for unknown articles
 
 class EinkaufslisteBackend(hass.Hass):
 
+    # Class-level caches for pure string normalization. Safe across reloads
+    # because the output depends only on the input string.
+    _norm_cache = {}
+    _singularize_cache = {}
+
     # ------------------------------------------------------------------ init
 
     def initialize(self):
@@ -82,6 +87,9 @@ class EinkaufslisteBackend(hass.Hass):
         self._items = []
         self._catalog = {"categories": CATEGORIES_FALLBACK, "artikel": [], "version": "fallback"}
         self._catalog_version = "fallback"
+        # Per-instance cache for catalog lookups; invalidated when the catalog is
+        # reloaded so edits to artikel_katalog.json take effect immediately.
+        self._catalog_entry_cache = {}
 
         self._load_catalog()
         self._load_list()
@@ -194,6 +202,9 @@ class EinkaufslisteBackend(hass.Hass):
             self.log("Catalog load failed (%s); using fallback" % e, level="WARNING")
             self._catalog = {"categories": CATEGORIES_FALLBACK, "artikel": [], "version": "fallback"}
             self._catalog_version = "fallback"
+        # Catalog content changed: drop cached lookups so a reload or restart
+        # picks up edits to artikel_katalog.json immediately.
+        self._catalog_entry_cache = {}
 
     # ------------------------------------------------------------- cataloging
 
@@ -203,9 +214,14 @@ class EinkaufslisteBackend(hass.Hass):
     def _norm(cls, s):
         if not s:
             return ""
-        s = s.lower().translate(cls._NORMALIZE_MAP)
-        s = re.sub(r"[^a-z0-9]+", " ", s)
-        return s.strip()
+        key = str(s)
+        cache = cls._norm_cache
+        if key in cache:
+            return cache[key]
+        n = key.lower().translate(cls._NORMALIZE_MAP)
+        n = re.sub(r"[^a-z0-9]+", " ", n).strip()
+        cache[key] = n
+        return n
 
     @classmethod
     def _singularize(cls, s):
@@ -215,13 +231,18 @@ class EinkaufslisteBackend(hass.Hass):
         rather than "banane" (n). "banane" -> "banan" (e). Both collapse to
         the same key, so singular/plural duplicates merge.
         """
-        n = cls._norm(s)
+        original = cls._norm(s)
+        cache = cls._singularize_cache
+        if original in cache:
+            return cache[original]
+        n = original
         for suf in ("en", "n", "er", "e", "s"):
             # require a stem of >=3 chars after stripping so short words like
             # "eis" (-> "ei") don't collapse into "ei" and merge with eggs.
             if n.endswith(suf) and len(n) - len(suf) >= 3:
                 n = n[: -len(suf)]
                 break
+        cache[original] = n
         return n
 
     def _catalog_entry_for(self, summary):
@@ -229,10 +250,14 @@ class EinkaufslisteBackend(hass.Hass):
         if not summary:
             return None
         target = self._norm(summary)
+        cache = self._catalog_entry_cache
+        if target in cache:
+            return cache[target]
         for art in self._catalog.get("artikel", []):
             names = [art.get("name", "")] + list(art.get("aliases", []))
             for nm in names:
                 if self._norm(nm) == target:
+                    cache[target] = art
                     return art
         # fuzzy: target contains a catalog name or vice-versa. Guard against
         # short words (e.g. "ei" matching "speise"/"reis"/"seife") by requiring
@@ -243,7 +268,9 @@ class EinkaufslisteBackend(hass.Hass):
                 cn = self._norm(nm)
                 if (len(cn) >= 4 and len(target) >= 4
                         and (cn in target or target in cn)):
+                    cache[target] = art
                     return art
+        cache[target] = None
         return None
 
     def _category_name(self, cat_id):
