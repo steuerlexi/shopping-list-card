@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.5 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.6 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -1562,25 +1562,35 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _renderGhostTile(text, catWrap) {
+    // v2.1.6: Ghost-Kacheln (Katalog-Artikel, die noch nicht auf der Liste stehen)
+    // erhalten dasselbe Chrome wie aktive _renderTile-Kacheln (vollerfarbener
+    // Hintergrund, 56px-Icon, weißes Overlay-Label unten, kein gestrichelter
+    // Rahmen), damit das Backlog einheitlich aussieht. Die `sl-ghost`-Klasse
+    // bleibt erhalten, damit die Refresh-Logik (`.sl-tile:not(.sl-ghost)`)
+    // Ghost-Kacheln weiterhin vom diff/Update echter Items ausnimmt.
     const color = this._color;
     const tile = document.createElement("div");
     tile.className = "sl-tile sl-ghost";
     tile.dataset.summary = text.toLowerCase();
     tile.dataset.status = "ghost";
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px 6px;border-radius:12px;background:var(--sl-bg);border:2px dashed var(--sl-border);opacity:0.65;cursor:pointer;min-height:72px;position:relative;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
-    tile.addEventListener("mouseenter", () => { tile.style.background = "var(--sl-hover)"; tile.style.borderColor = color; tile.style.opacity = "0.9"; });
-    tile.addEventListener("mouseleave", () => { tile.style.background = "var(--sl-bg)"; tile.style.borderColor = "var(--sl-border)"; tile.style.opacity = "0.65"; });
+    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;border-radius:12px;background:" + color + ";border:none;opacity:1;cursor:pointer;min-height:96px;position:relative;overflow:hidden;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
+    tile.addEventListener("mouseenter", () => { tile.style.background = "var(--sl-save)"; });
+    tile.addEventListener("mouseleave", () => { tile.style.background = color; });
 
     const iconWrap = document.createElement("div");
-    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;";
-    this._renderItemIcon(iconWrap, { summary: text, icon: null }, 36);
+    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;";
+    this._renderItemIcon(iconWrap, { summary: text, icon: null }, 56);
     tile.appendChild(iconWrap);
 
+    const labelOverlay = document.createElement("div");
+    labelOverlay.className = "sl-label-overlay";
+    labelOverlay.style.cssText = "position:absolute;left:0;right:0;bottom:0;padding:4px 6px;background:linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);z-index:2;";
     const label = document.createElement("div");
     label.className = "sl-label";
-    label.style.cssText = "font-size:10px;font-weight:500;text-align:center;color:var(--sl-text-muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;";
+    label.style.cssText = "font-size:10px;font-weight:600;text-align:center;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;text-shadow:0 1px 2px rgba(0,0,0,0.5);";
     label.textContent = text;
-    tile.appendChild(label);
+    labelOverlay.appendChild(label);
+    tile.appendChild(labelOverlay);
 
     tile.addEventListener("click", () => this._addItem(text));
     if (catWrap) this._tileIndex.push({ tile, cat: catWrap, summary: text.toLowerCase() });
