@@ -1517,9 +1517,9 @@ class ShoppingListCard extends HTMLElement {
       .sl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px;padding:12px;}
       @media (max-width:400px){.sl-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;padding:8px;}}
       @media (max-width:320px){.sl-grid{grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;}}
-      .sl-banner-header{position:relative;overflow:hidden;display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;cursor:pointer;user-select:none;aspect-ratio:6/1;min-height:48px;max-height:92px;}
-      @media (max-width:600px){.sl-banner-header{aspect-ratio:5/1;min-height:44px;}}
-      @media (max-width:420px){.sl-banner-header{aspect-ratio:4.5/1;min-height:40px;}}
+      .sl-banner-header{position:relative;overflow:hidden;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:12px;cursor:pointer;user-select:none;aspect-ratio:8/1;min-height:36px;max-height:68px;}
+      @media (max-width:600px){.sl-banner-header{aspect-ratio:7/1;min-height:32px;}}
+      @media (max-width:420px){.sl-banner-header{aspect-ratio:6/1;min-height:30px;}}
       .sl-cat-banner{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0;}
       @keyframes sl-cat-banner{0%{transform:scale(1) translate(0,0);}100%{transform:scale(1.05) translate(-1%,-0.5%);}}
     `;
