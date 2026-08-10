@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.11 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.22 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -76,7 +76,7 @@ class ShoppingListCard extends HTMLElement {
       "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln","Knoblauch",
       "Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants","Milch",
       "Joghurt","Sahne","Butter","Käse","Schafskäse","Ofenkäse","Quark","Frischkäse","Mozzarella","Eier",
-      "Hähnchen","Hackfleisch","Schnitzel","Schinken","Aufschnitt","Rindersteak","Putensteak","Schweinesteak","Steaks","Fisch","Lachs","Garnelen","Tofu",
+      "Hähnchen","Hackfleisch","Schnitzel","Schinken","Aufschnitt","Rindersteak","Putensteak","Schweinesteak","Fisch","Lachs","Garnelen","Tofu",
       "Bratwürstchen","Nudeln","Spaghetti","Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig",
       "Ketchup","Mayonnaise","Senf","Honig","Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser",
       "Saft","Cola","Bier","Weißwein","Rotwein","Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo",
@@ -110,7 +110,7 @@ class ShoppingListCard extends HTMLElement {
       schmand:"1F95B", schlagsahne:"1F95B", butter:"1F9C8", käse:"1F9C0", quark:"1FAD9",
       frischkäse:"1F9C0", mozzarella:"1F9C0", brie:"1F9C0", gouda:"1F9C0", emmentaler:"1F9C0", ofenkäse:"1F9C0",
       parmesan:"1F9C0", "cream cheese":"1F9C0", mascarpone:"1F9C0", burrata:"1F9C0",
-      cheddar:"1F9C0", fleisch:"1F969", steak:"1F969", hähnchen:"1F357", pute:"1F357",
+      cheddar:"1F9C0", fleisch:"1F969", hähnchen:"1F357", pute:"1F357",
       ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"1F32D", bratwürstchen:"1F32D", salami:"1F32D",
       mettwurst:"1F32D", aufschnitt:"1F953", steak:"1F969", steaks:"1F969", rindersteak:"1F969", rindersteaks:"1F969", beefsteak:"1F969",
       putensteak:"putensteak.svg", putensteaks:"putensteak.svg", schweinesteak:"schweinesteak.svg", schweinesteaks:"schweinesteak.svg", schweinskotelett:"schweinesteak.svg",
