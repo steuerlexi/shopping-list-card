@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.9 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.10 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -191,6 +191,28 @@ class ShoppingListCard extends HTMLElement {
       }
     }
     this._catLookupEntries = [...this._catLookup.entries()].sort((a, b) => b[0].length - a[0].length);
+
+    // Stem-based category index for the fuzzy pass 2 in _getItemCategory.
+    // Catches compounds that drop an inflection letter ("Erdbeerjoghurt" ->
+    // stem "erdbeer", since the keyword is "erdbeere") and ASCII-typed umlaut
+    // words ("Kaese" -> transliterated "kaese" matches stem "kaes" from
+    // "kaese"). Anchors cover generic stems that are NOT standalone keywords
+    // (kohl -> Grünkohl, beer -> Walbeere, suppe -> Hühnersuppe). Anchors are
+    // inserted first and win on collision.
+    const anchorStems = [
+      ["kohl", "obst_gemuese"],
+      ["beer", "obst_gemuese"],
+      ["suppe", "trockenwaren"]
+    ];
+    const stemMap = new Map();
+    for (const [stem, catKey] of anchorStems) stemMap.set(stem, catKey);
+    for (const [key, catKey] of this._catLookupEntries) {
+      const stem = this._stem(key);
+      // keep stems of length >= 4; the length guard inside _stem already
+      // prevented over-short results, but double-check to be safe.
+      if (stem && stem.length >= 4 && !stemMap.has(stem)) stemMap.set(stem, catKey);
+    }
+    this._stemCatEntries = [...stemMap.entries()].sort((a, b) => b[0].length - a[0].length);
 
     // Reverse map: backend publishes category NAME (e.g. "Obst & Gemüse"),
     // but grouping/icon/color need the canonical key. Fall back to summary scan.
@@ -504,12 +526,22 @@ class ShoppingListCard extends HTMLElement {
     if (!iconValue || !/\.(svg|png|jpg|jpeg)$/i.test(String(iconValue))) iconValue = "sonstiges.svg";
     const base = this._getLocalIconBaseUrl();
     const url = iconValue.startsWith("http") || iconValue.startsWith("/") ? iconValue : `${base}/items/${iconValue}`;
-    const fallback = `${base}/items/sonstiges.svg`;
+    // D — category-default icon fallback. When an unknown article's guessed
+    // item SVG 404s, fall back to the recognized category's static Flaticon SVG
+    // (flat, visually consistent with the item tiles) before the final cart.
+    // _itemCategoryKey uses the backend category if present, else the (now
+    // stem-enhanced) _getItemCategory, so newly-added articles land on a
+    // fitting category icon instead of the generic sonstiges cart.
+    const catFallback = `${base}/categories/${this._itemCategoryKey(item) || "sonstiges"}.svg`;
+    const finalFallback = `${base}/items/sonstiges.svg`;
     container.innerHTML = "";
     if (/\.(svg)$/i.test(url)) {
       // Inline SVG preferred: allows future CSS/SMIL animations and consistent scaling.
       this._loadSvgInline(url, container, size).then(loaded => {
-        if (!loaded) this._loadSvgInline(fallback, container, size);
+        if (loaded) return;
+        this._loadSvgInline(catFallback, container, size).then(c2 => {
+          if (!c2) this._loadSvgInline(finalFallback, container, size);
+        });
       });
     } else {
       const img = document.createElement("img");
@@ -519,15 +551,49 @@ class ShoppingListCard extends HTMLElement {
       img.style.flexShrink = "0";
       img.style.objectFit = "contain";
       img.alt = "";
-      img.onerror = () => { img.src = fallback; };
+      img.onerror = () => { img.src = finalFallback; };
       container.appendChild(img);
     }
   }
 
+  _translit(s) {
+    return String(s).toLowerCase()
+      .replace(/[ä]/g, "ae").replace(/[ö]/g, "oe").replace(/[ü]/g, "ue").replace(/[ß]/g, "ss");
+  }
+
+  // Reduce a (already lowercased) keyword to a stem by transliterating umlauts
+  // and stripping ONE trailing inflection suffix (-en, -es, -er, -e, -s, -n),
+  // but only if the resulting stem is at least 4 chars long. The length guard
+  // prevents dangerous short stems like "ei" (from "eier") or "te" (from
+  // "tee") that would match far too broadly.
+  _stem(w) {
+    let s = this._translit(w);
+    const suffixes = ["en", "es", "er", "e", "s", "n"];
+    for (const suf of suffixes) {
+      if (s.length - suf.length >= 4 && s.endsWith(suf)) {
+        s = s.slice(0, -suf.length);
+        break;
+      }
+    }
+    return s;
+  }
+
   _getItemCategory(text) {
-    const t = text.toLowerCase();
+    const t = String(text || "").toLowerCase();
+    // Pass 1: exact-keyword substring (unchanged). Catches exact words and
+    // compounds that contain a full keyword verbatim ("Tomatenmark" <- "tomate").
     for (const [key, catKey] of this._catLookupEntries) {
       if (t.includes(key)) return catKey;
+    }
+    // Pass 2: stem/substring match on the transliterated input. Catches
+    // compounds that drop an inflection letter ("Erdbeerjoghurt" matches stem
+    // "erdbeer" from keyword "erdbeere") and ASCII-typed umlaut words ("Kaese"
+    // matches stem "kaes" from keyword "käse"). Longest stems first to prefer
+    // the most specific category. Pass 1 takes priority, so stems only decide
+    // words the exact pass missed.
+    const n = this._translit(t);
+    for (const [stem, catKey] of this._stemCatEntries) {
+      if (n.includes(stem)) return catKey;
     }
     return "sonstiges";
   }
