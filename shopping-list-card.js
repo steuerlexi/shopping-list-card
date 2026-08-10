@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.23 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.24 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -111,7 +111,7 @@ class ShoppingListCard extends HTMLElement {
       frischkäse:"1F9C0", mozzarella:"1F9C0", brie:"1F9C0", gouda:"1F9C0", emmentaler:"1F9C0", ofenkäse:"1F9C0",
       parmesan:"1F9C0", "cream cheese":"1F9C0", mascarpone:"1F9C0", burrata:"1F9C0",
       cheddar:"1F9C0", fleisch:"1F969", hähnchen:"1F357", pute:"1F357",
-      ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"1F32D", bratwürstchen:"1F32D", salami:"1F32D",
+      ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"bratwurst.svg", bratwürstchen:"bratwurst.svg", salami:"1F32D",
       mettwurst:"1F32D", aufschnitt:"1F953", steak:"steak.svg", steaks:"steak.svg", rindersteak:"steak.svg", rindersteaks:"steak.svg", beefsteak:"steak.svg",
       putensteak:"putensteak.svg", putensteaks:"putensteak.svg", schweinesteak:"schweinesteak.svg", schweinesteaks:"schweinesteak.svg", schweinskotelett:"schweinesteak.svg",
       schnitzel:"1F969", hackfleisch:"1F356", fisch:"1F41F", lachs:"1F41F",
