@@ -56,6 +56,9 @@
     {"name": "Milchreis",    "aliases": [],                                          "category": "milch_eier",        "icon": "1F35A"},
 
     {"name": "Hähnchen",     "aliases": ["Hähnchenbrust", "Hähnchenkeule", "Pute", "Putenbrust", "Putenschnitzel", "Ente", "Schnitzel"], "category": "fleisch_fisch", "icon": "1F357"},
+    {"name": "Rindersteak",  "aliases": ["Rindersteaks", "Beefsteak"],                "category": "fleisch_fisch",     "icon": "1F969"},
+    {"name": "Putensteak",   "aliases": ["Putensteaks"],                              "category": "fleisch_fisch",     "icon": "1F357"},
+    {"name": "Schweinesteak","aliases": ["Schweinesteaks", "Schweinskotelett"],        "category": "fleisch_fisch",     "icon": "1F969"},
     {"name": "Hackfleisch",  "aliases": ["Rinderhack", "Rinderfilet", "Rinderroulade", "Leber", "Lunge", "Kalbfleisch"], "category": "fleisch_fisch", "icon": "1F969"},
     {"name": "Schinken",     "aliases": ["Speck", "Kassler"],                        "category": "fleisch_fisch",     "icon": "1F953"},
     {"name": "Fisch",        "aliases": ["Lachs", "Thunfisch", "Forelle", "Scholle", "Makrele", "Zander", "Rollmops", "Fischstäbchen"], "category": "fleisch_fisch", "icon": "1F41F"},
