@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.4 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.5 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -403,7 +403,14 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _loadSvgInline(url, container, size) {
-    return fetch(url, { cache: "default" })
+    // cache: "no-store" — HA stamps 404s for missing /local/ files with
+    // max-age=2678400 (31 days). When icons are added later, a browser that
+    // cached the old 404 would keep replaying it and never see the new file,
+    // falling back to sonstiges.svg for everything. no-store forces a fresh
+    // fetch every render so newly-uploaded SVGs appear immediately. The ~116
+    // SVGs are tiny and served from the local HA host, so the per-render cost
+    // is negligible. (mapping.json already uses no-store for the same reason.)
+    return fetch(url, { cache: "no-store" })
       .then(r => r.ok ? r.text() : null)
       .then(text => {
         if (!text) return false;
