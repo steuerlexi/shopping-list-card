@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.3 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.4 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -406,9 +406,13 @@ class ShoppingListCard extends HTMLElement {
     return fetch(url, { cache: "default" })
       .then(r => r.ok ? r.text() : null)
       .then(text => {
-        if (!text || !text.trim().toLowerCase().startsWith("<svg")) return false;
+        if (!text) return false;
+        // Flaticon SVGs often start with <?xml + generator comments; strip
+        // everything before the first <svg so innerHTML parses cleanly.
+        const idx = text.toLowerCase().indexOf("<svg");
+        if (idx < 0) return false;
         const tmp = document.createElement("div");
-        tmp.innerHTML = text.trim();
+        tmp.innerHTML = text.slice(idx);
         const svg = tmp.querySelector("svg");
         if (!svg) return false;
         // Force a uniform rendered size regardless of the SVG's own width/height
