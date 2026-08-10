@@ -1276,23 +1276,24 @@ class ShoppingListCard extends HTMLElement {
 
     const color = this._color;
     const mirrorWrap = document.createElement("div");
-    mirrorWrap.style.cssText = "margin-top:48px;padding-top:8px;";
+    mirrorWrap.style.cssText = "margin-top:56px;padding-top:8px;";
 
     // Visual separator between active list and backlog/mirror section.
     const separator = document.createElement("div");
-    separator.style.cssText = "display:flex;align-items:center;gap:12px;margin-bottom:20px;";
-    const lineBase = "flex:1;height:2px;background:linear-gradient(90deg, transparent 0%, var(--sl-border) 20%, var(--sl-border) 80%, transparent 100%);border-radius:1px;";
+    separator.style.cssText = "display:flex;align-items:center;gap:14px;margin-bottom:20px;";
+    const lineBase = "flex:1;height:3px;background:linear-gradient(90deg, transparent 0%, var(--sl-border) 15%, var(--sl-border) 85%, transparent 100%);border-radius:2px;box-shadow:0 1px 0 rgba(127,127,127,0.15);";
     const leftLine = document.createElement("div");
     leftLine.style.cssText = lineBase;
     const rightLine = document.createElement("div");
     rightLine.style.cssText = lineBase;
     const sepLabel = document.createElement("div");
-    sepLabel.style.cssText = "display:flex;align-items:center;gap:6px;flex-shrink:0;padding:4px 10px;border-radius:999px;background:var(--sl-bg);border:1px solid var(--sl-border);color:var(--sl-text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;";
+    sepLabel.style.cssText = "display:flex;align-items:center;gap:8px;flex-shrink:0;padding:7px 16px;border-radius:999px;background:var(--sl-bg);border:2px solid var(--sl-border);color:var(--sl-text-muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;box-shadow:0 1px 2px rgba(0,0,0,0.05);";
     const sepIcon = document.createElement("ha-icon");
     sepIcon.setAttribute("icon", "mdi:archive-outline");
-    sepIcon.style.cssText = "width:14px;height:14px;color:var(--sl-text-muted);";
+    sepIcon.style.cssText = "display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;min-width:16px;min-height:16px;color:var(--sl-text-muted);";
     sepLabel.appendChild(sepIcon);
     const sepText = document.createElement("span");
+    sepText.style.cssText = "white-space:nowrap;";
     sepText.textContent = "Verfügbar (" + allAvail.length + ")";
     sepLabel.appendChild(sepText);
     separator.appendChild(leftLine);
