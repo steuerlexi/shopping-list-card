@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.8 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.9 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -65,39 +65,20 @@ class ShoppingListCard extends HTMLElement {
     this._autocompleteItems = [...new Set([
       "Apfel","Bananen","Birne","Kiwi","Orange","Mandarine","Weintrauben","Kirschen","Erdbeeren","Himbeeren",
       "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
-      "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln",
-      "Knoblauch","Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants",
-      "Milch","Joghurt","Sahne","Butter","Käse","Schafskäse","Ofenkäse","Quark","Frischkäse","Mozzarella","Eier","Hähnchen",
-      "Hackfleisch","Schnitzel","Schinken","Aufschnitt","Steaks","Fisch","Lachs","Garnelen","Tofu","Bratwürstchen","Nudeln","Spaghetti",
-      "Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig","Ketchup","Mayonnaise","Senf","Honig",
-      "Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser","Saft","Cola","Bier","Weißwein","Rotwein",
-      "Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo","Duschgel","Seife","Zahnpasta","Waschmittel",
-      "Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse","Mandeln","TK-Gemüse","Müllbeutel",
-      "Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel","Heidelbeeren",
-      "Holunder","Johannisbeeren","Klementine","Mandarine","Nektarine","Pampelmuse","Preiselbeeren",
-      "Rote Bete","Stachelbeeren","Wassermelone","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat","Dill",
-      "Kürbis","Lauch","Mais","Mangold","Pak Choi","Pastinake","Peperoni","Petersilie","Porree",
-      "Rettich","Rosenkohl","Rotkohl","Rucola","Spargel","Süßkartoffel","Topinambur","Weißkohl",
-      "Buttermilch","Camembert","Creme fraiche","Feta","Griechischer Joghurt","Kefir","Kochkäse",
-      "Leerdammer","Milchreis","Ricotta","Calamari","Ente","Hähnchenbrust","Hähnchenkeule",
-      "Kalbfleisch","Kassler","Lamm","Leber","Lunge","Putenbrust","Putenschnitzel","Rinderfilet",
-      "Rinderhack","Rinderroulade","Rollmops","Sülze","Zander","Backpulver","Balsamico","Brühe",
-      "Gnocchi","Haferflocken","Kartoffelstärke","Kichererbsen","Kidneybohnen","Linsen","Oliven",
-      "Paniermehl","Pesto","Polenta","Rosinen","Sahnesteif","Sojasoße","Sonnenblumenöl","Soßenbinder",
-      "Vanillezucker","Worcestersauce","Apfelschorle","Energydrink","Granatapfelsaft","Hugo",
-      "Mineralwasser","Prosecco","Radler","Sekt","Smoothie","Sprudelwasser","Traubensaft",
-      "Aufbackbrötchen","Blätterteig","Gemüsepfanne","Knödel","Kuchen","Lasagne","Maultaschen",
-      "Nuggets","Paniertes","Piroggen","Ravioli","Reibekuchen","Schaschlik","Tortellini","Waffeln",
-      "Wraps","Abwaschbürste","Alufolie","Backpapier","Bonbons","Deo","Desinfektionsmittel",
-      "Drano","Feuchttücher","Frischhaltefolie","Geschirrtabs","Glühbirne","Haargel","Handcreme",
-      "Handschuhe","Hustensaft","Insektenspray","Kerze","Kerzen","Klorollen","Kondome","Körperöl",
-      "Küchentücher","Leinöl","Lotion","Lufterfrischer","Make-up","Mascara","Medikamente",
-      "Milchreiniger","Mülltüten","Mundspülung","Nasenspray","Orangenschalen","Papiertüten",
-      "Parfüm","Pfefferkörner","Pflaster","Rasierklingen","Rasierschaum","Räucherstäbchen",
-      "Salbei","Sekt","Spülbürste","Staubsaugerbeutel","Streichhölzer","Taschentücher",
-      "Teebaumöl","Toilettenreiniger","Zahnbürste","Zitronenmelisse","Zündhölzer","Bubblegum",
-      "Gummibärchen","Kaugummi","Knuspermüsli","Lebkuchen","Lutscher","Marshmallow","Nougat",
-      "Pralinen","Salzstangen","Studentenfutter","Trockenobst","Weinbrand"
+      "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln","Knoblauch",
+      "Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants","Milch",
+      "Joghurt","Sahne","Butter","Käse","Schafskäse","Ofenkäse","Quark","Frischkäse","Mozzarella","Eier",
+      "Hähnchen","Hackfleisch","Schnitzel","Schinken","Aufschnitt","Steaks","Fisch","Lachs","Garnelen","Tofu",
+      "Bratwürstchen","Nudeln","Spaghetti","Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig",
+      "Ketchup","Mayonnaise","Senf","Honig","Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser",
+      "Saft","Cola","Bier","Weißwein","Rotwein","Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo",
+      "Duschgel","Seife","Zahnpasta","Waschmittel","Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse",
+      "Mandeln","TK-Gemüse","Müllbeutel","Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel",
+      "Heidelbeeren","Johannisbeeren","Nektarine","Pampelmuse","Preiselbeeren","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat","Dill",
+      "Kürbis","Lauch","Mais","Mangold","Pak Choi","Pastinake","Peperoni","Petersilie","Buttermilch","Griechischer Joghurt",
+      "Kefir","Ricotta","Hähnchenbrust","Hähnchenkeule","Lamm","Linsen","Sekt","Gemüsepfanne","Kuchen","Ravioli",
+      "Tortellini","Waffeln","Wraps","Abwaschbürste","Alufolie","Deo","Frischhaltefolie","Küchentücher","Lebkuchen","Kaviar",
+      "Biobeutel"
     ])];
 
     this._iconMap = {
