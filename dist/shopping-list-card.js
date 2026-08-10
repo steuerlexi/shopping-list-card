@@ -1324,7 +1324,11 @@ class ShoppingListCard extends HTMLElement {
     mirrorTitle.appendChild(clearAll);
     mirrorWrap.appendChild(mirrorTitle);
 
-    const mirrorOrder = [...new Set([...order, ...Object.keys(availByCat)])];
+    // Build backlog category order, then force "sonstiges" to the very end.
+    const mirrorDynamic = Object.keys(availByCat).filter(k => k !== "sonstiges");
+    const mirrorOrder = [...new Set([...order.filter(k => k !== "sonstiges"), ...mirrorDynamic])];
+    if (availByCat["sonstiges"]) mirrorOrder.push("sonstiges");
+
     for (const cat of mirrorOrder) {
       if (!availByCat[cat]) continue;
       const fullCatTexts = availByCat[cat];
@@ -1565,8 +1569,12 @@ class ShoppingListCard extends HTMLElement {
       "obst_gemuese","brot_backwaren","trockenwaren","milch_eier","fleisch_fisch",
       "getraenke","tiefkuehlprodukte","haushalt_hygiene"
     ]).filter(k => k !== "sonstiges");
-    const order = [...new Set([...defaultOrder, ...Object.keys(groups).filter(k => k !== "sonstiges"),
-      ...(groups["sonstiges"]?.length > 0 ? ["sonstiges"] : [])])].filter(k => groups[k]?.length > 0);
+    // Build the active category order, then force "sonstiges" to the very end
+    // regardless of config order or dynamic category discovery.
+    const dynamicOrder = Object.keys(groups).filter(k => k !== "sonstiges");
+    const hasSonstiges = groups["sonstiges"]?.length > 0;
+    const order = [...new Set([...defaultOrder, ...dynamicOrder])].filter(k => groups[k]?.length > 0);
+    if (hasSonstiges) order.push("sonstiges");
 
     const activeOrder = order.filter(k => groups[k].some(i => i.status === "needs_action"));
 
