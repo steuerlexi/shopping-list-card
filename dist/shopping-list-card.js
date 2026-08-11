@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.24 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.25 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -37,6 +37,16 @@ class ShoppingListCard extends HTMLElement {
     this._svgTextCache = new Map();
     this._svgInFlight = new Map();
     this._autocompleteCatCache = new Map();
+    // Per-instance negative cache for the animated category SVG probe in
+    // _renderCategoryIcon. Animated variants under categories/animated/ almost
+    // never exist, so every category header would otherwise pay a 404 round-trip
+    // on every full render before falling back to the static SVG. Once a key's
+    // animated URL has 404'd (or returned unparseable content) we skip the probe
+    // for that key on subsequent renders. Cleared on page refresh (per-instance),
+    // so a newly added animated SVG is discovered the next time the card loads.
+    // Scoped to the animated probe only — item-icon fetches stay uncached-on-404
+    // so newly uploaded /items/*.svg files show up without a forced refresh.
+    this._noAnimatedSvg = new Set();
   }
 
   setConfig(config) {
@@ -699,15 +709,23 @@ class ShoppingListCard extends HTMLElement {
     key = key || "sonstiges";
     if (mode === "inline") {
       const base = this._getLocalIconBaseUrl();
-      const animatedUrl = `${base}/categories/animated/${key}.svg`;
       const staticUrl = `${base}/categories/${key}.svg`;
       const fallbackSvg = this._categorySvgs?.[key] || this._categorySvgs?.sonstiges;
-      // Try animated variant first, then static local SVG, then built-in fallback.
-      // Inline loading enables CSS/SMIL animations inside the SVG.
-      this._loadSvgInline(animatedUrl, container, size).then(loaded => {
-        if (loaded) return true;
-        return this._loadSvgInline(staticUrl, container, size);
-      }).then(loaded => {
+      // Try animated variant first (if not already known-missing for this key),
+      // then static local SVG, then built-in fallback. Inline loading enables
+      // CSS/SMIL animations inside the SVG. The per-key _noAnimatedSvg set skips
+      // the animated probe once it has 404'd, so later renders go straight to
+      // the static URL instead of replaying the 404 for every category header.
+      const tryAnimated = !this._noAnimatedSvg.has(key);
+      const animatedUrl = tryAnimated ? `${base}/categories/animated/${key}.svg` : null;
+      const probe = animatedUrl
+        ? this._loadSvgInline(animatedUrl, container, size).then(loaded => {
+            if (loaded) return true;
+            this._noAnimatedSvg.add(key);
+            return this._loadSvgInline(staticUrl, container, size);
+          })
+        : this._loadSvgInline(staticUrl, container, size);
+      probe.then(loaded => {
         if (loaded) return;
         if (!fallbackSvg) return;
         const tmp = document.createElement("div");
@@ -1255,14 +1273,19 @@ class ShoppingListCard extends HTMLElement {
     for (const item of items) itemBySummary.set(item.summary.toLowerCase(), item);
     const allArticles = this._getAutocompleteItems();
     const allAvail = [];
+    const allAvailSet = new Set(); // parallel membership set → O(1) dedup below
     const acLower = new Set(allArticles.map(a => a.toLowerCase()));
     for (const text of allArticles) {
       if (onListSummaries.has(text.toLowerCase())) continue;
       allAvail.push(text);
+      allAvailSet.add(text);
     }
     const completedExtras = items.filter(i => i.status === "completed" && !acLower.has(i.summary.toLowerCase()) && !onListSummaries.has(i.summary.toLowerCase()));
     for (const ci of completedExtras) {
-      if (!allAvail.includes(ci.summary)) allAvail.push(ci.summary);
+      if (!allAvailSet.has(ci.summary)) {
+        allAvail.push(ci.summary);
+        allAvailSet.add(ci.summary);
+      }
     }
     if (allAvail.length === 0) return null;
 
