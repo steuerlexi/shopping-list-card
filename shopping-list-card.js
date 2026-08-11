@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.25 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.1.26 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -23,6 +23,8 @@ class ShoppingListCard extends HTMLElement {
     this._prevItems = null;
     this._fingerprint = 0;
     this._lastFingerprint = -1;
+    this._renderPending = false;
+    this._renderRaf = null;
     this._entity = null;
     this._listId = "standard";
     this._color = "#43A047";
@@ -375,8 +377,23 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _fetchAndRender() {
-    this._loadItems();
-    this._render();
+    // Coalesce multiple triggers into one parse+render per animation frame.
+    // Both subscribe_entities and state_changed fire for the same backend
+    // change; without this, each separately runs _loadItems (re-parse of the
+    // items attribute + fingerprint hash over all items). The fingerprint guard
+    // in _render() avoids the double *render*, but not the double parse/hash.
+    // requestAnimationFrame collapses all triggers that land within the same
+    // frame into a single pass and aligns the DOM update with the browser paint.
+    // It also naturally skips work while the tab is hidden; the next visible
+    // frame renders with the latest this._hass.
+    if (this._renderPending) return;
+    this._renderPending = true;
+    this._renderRaf = requestAnimationFrame(() => {
+      this._renderPending = false;
+      this._renderRaf = null;
+      this._loadItems();
+      this._render();
+    });
   }
 
   _loadItems() {
@@ -930,6 +947,11 @@ class ShoppingListCard extends HTMLElement {
     if (this._hass) this._subscribeChanges();
   }
   disconnectedCallback() {
+    if (this._renderRaf != null) {
+      cancelAnimationFrame(this._renderRaf);
+      this._renderRaf = null;
+      this._renderPending = false;
+    }
     if (this._unsub) {
       Promise.resolve(this._unsub).then(fn => fn());
       this._unsub = null;
