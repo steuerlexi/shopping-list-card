@@ -1,4 +1,4 @@
-// Shopping List Card v2.1.26 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.2.0 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -44,11 +44,31 @@ class ShoppingListCard extends HTMLElement {
     // never exist, so every category header would otherwise pay a 404 round-trip
     // on every full render before falling back to the static SVG. Once a key's
     // animated URL has 404'd (or returned unparseable content) we skip the probe
-    // for that key on subsequent renders. Cleared on page refresh (per-instance),
-    // so a newly added animated SVG is discovered the next time the card loads.
-    // Scoped to the animated probe only — item-icon fetches stay uncached-on-404
-    // so newly uploaded /items/*.svg files show up without a forced refresh.
+    // for that key on subsequent renders. The set is persisted in localStorage
+    // (see _loadNoAnimatedSvg) so a 404 learned in one session is remembered
+    // across reloads, and config `probe_animated: false` disables the probe
+    // entirely. Scoped to the animated probe only — item-icon fetches stay
+    // uncached-on-404 so newly uploaded /items/*.svg files show up without a
+    // forced refresh.
     this._noAnimatedSvg = new Set();
+
+    // Persistent icon cache (survives page reloads / app restarts). Stores
+    // ONLY successful (HTTP 200) SVG texts keyed by URL in localStorage, so
+    // repeated page loads don't re-fetch ~120 icons over the network — the
+    // main cause of slow icon loading on mobile. 404s are deliberately NOT
+    // stored, so newly uploaded /items/*.svg files are still discovered: the
+    // no-store rationale in _loadSvgInline only applied to the *browser HTTP*
+    // cache; a JS-side cache that stores only 200s sidesteps it. Falls back
+    // gracefully to the per-instance RAM cache when localStorage is
+    // unavailable (private mode, quota exceeded, non-secure context).
+    // Whole-blob TTL (7 days): if the cache is older it is rebuilt from the
+    // network once, picking up replaced SVG files without a manual version
+    // bump. Bump _PCACHE_VERSION when the icon set changes wholesale.
+    this._pCacheVersion = 1;
+    this._pCacheTtlMs = 7 * 24 * 3600 * 1000;
+    this._persistentSvg = null;     // Map<url, text>, lazy-loaded
+    this._persistTimer = null;
+    this._loadNoAnimatedSvg();
   }
 
   setConfig(config) {
@@ -484,6 +504,75 @@ class ShoppingListCard extends HTMLElement {
     return true;
   }
 
+  // --- Persistent icon cache (localStorage) -----------------------------
+  // Survives page reloads / app restarts so icons appear instantly on mobile.
+  // Stores ONLY HTTP 200 SVG texts (never 404s → new icons still discovered).
+  // 7-day whole-blob TTL; falls back to RAM-only if localStorage is blocked.
+
+  _loadNoAnimatedSvg() {
+    // Restore the per-key "no animated variant" set from localStorage so 404s
+    // learned in a previous session are not re-probed on every full render.
+    try {
+      const raw = localStorage.getItem("slc_no_animated_v1");
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) for (const k of arr) this._noAnimatedSvg.add(k);
+      }
+    } catch (e) { /* private mode / quota — degrade to RAM-only */ }
+  }
+
+  _markNoAnimatedSvg(key) {
+    if (this._noAnimatedSvg.has(key)) return;
+    this._noAnimatedSvg.add(key);
+    try {
+      localStorage.setItem("slc_no_animated_v1", JSON.stringify([...this._noAnimatedSvg]));
+    } catch (e) { /* ignore — RAM set still works for this session */ }
+  }
+
+  _getPersistentCache() {
+    if (this._persistentSvg !== null) return this._persistentSvg;
+    const map = new Map();
+    try {
+      const raw = localStorage.getItem(`slc_svg_cache_v${this._pCacheVersion}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.entries && typeof parsed.entries === "object") {
+          const age = (Date.now() || 0) - (parsed.ts || 0);
+          if (age <= this._pCacheTtlMs) {
+            for (const [url, text] of Object.entries(parsed.entries)) {
+              if (typeof text === "string") map.set(url, text);
+            }
+          }
+        }
+      }
+    } catch (e) { /* corrupt JSON / unavailable — start empty */ }
+    this._persistentSvg = map;
+    return map;
+  }
+
+  _persistSvgCacheSoon() {
+    // Coalesce writes: many icons arrive in a burst during a full render; we
+    // debounce to a single localStorage write 1s after the last addition.
+    if (this._persistTimer) return;
+    this._persistTimer = setTimeout(() => {
+      this._persistTimer = null;
+      const map = this._persistentSvg;
+      if (!map) return;
+      try {
+        const entries = {};
+        let n = 0;
+        for (const [url, text] of map) {
+          entries[url] = text;
+          if (++n >= 3000) break; // guard against unbounded growth / quota
+        }
+        localStorage.setItem(
+          `slc_svg_cache_v${this._pCacheVersion}`,
+          JSON.stringify({ ts: Date.now() || 0, entries })
+        );
+      } catch (e) { /* quota exceeded — keep RAM cache, skip persisting */ }
+    }, 1000);
+  }
+
   _loadSvgInline(url, container, size) {
     // cache: "no-store" — HA stamps 404s for missing /local/ files with
     // max-age=2678400 (31 days). When icons are added later, a browser that
@@ -491,17 +580,41 @@ class ShoppingListCard extends HTMLElement {
     // We keep no-store on the wire but add a per-instance RAM cache for
     // successful SVG texts and deduplicate in-flight requests so the same
     // URL isn't fetched 20 times in parallel during a full render.
+    //
+    // Layer 2: a persistent localStorage cache (see _getPersistentCache)
+    // survives reloads so ~120 icons don't re-fetch over the network every
+    // page load — the main cause of slow icon loading on mobile. Only HTTP
+    // 200 texts are stored, so newly uploaded /items/*.svg files are still
+    // discovered (the no-store rationale applied to the *browser HTTP* cache,
+    // not a JS-side cache that stores only 200s).
+
+    // 1. per-instance RAM cache
     const cached = this._svgTextCache.get(url);
     if (cached && cached.ok) {
       return Promise.resolve(this._applySvgText(cached.text, container, size));
     }
+    // 2. persistent cache (survives reloads) — lazy-loaded once
+    const persistent = this._getPersistentCache();
+    const pText = persistent.get(url);
+    if (pText) {
+      this._svgTextCache.set(url, { ok: true, text: pText });
+      return Promise.resolve(this._applySvgText(pText, container, size));
+    }
+    // 3. network, deduplicated in-flight
     let flight = this._svgInFlight.get(url);
     if (!flight) {
       flight = fetch(url, { cache: "no-store" })
         .then(r => r.ok ? r.text() : null)
         .then(text => {
           this._svgInFlight.delete(url);
-          if (text) this._svgTextCache.set(url, { ok: true, text });
+          if (text) {
+            this._svgTextCache.set(url, { ok: true, text });
+            const pc = this._getPersistentCache();
+            if (!pc.has(url)) {
+              pc.set(url, text);
+              this._persistSvgCacheSoon();
+            }
+          }
           return text;
         })
         .catch(() => {
@@ -730,15 +843,20 @@ class ShoppingListCard extends HTMLElement {
       const fallbackSvg = this._categorySvgs?.[key] || this._categorySvgs?.sonstiges;
       // Try animated variant first (if not already known-missing for this key),
       // then static local SVG, then built-in fallback. Inline loading enables
-      // CSS/SMIL animations inside the SVG. The per-key _noAnimatedSvg set skips
-      // the animated probe once it has 404'd, so later renders go straight to
-      // the static URL instead of replaying the 404 for every category header.
-      const tryAnimated = !this._noAnimatedSvg.has(key);
+      // CSS/SMIL animations inside the SVG. The per-key _noAnimatedSvg set
+      // (persisted in localStorage) skips the animated probe once it has 404'd,
+      // so later renders — and later sessions — go straight to the static URL
+      // instead of replaying the 404 for every category header. The
+      // `probe_animated: false` config flag disables the probe entirely, which
+      // is useful once you know no animated variants exist and want to skip
+      // the initial 404 round-trips altogether.
+      const probeAnimated = this.config?.probe_animated !== false;
+      const tryAnimated = probeAnimated && !this._noAnimatedSvg.has(key);
       const animatedUrl = tryAnimated ? `${base}/categories/animated/${key}.svg` : null;
       const probe = animatedUrl
         ? this._loadSvgInline(animatedUrl, container, size).then(loaded => {
             if (loaded) return true;
-            this._noAnimatedSvg.add(key);
+            this._markNoAnimatedSvg(key);
             return this._loadSvgInline(staticUrl, container, size);
           })
         : this._loadSvgInline(staticUrl, container, size);
