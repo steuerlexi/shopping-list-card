@@ -1,4 +1,4 @@
-// Shopping List Card v2.2.0 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.3.0 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -69,6 +69,31 @@ class ShoppingListCard extends HTMLElement {
     this._persistentSvg = null;     // Map<url, text>, lazy-loaded
     this._persistTimer = null;
     this._loadNoAnimatedSvg();
+
+    // Short-TTL negative cache for item-icon 404s. When an /items/*.svg URL
+    // 404s, remember it for _negCacheTtlMs so subsequent renders skip the
+    // network round-trip and go straight to the category/final fallback.
+    // Per-instance (RAM) only — a page refresh clears it, so newly uploaded
+    // /items/*.svg files are discovered at most _negCacheTtlMs later. Scoped
+    // to the item-icon path (the animated category probe keeps its own
+    // _noAnimatedSvg set). 5 min trades a little new-icon latency for
+    // eliminating the repeated 404 chain on every full rebuild.
+    this._itemIconMissing = new Map(); // url -> expiry timestamp
+    this._negCacheTtlMs = 5 * 60 * 1000;
+
+    // Lazy ghost-tile icon loading. Offscreen backlog tiles defer their SVG
+    // fetch+parse until they scroll near the viewport (IntersectionObserver),
+    // so a full backlog render (~116 tiles) doesn't fire ~116 synchronous
+    // SVG loads in one frame. First-screen tiles load immediately (checked
+    // via getBoundingClientRect) to avoid a one-frame observer delay.
+    this._lazyIconIO = null;
+    this._lazyIconCallbacks = null; // WeakMap<container, run>
+
+    // Background warmup of the persistent SVG cache. After the first render,
+    // pre-fetch any catalog SVGs not yet cached into localStorage in idle
+    // time, so the NEXT render (and offscreen tiles as they scroll in) hit
+    // only the cache. Idempotent: only fetches URLs not already cached.
+    this._warmupScheduled = false;
   }
 
   setConfig(config) {
@@ -448,6 +473,10 @@ class ShoppingListCard extends HTMLElement {
         if (data && typeof data === "object") {
           this._itemIconMapping = data;
           if (this._hass) this._fetchAndRender();
+          // mapping.json may refine item filenames → re-warmup the cache with
+          // the now-correct URLs (idempotent: only fetches uncached URLs).
+          this._warmupScheduled = false;
+          this._scheduleWarmup();
         }
       })
       .catch(() => { /* mapping.json is optional */ });
@@ -573,6 +602,52 @@ class ShoppingListCard extends HTMLElement {
     }, 1000);
   }
 
+  // Network stage shared by _loadSvgInline (render) and _warmupSvgCache
+  // (background pre-fetch). Handles: RAM cache hit, persistent cache hit,
+  // short-TTL negative cache (skip recently-404'd URLs), in-flight dedup,
+  // and storing HTTP 200 texts into both RAM and persistent caches. Does
+  // NOT touch the DOM — the caller applies the result (or ignores it for
+  // warmup). Returns a Promise that resolves with no value once the URL's
+  // status is settled (check _svgTextCache afterwards).
+  _prefetchSvg(url) {
+    if (this._svgTextCache.has(url)) return Promise.resolve();
+    const pc = this._getPersistentCache();
+    if (pc.has(url)) return Promise.resolve();
+    // Short-TTL negative cache: skip re-fetching URLs that recently 404'd,
+    // so repeated renders don't replay the 404→fallback chain for unknown
+    // item SVGs. Cleared on reload, so new uploads are discovered at most
+    // _negCacheTtlMs later.
+    const miss = this._itemIconMissing.get(url);
+    if (miss && (Date.now() || 0) < miss) return Promise.resolve();
+    let flight = this._svgInFlight.get(url);
+    if (flight) return flight.then(() => {});
+    flight = fetch(url, { cache: "no-store" })
+      .then(r => {
+        if (!r.ok) {
+          this._itemIconMissing.set(url, (Date.now() || 0) + this._negCacheTtlMs);
+          return null;
+        }
+        return r.text();
+      })
+      .then(text => {
+        this._svgInFlight.delete(url);
+        if (text) {
+          this._svgTextCache.set(url, { ok: true, text });
+          if (!pc.has(url)) {
+            pc.set(url, text);
+            this._persistSvgCacheSoon();
+          }
+        }
+        return text;
+      })
+      .catch(() => {
+        this._svgInFlight.delete(url);
+        return null;
+      });
+    this._svgInFlight.set(url, flight);
+    return flight.then(() => {});
+  }
+
   _loadSvgInline(url, container, size) {
     // cache: "no-store" — HA stamps 404s for missing /local/ files with
     // max-age=2678400 (31 days). When icons are added later, a browser that
@@ -586,7 +661,8 @@ class ShoppingListCard extends HTMLElement {
     // page load — the main cause of slow icon loading on mobile. Only HTTP
     // 200 texts are stored, so newly uploaded /items/*.svg files are still
     // discovered (the no-store rationale applied to the *browser HTTP* cache,
-    // not a JS-side cache that stores only 200s).
+    // not a JS-side cache that stores only 200s). The network stage is shared
+    // with the background warmup via _prefetchSvg (negative cache + dedup).
 
     // 1. per-instance RAM cache
     const cached = this._svgTextCache.get(url);
@@ -600,30 +676,102 @@ class ShoppingListCard extends HTMLElement {
       this._svgTextCache.set(url, { ok: true, text: pText });
       return Promise.resolve(this._applySvgText(pText, container, size));
     }
-    // 3. network, deduplicated in-flight
-    let flight = this._svgInFlight.get(url);
-    if (!flight) {
-      flight = fetch(url, { cache: "no-store" })
-        .then(r => r.ok ? r.text() : null)
-        .then(text => {
-          this._svgInFlight.delete(url);
-          if (text) {
-            this._svgTextCache.set(url, { ok: true, text });
-            const pc = this._getPersistentCache();
-            if (!pc.has(url)) {
-              pc.set(url, text);
-              this._persistSvgCacheSoon();
+    // 3. network (deduped + negative-cached) via _prefetchSvg, then apply
+    return this._prefetchSvg(url).then(() => {
+      const c = this._svgTextCache.get(url);
+      return this._applySvgText(c && c.ok ? c.text : null, container, size);
+    });
+  }
+
+  // --- Lazy ghost-tile icon loading (IntersectionObserver) ---------------
+  // Offscreen backlog tiles defer their SVG fetch+parse until they scroll
+  // near the viewport, so a full backlog render (~116 tiles) doesn't fire
+  // ~116 synchronous SVG loads in one frame. Tiles already in the viewport
+  // load immediately (no one-frame observer delay).
+
+  _isNearViewport(el) {
+    const r = el.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    return r.top < vh + 300 && r.bottom > -300;
+  }
+
+  _observeForLazy(container, run) {
+    if (!this._lazyIconIO) {
+      this._lazyIconIO = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            const fn = this._lazyIconCallbacks && this._lazyIconCallbacks.get(e.target);
+            if (fn) {
+              this._lazyIconCallbacks.delete(e.target);
+              fn();
             }
+            this._lazyIconIO.unobserve(e.target);
           }
-          return text;
-        })
-        .catch(() => {
-          this._svgInFlight.delete(url);
-          return null;
-        });
-      this._svgInFlight.set(url, flight);
+        }
+      }, { rootMargin: "300px" });
+      this._lazyIconCallbacks = new WeakMap();
     }
-    return flight.then(text => this._applySvgText(text, container, size));
+    this._lazyIconCallbacks.set(container, run);
+    this._lazyIconIO.observe(container);
+  }
+
+  // --- Background warmup of the persistent SVG cache ---------------------
+  // After the first render, pre-fetch any catalog/category SVGs not yet
+  // cached into localStorage in idle time, so the next render and scrolling
+  // offscreen tiles hit only the cache. Idempotent: only fetches uncached
+  // URLs. Runs in idle callbacks with small batches to avoid competing with
+  // the live render for the browser's connection budget.
+
+  _scheduleWarmup() {
+    if (this._warmupScheduled) return;
+    this._warmupScheduled = true;
+    const run = () => {
+      this._warmupScheduled = false;
+      this._warmupSvgCache();
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 4000 });
+    else setTimeout(run, 1500);
+  }
+
+  _warmupSvgCache() {
+    if (!this._cachesReady) return;
+    const base = this._getLocalIconBaseUrl();
+    const urls = new Set();
+    // Item icons for every catalog article (uses mapping.json if loaded,
+    // else the transliteration guess — both resolve to a real file path).
+    for (const text of this._autocompleteItems) {
+      const file = this._resolveItemIconFile({ summary: text, icon: null });
+      const f = String(file || "");
+      if (/\.svg$/i.test(f)) {
+        const u = f.startsWith("http") || f.startsWith("/") ? f : `${base}/items/${f}`;
+        urls.add(u);
+      }
+    }
+    // Static category SVGs + final fallback.
+    for (const key of Object.keys(this._categorySvgs || {})) {
+      urls.add(`${base}/categories/${key}.svg`);
+    }
+    urls.add(`${base}/items/sonstiges.svg`);
+    // Only fetch what isn't already cached (RAM, persistent, or in-flight).
+    const pc = this._getPersistentCache();
+    const pending = [...urls].filter(
+      u => !pc.has(u) && !this._svgTextCache.has(u) && !this._svgInFlight.has(u)
+    );
+    if (pending.length === 0) return;
+    // Stagger in small batches via idle callbacks so we don't saturate the
+    // 6-connections-per-origin limit while the card may still be rendering.
+    let i = 0;
+    const step = () => {
+      const batch = pending.slice(i, i + 6);
+      i += 6;
+      Promise.all(batch.map(u => this._prefetchSvg(u))).then(() => {
+        if (i < pending.length) {
+          if (typeof requestIdleCallback === "function") requestIdleCallback(step, { timeout: 4000 });
+          else setTimeout(step, 200);
+        }
+      });
+    };
+    step();
   }
 
   _shouldRender(oldHass, newHass) {
@@ -696,7 +844,7 @@ class ShoppingListCard extends HTMLElement {
     return "1F6D2";
   }
 
-  _renderItemIcon(container, item, size) {
+  _renderItemIcon(container, item, size, lazy = false) {
     const summary = item?.summary || "";
     const override = this.config.icon_map?.[summary] || this.config.icon_map?.[String(summary).toLowerCase()];
     let iconValue = override;
@@ -719,12 +867,23 @@ class ShoppingListCard extends HTMLElement {
     container.innerHTML = "";
     if (/\.(svg)$/i.test(url)) {
       // Inline SVG preferred: allows future CSS/SMIL animations and consistent scaling.
-      this._loadSvgInline(url, container, size).then(loaded => {
-        if (loaded) return;
-        this._loadSvgInline(catFallback, container, size).then(c2 => {
-          if (!c2) this._loadSvgInline(finalFallback, container, size);
+      const run = () => {
+        this._loadSvgInline(url, container, size).then(loaded => {
+          if (loaded) return;
+          this._loadSvgInline(catFallback, container, size).then(c2 => {
+            if (!c2) this._loadSvgInline(finalFallback, container, size);
+          });
         });
-      });
+      };
+      // Lazy: defer the whole icon-load sequence until the tile scrolls near
+      // the viewport, so offscreen backlog tiles don't fire SVG fetches during
+      // the render pass. First-screen tiles load immediately to avoid the
+      // one-frame IntersectionObserver delay.
+      if (lazy && !this._isNearViewport(container)) {
+        this._observeForLazy(container, run);
+      } else {
+        run();
+      }
     } else {
       const img = document.createElement("img");
       img.src = url;
@@ -1077,6 +1236,14 @@ class ShoppingListCard extends HTMLElement {
     if (this._unsubEvents) {
       Promise.resolve(this._unsubEvents).then(fn => fn());
       this._unsubEvents = null;
+    }
+    // Release the lazy-icon IntersectionObserver; observed nodes are dropped
+    // by replaceChildren during teardown anyway, but disconnecting avoids a
+    // dangling observer if the card is removed without a final render.
+    if (this._lazyIconIO) {
+      this._lazyIconIO.disconnect();
+      this._lazyIconIO = null;
+      this._lazyIconCallbacks = null;
     }
   }
 
@@ -1751,6 +1918,10 @@ class ShoppingListCard extends HTMLElement {
 
     this.replaceChildren(card);
     this._pruneStaleModal();
+    // Kick off a background warmup of the persistent SVG cache in idle time
+    // so the next render and scrolling offscreen tiles hit only the cache.
+    // Guarded so repeated renders schedule at most one pending warmup.
+    this._scheduleWarmup();
   }
 
   _renderTile(item, catWrap) {
@@ -1884,7 +2055,10 @@ class ShoppingListCard extends HTMLElement {
 
     const iconWrap = document.createElement("div");
     iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;";
-    this._renderItemIcon(iconWrap, { summary: text, icon: null }, 56);
+    // lazy=true: backlog tiles defer their SVG fetch until near the viewport,
+    // so a full backlog render (~116 tiles) doesn't fire ~116 synchronous
+    // SVG loads in one frame. First-screen tiles still load immediately.
+    this._renderItemIcon(iconWrap, { summary: text, icon: null }, 56, true);
     tile.appendChild(iconWrap);
 
     const labelOverlay = document.createElement("div");
