@@ -1,4 +1,4 @@
-// Shopping List Card v2.3.0 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.3.1 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -94,6 +94,8 @@ class ShoppingListCard extends HTMLElement {
     // time, so the NEXT render (and offscreen tiles as they scroll in) hit
     // only the cache. Idempotent: only fetches URLs not already cached.
     this._warmupScheduled = false;
+    this._warmupIdleHandle = null;   // requestIdleCallback/setTimeout handle for _scheduleWarmup
+    this._warmupStepHandle = null;   // handle for the staggered _warmupSvgCache step loop
   }
 
   setConfig(config) {
@@ -618,13 +620,18 @@ class ShoppingListCard extends HTMLElement {
     // item SVGs. Cleared on reload, so new uploads are discovered at most
     // _negCacheTtlMs later.
     const miss = this._itemIconMissing.get(url);
-    if (miss && (Date.now() || 0) < miss) return Promise.resolve();
+    if (miss && Date.now() < miss) return Promise.resolve();
     let flight = this._svgInFlight.get(url);
     if (flight) return flight.then(() => {});
     flight = fetch(url, { cache: "no-store" })
       .then(r => {
         if (!r.ok) {
-          this._itemIconMissing.set(url, (Date.now() || 0) + this._negCacheTtlMs);
+          // Scope the negative cache to per-article item icons only — never
+          // cache a missing category SVG or the sonstiges.svg final fallback,
+          // so a transiently-missing fallback still retries on each render.
+          if (/\/items\//.test(url) && !/\/sonstiges\.svg$/.test(url)) {
+            this._itemIconMissing.set(url, Date.now() + this._negCacheTtlMs);
+          }
           return null;
         }
         return r.text();
@@ -687,13 +694,7 @@ class ShoppingListCard extends HTMLElement {
   // Offscreen backlog tiles defer their SVG fetch+parse until they scroll
   // near the viewport, so a full backlog render (~116 tiles) doesn't fire
   // ~116 synchronous SVG loads in one frame. Tiles already in the viewport
-  // load immediately (no one-frame observer delay).
-
-  _isNearViewport(el) {
-    const r = el.getBoundingClientRect();
-    const vh = window.innerHeight || document.documentElement.clientHeight;
-    return r.top < vh + 300 && r.bottom > -300;
-  }
+  // are reported by the observer on its first callback (~1 frame).
 
   _observeForLazy(container, run) {
     if (!this._lazyIconIO) {
@@ -726,25 +727,40 @@ class ShoppingListCard extends HTMLElement {
     if (this._warmupScheduled) return;
     this._warmupScheduled = true;
     const run = () => {
+      this._warmupIdleHandle = null;
       this._warmupScheduled = false;
       this._warmupSvgCache();
     };
-    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 4000 });
-    else setTimeout(run, 1500);
+    this._warmupIdleHandle = typeof requestIdleCallback === "function"
+      ? requestIdleCallback(run, { timeout: 4000 })
+      : setTimeout(run, 1500);
+  }
+
+  // Cancel any pending warmup idle/timeout handle. Safe regardless of which
+  // scheduler produced it: the wrong clearer is a no-op on a foreign handle.
+  _clearWarmupHandle(h) {
+    if (h == null) return;
+    if (typeof cancelIdleCallback === "function") cancelIdleCallback(h);
+    clearTimeout(h);
   }
 
   _warmupSvgCache() {
     if (!this._cachesReady) return;
     const base = this._getLocalIconBaseUrl();
     const urls = new Set();
-    // Item icons for every catalog article (uses mapping.json if loaded,
-    // else the transliteration guess — both resolve to a real file path).
-    for (const text of this._autocompleteItems) {
-      const file = this._resolveItemIconFile({ summary: text, icon: null });
-      const f = String(file || "");
-      if (/\.svg$/i.test(f)) {
-        const u = f.startsWith("http") || f.startsWith("/") ? f : `${base}/items/${f}`;
-        urls.add(u);
+    // Item icons for every catalog article. Only warm once mapping.json is
+    // loaded — before that, _resolveItemIconFile falls back to transliteration
+    // guesses that 404 for most articles, which would turn the warmup into a
+    // 404 storm on every page load. The mapping-load path re-schedules warmup.
+    const hasMapping = this._itemIconMapping && Object.keys(this._itemIconMapping).length > 0;
+    if (hasMapping) {
+      for (const text of this._autocompleteItems) {
+        const file = this._resolveItemIconFile({ summary: text, icon: null });
+        const f = String(file || "");
+        if (/\.svg$/i.test(f)) {
+          const u = f.startsWith("http") || f.startsWith("/") ? f : `${base}/items/${f}`;
+          urls.add(u);
+        }
       }
     }
     // Static category SVGs + final fallback.
@@ -761,13 +777,17 @@ class ShoppingListCard extends HTMLElement {
     // Stagger in small batches via idle callbacks so we don't saturate the
     // 6-connections-per-origin limit while the card may still be rendering.
     let i = 0;
+    this._warmupStepHandle = null;
     const step = () => {
       const batch = pending.slice(i, i + 6);
       i += 6;
       Promise.all(batch.map(u => this._prefetchSvg(u))).then(() => {
         if (i < pending.length) {
-          if (typeof requestIdleCallback === "function") requestIdleCallback(step, { timeout: 4000 });
-          else setTimeout(step, 200);
+          this._warmupStepHandle = typeof requestIdleCallback === "function"
+            ? requestIdleCallback(step, { timeout: 4000 })
+            : setTimeout(step, 200);
+        } else {
+          this._warmupStepHandle = null;
         }
       });
     };
@@ -877,9 +897,12 @@ class ShoppingListCard extends HTMLElement {
       };
       // Lazy: defer the whole icon-load sequence until the tile scrolls near
       // the viewport, so offscreen backlog tiles don't fire SVG fetches during
-      // the render pass. First-screen tiles load immediately to avoid the
-      // one-frame IntersectionObserver delay.
-      if (lazy && !this._isNearViewport(container)) {
+      // the render pass. We always observe (no pre-check) because the tile is
+      // still detached from the DOM here — getBoundingClientRect() would
+      // return all zeros and falsely report every tile as in-viewport, which
+      // silently defeated the optimization. The observer fires an initial
+      // entry for tiles already visible on its first callback (~1 frame).
+      if (lazy) {
         this._observeForLazy(container, run);
       } else {
         run();
@@ -1245,6 +1268,12 @@ class ShoppingListCard extends HTMLElement {
       this._lazyIconIO = null;
       this._lazyIconCallbacks = null;
     }
+    // Cancel any pending background warmup so a detached card doesn't keep
+    // firing fetches + localStorage writes after removal.
+    this._clearWarmupHandle(this._warmupIdleHandle);
+    this._clearWarmupHandle(this._warmupStepHandle);
+    this._warmupIdleHandle = null;
+    this._warmupStepHandle = null;
   }
 
   _lightUpdate() {
