@@ -1,4 +1,4 @@
-// Shopping List Card v2.3.1 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.4.0 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -10,6 +10,37 @@
 // Config: { type: "custom:shopping-list-card", entity: "sensor.einkaufsliste_backend" }
 // Legacy `todo.*` entities and the old `lists:` array are detected and render
 // a migration warning instead of silently breaking.
+//
+// v2.4.0 — performance edition: surgical section-level DOM updates instead of
+// full rebuilds, card-level event delegation (11 listeners/tile → ~10 per
+// card), CSS-class tiles (no inline cssText / JS hover), parsed-SVG prototype
+// cache (cloneNode instead of innerHTML reparse), content-visibility for
+// offscreen sections, 150ms trailing debounce for full rebuilds, Cache Storage
+// API for the persistent SVG store (localStorage fallback), and inline MDI
+// SVG paths instead of <ha-icon> for static UI icons.
+
+// Inline MDI path data (from @mdi/svg 7.4.47) so the card doesn't spin up a
+// <ha-icon> custom element (icon-set lookup + lit template) for each static
+// UI icon. Only icons used by the card chrome are included; the view box and
+// fill match what ha-icon would have rendered.
+const MDI_PATHS = {
+  "magnify": "M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z",
+  "plus": "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z",
+  "chevron-down": "M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z",
+  "chevron-right": "M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z",
+  "archive-outline": "M20 21H4V10H6V19H18V10H20V21M3 3H21V9H3V3M9.5 11H14.5C14.78 11 15 11.22 15 11.5V13H9V11.5C9 11.22 9.22 11 9.5 11M5 5V7H19V5H5Z",
+  "check-circle": "M12 2C6.5 2 2 6.5 2 12S6.5 22 12 22 22 17.5 22 12 17.5 2 12 2M10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z",
+  "cart-outline": "M17,18A2,2 0 0,1 19,20A2,2 0 0,1 17,22C15.89,22 15,21.1 15,20C15,18.89 15.89,18 17,18M1,2H4.27L5.21,4H20A1,1 0 0,1 21,5C21,5.17 20.95,5.34 20.88,5.5L17.3,11.97C16.96,12.58 16.3,13 15.55,13H8.1L7.2,14.63L7.17,14.75A0.25,0.25 0 0,0 7.42,15H19V17H7C5.89,17 5,16.1 5,15C5,14.65 5.09,14.32 5.24,14.04L6.6,11.59L3,4H1V2M7,18A2,2 0 0,1 9,20A2,2 0 0,1 7,22C5.89,22 5,21.1 5,20C5,18.89 5.89,18 7,18M16,11L18.78,6H6.14L8.5,11H16Z"
+};
+
+// Render one of the MDI_PATHS icons as a standalone inline <svg> string.
+// Returns null for unknown names so callers can fall back to <ha-icon>.
+function mdiSvgString(name, size) {
+  const d = MDI_PATHS[name];
+  if (!d) return null;
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="' + size +
+    '" height="' + size + '" style="fill:currentColor;display:block;"><path d="' + d + '"/></svg>';
+}
 
 class ShoppingListCard extends HTMLElement {
   constructor() {
@@ -39,6 +70,31 @@ class ShoppingListCard extends HTMLElement {
     this._svgTextCache = new Map();
     this._svgInFlight = new Map();
     this._autocompleteCatCache = new Map();
+    // v2.4.0: parsed SVG prototype cache. Each URL is parsed into a detached
+    // <svg> element exactly once; applications clone the prototype instead of
+    // re-running innerHTML (HTML parser + DOM build) for every tile. This is
+    // the biggest single win for full rebuilds (~150 tiles × ~1 SVG parse).
+    this._svgDomCache = new Map();
+    // v2.4.0: trailing debounce for full rebuilds. Surgical updates apply
+    // immediately; a full rebuild coalesces burst-triggered rebuilds within
+    // a 150ms window (both WS subscriptions + hass updates often fire back to
+    // back after one backend change).
+    this._fullRenderTimer = null;
+    // v2.4.0: current search query (lowercased). Tracked on the instance so
+    // a rebuild can restore input text + tile filtering, and so surgical
+    // updates can bail to a full render while a filter is active.
+    this._searchQuery = "";
+    this._searchText = "";       // original-case input text (restored after rebuilds)
+    // v2.4.0: card-level event delegation state (see _bindCardEvents).
+    this._press = null;          // { tile, timer, x, y } — active long-press
+    this._touchTile = null;      // last touch-handled tile (suppress duplicate mouse/click)
+    this._touchAt = 0;           // timestamp of that touch
+    this._longPressTile = null;  // tile whose long-press just fired (suppress click)
+    this._longPressAt = 0;
+    // v2.4.0: Cache Storage API handle (memoized promise) for the persistent
+    // SVG store; null on non-secure contexts (plain http LAN) where the API
+    // is unavailable — the localStorage path remains as fallback.
+    this._cacheStorePromise = null;
     // Per-instance negative cache for the animated category SVG probe in
     // _renderCategoryIcon. Animated variants under categories/animated/ almost
     // never exist, so every category header would otherwise pay a 404 round-trip
@@ -424,35 +480,70 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _fetchAndRender() {
-    // Coalesce multiple triggers into one parse+render per animation frame.
+    // Coalesce multiple triggers into one parse+render pass per animation frame.
     // Both subscribe_entities and state_changed fire for the same backend
     // change; without this, each separately runs _loadItems (re-parse of the
-    // items attribute + fingerprint hash over all items). The fingerprint guard
-    // in _render() avoids the double *render*, but not the double parse/hash.
-    // requestAnimationFrame collapses all triggers that land within the same
-    // frame into a single pass and aligns the DOM update with the browser paint.
-    // It also naturally skips work while the tab is hidden; the next visible
-    // frame renders with the latest this._hass.
+    // items attribute + fingerprint hash over all items). requestAnimationFrame
+    // collapses all triggers that land within the same frame into a single
+    // pass and aligns the DOM update with the browser paint. It also naturally
+    // skips work while the tab is hidden; the next visible frame renders with
+    // the latest this._hass.
+    //
+    // v2.4.0: after the fingerprint check, try a surgical update first (only
+    // the categories whose items actually changed are rebuilt in place). Full
+    // rebuilds — needed when the DOM doesn't match the previous fingerprint —
+    // go through a short trailing debounce (_scheduleFullRender) so a burst of
+    // triggers coalesces into one rebuild instead of several.
     if (this._renderPending) return;
     this._renderPending = true;
     this._renderRaf = requestAnimationFrame(() => {
       this._renderPending = false;
       this._renderRaf = null;
       this._loadItems();
-      this._render();
+      if (this._fingerprint === this._lastFingerprint) return;
+      if (this._applySurgicalUpdate()) {
+        this._lastFingerprint = this._fingerprint;
+        // A pending full rebuild is now obsolete — the surgical pass already
+        // synced the DOM to the latest fingerprint.
+        if (this._fullRenderTimer) {
+          clearTimeout(this._fullRenderTimer);
+          this._fullRenderTimer = null;
+        }
+        return;
+      }
+      this._scheduleFullRender();
     });
+  }
+
+  // Trailing-debounced full rebuild. The first paint (no card yet) is
+  // immediate; afterwards a burst of full-rebuild triggers within the window
+  // collapses into a single rebuild that sees the newest this._hass.
+  _scheduleFullRender() {
+    if (!this.querySelector("ha-card")) { this._render(); return; }
+    if (this._fullRenderTimer) clearTimeout(this._fullRenderTimer);
+    this._fullRenderTimer = setTimeout(() => {
+      this._fullRenderTimer = null;
+      this._render();
+    }, 150);
   }
 
   _loadItems() {
     const st = this._hass?.states?.[this._entity];
-    if (!st) { this._items = []; return; }
+    // Stash the previous items BEFORE replacing, so _applySurgicalUpdate can
+    // diff prev→current and be certain the DOM still reflects _prevItems.
+    this._prevItems = this._items;
+    if (!st) { this._items = []; this._fingerprint = 0; return; }
     const all = Array.isArray(st.attributes?.items) ? st.attributes.items : [];
     this._items = all.filter(i => (i.list || "standard") === this._listId);
+    this._fingerprint = this._fingerprintOf(this._items);
+  }
+
+  _fingerprintOf(items) {
     let fp = 0;
-    for (const i of this._items) {
+    for (const i of items) {
       fp = (fp * 31 + this._hashString(i.uid + "|" + i.status + "|" + i.summary + "|" + (i.quantity || 1) + "|" + (i.icon || ""))) >>> 0;
     }
-    this._fingerprint = fp;
+    return fp;
   }
 
   _hashString(str) {
@@ -505,34 +596,58 @@ class ShoppingListCard extends HTMLElement {
     return guessed;
   }
 
-  // Parse an SVG text string into a sized wrapper and inject it into container.
-  // Returns true on success. Kept separate from the fetch layer so both the
-  // in-memory SVG cache and in-flight request deduplication can reuse it.
-  _applySvgText(text, container, size) {
-    if (!text) return false;
+  // Parse an SVG text string into a detached, style-normalized <svg> prototype.
+  // The prototype is cached per URL in _svgDomCache; applications clone it via
+  // cloneNode(true), which is dramatically cheaper than re-running innerHTML
+  // (HTML parser + full DOM build) for every tile on every render.
+  _parseSvgElement(text) {
+    if (!text) return null;
     // Flaticon SVGs often start with <?xml + generator comments; strip
     // everything before the first <svg so innerHTML parses cleanly.
     const idx = text.toLowerCase().indexOf("<svg");
-    if (idx < 0) return false;
+    if (idx < 0) return null;
     const tmp = document.createElement("div");
     tmp.innerHTML = text.slice(idx);
     const svg = tmp.querySelector("svg");
-    if (!svg) return false;
+    if (!svg) return null;
     // Force a uniform rendered size regardless of the SVG's own width/height
     // attributes or internal styles. The wrapper guarantees the footprint,
     // the SVG fills it with preserved aspect ratio.
-    const finalSize = (size && size > 0) ? size : 24;
     svg.style.width = "100%";
     svg.style.height = "100%";
     svg.style.display = "block";
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.style.flexShrink = "0";
+    return svg;
+  }
+
+  // Clone a (possibly null) prototype into a sized wrapper inside container.
+  // Returns true when a prototype was applied.
+  _applySvgTo(container, proto, size, options) {
+    if (!proto) return false;
+    const finalSize = (size && size > 0) ? size : 24;
     const wrap = document.createElement("div");
-    wrap.style.cssText = `display:flex;align-items:center;justify-content:center;width:${finalSize}px;height:${finalSize}px;flex-shrink:0;`;
-    wrap.appendChild(svg);
+    wrap.style.cssText = `display:flex;align-items:center;justify-content:center;width:${finalSize}px;height:${finalSize}px;flex-shrink:0;${options || ""}`;
+    wrap.appendChild(proto.cloneNode(true));
     container.innerHTML = "";
     container.appendChild(wrap);
     return true;
+  }
+
+  // Parsed-prototype lookup with lazy promotion from the text caches.
+  // Order: DOM cache → RAM text cache → persistent store (Cache API or
+  // localStorage fallback). Returns the prototype or null when the text
+  // isn't cached yet (the caller then goes through _prefetchSvg).
+  _getSvgProto(url) {
+    let proto = this._svgDomCache.get(url);
+    if (proto) return proto;
+    const cached = this._svgTextCache.get(url);
+    let text = cached && cached.ok ? cached.text : null;
+    if (!text) text = this._getPersistentCache().get(url) || null;
+    if (!text) return null;
+    proto = this._parseSvgElement(text);
+    if (proto) this._svgDomCache.set(url, proto);
+    return proto || null;
   }
 
   // --- Persistent icon cache (localStorage) -----------------------------
@@ -611,19 +726,48 @@ class ShoppingListCard extends HTMLElement {
   // NOT touch the DOM — the caller applies the result (or ignores it for
   // warmup). Returns a Promise that resolves with no value once the URL's
   // status is settled (check _svgTextCache afterwards).
-  _prefetchSvg(url) {
-    if (this._svgTextCache.has(url)) return Promise.resolve();
-    const pc = this._getPersistentCache();
-    if (pc.has(url)) return Promise.resolve();
-    // Short-TTL negative cache: skip re-fetching URLs that recently 404'd,
-    // so repeated renders don't replay the 404→fallback chain for unknown
-    // item SVGs. Cleared on reload, so new uploads are discovered at most
-    // _negCacheTtlMs later.
-    const miss = this._itemIconMissing.get(url);
-    if (miss && Date.now() < miss) return Promise.resolve();
-    let flight = this._svgInFlight.get(url);
-    if (flight) return flight.then(() => {});
-    flight = fetch(url, { cache: "no-store" })
+  // --- Cache Storage API persistent store --------------------------------
+  // v2.4.0: prefer the Cache Storage API over the localStorage blob. The
+  // localStorage path serializes ~120 SVG texts into one JSON string on the
+  // main thread (multi-MB stringify per persist, blocking) and parses the
+  // whole blob back on load. caches.put stores each URL natively, off the
+  // main thread, with per-entry retrieval. The API requires a secure context
+  // — plain-http LAN HA installs have no `window.caches` — so this feature-
+  // detects and returns null there, keeping localStorage as the fallback.
+
+  _getCacheStore() {
+    if (this._cacheStorePromise !== null) return this._cacheStorePromise;
+    this._cacheStorePromise = (async () => {
+      if (typeof caches === "undefined") return null;
+      const name = `slc-svg-v${this._pCacheVersion}`;
+      try {
+        let store = await caches.open(name);
+        const tsResp = await store.match("__slc_ts__");
+        let ts = 0;
+        if (tsResp) ts = Number(await tsResp.text()) || 0;
+        if (!ts || (Date.now() - ts) > this._pCacheTtlMs) {
+          // Blob expired (or fresh install): drop the whole cache and start
+          // over with a fresh timestamp. Mirrors the localStorage blob TTL.
+          await caches.delete(name);
+          store = await caches.open(name);
+          await store.put("__slc_ts__", new Response(String(Date.now())));
+        }
+        return store;
+      } catch (e) { /* storage blocked — fall back to localStorage */ return null; }
+    })();
+    return this._cacheStorePromise;
+  }
+
+  _cacheLookup(url) {
+    return this._getCacheStore().then(store => {
+      if (!store) return null;
+      return store.match(url).then(r => (r && r.ok) ? r.text() : null);
+    }).catch(() => null);
+  }
+
+  // Fetch a URL on the wire; negative-caches item-icon 404s on failure.
+  _fetchSvg(url) {
+    return fetch(url, { cache: "no-store" })
       .then(r => {
         if (!r.ok) {
           // Scope the negative cache to per-article item icons only — never
@@ -635,15 +779,44 @@ class ShoppingListCard extends HTMLElement {
           return null;
         }
         return r.text();
-      })
+      });
+  }
+
+  // Persist a successful SVG text: Cache API when available, else the
+  // debounced localStorage blob.
+  _storePersisted(url, text) {
+    this._getCacheStore().then(store => {
+      if (store) {
+        store.put(url, new Response(text, { headers: { "Content-Type": "image/svg+xml" } }));
+        return;
+      }
+      const pc = this._getPersistentCache();
+      if (!pc.has(url)) {
+        pc.set(url, text);
+        this._persistSvgCacheSoon();
+      }
+    }).catch(() => { /* keep RAM copy regardless */ });
+  }
+
+  _prefetchSvg(url) {
+    if (this._svgDomCache.has(url) || this._svgTextCache.has(url)) return Promise.resolve();
+    const pc = this._getPersistentCache();
+    if (pc.has(url)) return Promise.resolve();
+    // Short-TTL negative cache: skip re-fetching URLs that recently 404'd,
+    // so repeated renders don't replay the 404→fallback chain for unknown
+    // item SVGs. Cleared on reload, so new uploads are discovered at most
+    // _negCacheTtlMs later.
+    const miss = this._itemIconMissing.get(url);
+    if (miss && Date.now() < miss) return Promise.resolve();
+    let flight = this._svgInFlight.get(url);
+    if (flight) return flight.then(() => {});
+    flight = this._cacheLookup(url)
+      .then(text => text || this._fetchSvg(url))
       .then(text => {
         this._svgInFlight.delete(url);
         if (text) {
           this._svgTextCache.set(url, { ok: true, text });
-          if (!pc.has(url)) {
-            pc.set(url, text);
-            this._persistSvgCacheSoon();
-          }
+          this._storePersisted(url, text);
         }
         return text;
       })
@@ -655,38 +828,17 @@ class ShoppingListCard extends HTMLElement {
     return flight.then(() => {});
   }
 
-  _loadSvgInline(url, container, size) {
-    // cache: "no-store" — HA stamps 404s for missing /local/ files with
-    // max-age=2678400 (31 days). When icons are added later, a browser that
-    // cached the old 404 would keep replaying it and never see the new file.
-    // We keep no-store on the wire but add a per-instance RAM cache for
-    // successful SVG texts and deduplicate in-flight requests so the same
-    // URL isn't fetched 20 times in parallel during a full render.
-    //
-    // Layer 2: a persistent localStorage cache (see _getPersistentCache)
-    // survives reloads so ~120 icons don't re-fetch over the network every
-    // page load — the main cause of slow icon loading on mobile. Only HTTP
-    // 200 texts are stored, so newly uploaded /items/*.svg files are still
-    // discovered (the no-store rationale applied to the *browser HTTP* cache,
-    // not a JS-side cache that stores only 200s). The network stage is shared
-    // with the background warmup via _prefetchSvg (negative cache + dedup).
-
-    // 1. per-instance RAM cache
-    const cached = this._svgTextCache.get(url);
-    if (cached && cached.ok) {
-      return Promise.resolve(this._applySvgText(cached.text, container, size));
-    }
-    // 2. persistent cache (survives reloads) — lazy-loaded once
-    const persistent = this._getPersistentCache();
-    const pText = persistent.get(url);
-    if (pText) {
-      this._svgTextCache.set(url, { ok: true, text: pText });
-      return Promise.resolve(this._applySvgText(pText, container, size));
-    }
-    // 3. network (deduped + negative-cached) via _prefetchSvg, then apply
+  _loadSvgInline(url, container, size, options) {
+    // Layer 1: parsed-prototype cache (DOM cache → RAM text cache →
+    // persistent store). A hit is a synchronous cloneNode + append — no
+    // fetch, no innerHTML parse.
+    let proto = this._getSvgProto(url);
+    if (proto) return Promise.resolve(this._applySvgTo(container, proto, size, options));
+    // Layer 2: network (deduped + negative-cached) via _prefetchSvg, then
+    // apply. On failure the caller's fallback chain takes over.
     return this._prefetchSvg(url).then(() => {
-      const c = this._svgTextCache.get(url);
-      return this._applySvgText(c && c.ok ? c.text : null, container, size);
+      const p = this._getSvgProto(url);
+      return this._applySvgTo(container, p, size, options);
     });
   }
 
@@ -768,10 +920,10 @@ class ShoppingListCard extends HTMLElement {
       urls.add(`${base}/categories/${key}.svg`);
     }
     urls.add(`${base}/items/sonstiges.svg`);
-    // Only fetch what isn't already cached (RAM, persistent, or in-flight).
+    // Only fetch what isn't already cached (DOM/RAM, persistent, or in-flight).
     const pc = this._getPersistentCache();
     const pending = [...urls].filter(
-      u => !pc.has(u) && !this._svgTextCache.has(u) && !this._svgInFlight.has(u)
+      u => !pc.has(u) && !this._svgTextCache.has(u) && !this._svgDomCache.has(u) && !this._svgInFlight.has(u)
     );
     if (pending.length === 0) return;
     // Stagger in small batches via idle callbacks so we don't saturate the
@@ -1036,30 +1188,17 @@ class ShoppingListCard extends HTMLElement {
       const tryAnimated = probeAnimated && !this._noAnimatedSvg.has(key);
       const animatedUrl = tryAnimated ? `${base}/categories/animated/${key}.svg` : null;
       const probe = animatedUrl
-        ? this._loadSvgInline(animatedUrl, container, size).then(loaded => {
+        ? this._loadSvgInline(animatedUrl, container, size, options).then(loaded => {
             if (loaded) return true;
             this._markNoAnimatedSvg(key);
-            return this._loadSvgInline(staticUrl, container, size);
+            return this._loadSvgInline(staticUrl, container, size, options);
           })
-        : this._loadSvgInline(staticUrl, container, size);
+        : this._loadSvgInline(staticUrl, container, size, options);
       probe.then(loaded => {
         if (loaded) return;
         if (!fallbackSvg) return;
-        const tmp = document.createElement("div");
-        tmp.innerHTML = fallbackSvg.trim();
-        const svg = tmp.querySelector("svg");
-        if (svg) {
-          svg.style.width = "100%";
-          svg.style.height = "100%";
-          svg.style.display = "block";
-          svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-          svg.style.flexShrink = "0";
-          const wrap = document.createElement("div");
-          wrap.style.cssText = `display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;flex-shrink:0;${options}`;
-          wrap.appendChild(svg);
-          container.innerHTML = "";
-          container.appendChild(wrap);
-        }
+        const proto = this._parseSvgElement(fallbackSvg.trim());
+        this._applySvgTo(container, proto, size, options);
       });
       return;
     }
@@ -1274,51 +1413,54 @@ class ShoppingListCard extends HTMLElement {
     this._clearWarmupHandle(this._warmupStepHandle);
     this._warmupIdleHandle = null;
     this._warmupStepHandle = null;
+    // v2.4.0: cancel the trailing full-render debounce and any pending
+    // delegated long-press so a detached card fires no further work.
+    if (this._fullRenderTimer) {
+      clearTimeout(this._fullRenderTimer);
+      this._fullRenderTimer = null;
+    }
+    this._cancelPress();
+    this._touchTile = null;
+    this._touchAt = 0;
+    this._longPressTile = null;
   }
 
   _lightUpdate() {
+    // v2.4.0: tiles carry their entire visual state in data attributes; the
+    // stylesheet (see _render) derives background/border/opacity/badge colors
+    // from [data-status], so this pass only syncs datasets and the badge text
+    // — no inline style writes at all.
     const itemMap = new Map();
     for (const item of this._items) itemMap.set(item.uid, item);
-    const color = this._color;
 
     const tiles = this.querySelectorAll(".sl-tile:not(.sl-ghost)");
     for (const tile of tiles) {
       const item = itemMap.get(tile.dataset.uid);
       if (!item) { tile.remove(); continue; } // stale tile (item deleted in backend)
-      const isDone = item.status === "completed";
       const qty = String(item.quantity || 1);
       if (tile.dataset.status === item.status && tile.dataset.qty === qty) continue;
       tile.dataset.status = item.status;
       tile.dataset.qty = qty;
-      tile.style.background = isDone ? "var(--sl-bg)" : color;
-      tile.style.border = isDone ? "2px solid var(--sl-border)" : "none";
-      tile.style.opacity = isDone ? "0.55" : "1";
 
-      const labelOverlay = tile.querySelector(".sl-label-overlay");
-      if (labelOverlay) labelOverlay.style.background = isDone
-        ? "linear-gradient(0deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 70%, transparent 100%)"
-        : "linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%)";
-
-      // Quantity badge ("Nx") — absolute positioned top-right.
+      // Quantity badge ("Nx") — created/removed; colors come from CSS.
       let badge = tile.querySelector(".sl-badge");
       const showBadge = (item.quantity || 1) > 1;
       if (showBadge) {
-        const txt = (item.quantity || 1) + "x";
         if (!badge) {
           badge = document.createElement("div");
           badge.className = "sl-badge";
-          badge.style.cssText = "position:absolute;top:4px;right:4px;z-index:3;display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(0,0,0,0.35)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:700;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;backdrop-filter:blur(2px);";
           tile.appendChild(badge);
         }
-        badge.textContent = txt;
-        badge.style.background = isDone ? "var(--sl-border)" : "rgba(0,0,0,0.35)";
-        badge.style.color = isDone ? "var(--sl-text-muted)" : "#fff";
+        badge.textContent = (item.quantity || 1) + "x";
       } else if (badge) {
         badge.remove();
       }
     }
 
-    const cats = this.querySelectorAll(".sl-cat");
+    // Count headers only in the ACTIVE sections. Mirror/backlog headers show
+    // the full catalog count for their category (built by _renderMirrorSection),
+    // which this needs_action-based recount would clobber with a wrong number.
+    const cats = this.querySelectorAll('.sl-cat[data-section="active"]');
     for (const cat of cats) {
       const header = cat.querySelector(".sl-header");
       const grid = cat.querySelector(".sl-grid");
@@ -1341,17 +1483,44 @@ class ShoppingListCard extends HTMLElement {
     if (qtyEl) qtyEl.textContent = String(cur.quantity || 1);
   }
 
+  // Static MDI chrome icon as inline SVG (falls back to <ha-icon> for
+  // unknown names). Avoids instantiating the ha-icon custom element.
+  _mdiEl(name, size, cssText) {
+    const wrap = document.createElement("div");
+    const html = mdiSvgString(name, size);
+    if (html) {
+      wrap.innerHTML = html;
+    } else {
+      const el = document.createElement("ha-icon");
+      el.setAttribute("icon", "mdi:" + name);
+      el.style.width = size + "px";
+      el.style.height = size + "px";
+      wrap.appendChild(el);
+    }
+    if (cssText) wrap.style.cssText = cssText;
+    return wrap;
+  }
+
+  // "Noch nichts auf der Liste" row — shared by the initial render and the
+  // surgical updater (_updateEmptyHint) so both produce the same markup.
+  _buildEmptyHint() {
+    const emptyRow = document.createElement("div");
+    emptyRow.className = "sl-empty-hint";
+    emptyRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:8px 4px;color:var(--sl-text-muted);font-size:13px;";
+    emptyRow.appendChild(this._mdiEl("cart-outline", 16, "width:16px;height:16px;color:var(--sl-text-muted);display:flex;flex-shrink:0;"));
+    const t = document.createElement("span");
+    t.textContent = "Noch nichts auf der Liste – unten tippen oder oben eingeben.";
+    emptyRow.appendChild(t);
+    return emptyRow;
+  }
+
   _renderSearchBar() {
     const listWrap = document.createElement("div");
-    listWrap.style.cssText = "margin-bottom:14px;position:relative;";
-    const color = this._color;
+    listWrap.className = "sl-search";
 
     const searchWrap = document.createElement("div");
     searchWrap.style.cssText = "display:flex;align-items:center;background:var(--sl-bg-input);border-radius:12px;padding:0 12px;border:1px solid var(--sl-border);";
-    const searchIcon = document.createElement("ha-icon");
-    searchIcon.setAttribute("icon", "mdi:magnify");
-    searchIcon.style.cssText = "color:var(--sl-text-muted);width:20px;height:20px;margin-right:8px;";
-    searchWrap.appendChild(searchIcon);
+    searchWrap.appendChild(this._mdiEl("magnify", 20, "color:var(--sl-text-muted);width:20px;height:20px;margin-right:8px;display:flex;flex-shrink:0;"));
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = "Artikel suchen oder hinzufügen...";
@@ -1364,18 +1533,7 @@ class ShoppingListCard extends HTMLElement {
     searchWrap.appendChild(addBtn);
     listWrap.appendChild(searchWrap);
 
-    if (this._items.length === 0) {
-      const emptyRow = document.createElement("div");
-      emptyRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:8px 4px;color:var(--sl-text-muted);font-size:13px;";
-      const ic = document.createElement("ha-icon");
-      ic.setAttribute("icon", "mdi:cart-outline");
-      ic.style.cssText = "width:16px;height:16px;color:var(--sl-text-muted);";
-      emptyRow.appendChild(ic);
-      const t = document.createElement("span");
-      t.textContent = "Noch nichts auf der Liste – unten tippen oder oben eingeben.";
-      emptyRow.appendChild(t);
-      listWrap.appendChild(emptyRow);
-    }
+    if (this._items.length === 0) listWrap.appendChild(this._buildEmptyHint());
 
     const acDropdown = document.createElement("div");
     acDropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:var(--sl-bg);border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;max-height:200px;overflow-y:auto;display:none;";
@@ -1387,6 +1545,11 @@ class ShoppingListCard extends HTMLElement {
     let searchTimer = null;
     input.addEventListener("input", () => {
       const val = input.value.toLowerCase().trim();
+      // v2.4.0: track the active query on the instance so surgical updates
+      // can bail to a full render while a filter is active, and a rebuild
+      // can restore input text + filtering.
+      this._searchQuery = val;
+      this._searchText = input.value;
       searchTimer && clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
         searchTimer = null;
@@ -1400,11 +1563,9 @@ class ShoppingListCard extends HTMLElement {
         if (matches.length) {
         matches.forEach(m => {
           const row = document.createElement("div");
-          row.style.cssText = "padding:10px 16px;cursor:pointer;font-size:15px;color:var(--sl-text);border-bottom:1px solid var(--sl-border);";
+          row.className = "sl-ac-row";
           row.textContent = m;
-          row.addEventListener("mouseenter", () => row.style.background = "var(--sl-hover)");
-          row.addEventListener("mouseleave", () => row.style.background = "var(--sl-bg)");
-          row.addEventListener("click", () => { this._addItem(m); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); });
+          row.addEventListener("click", () => { this._addItem(m); input.value = ""; this._searchQuery = ""; this._searchText = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); });
           acDropdown.appendChild(row);
         });
         acDropdown.style.display = "block";
@@ -1415,7 +1576,7 @@ class ShoppingListCard extends HTMLElement {
     });
 
     const doAdd = () => {
-      if (input.value.trim()) { this._addItem(input.value); input.value = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); }
+      if (input.value.trim()) { this._addItem(input.value); input.value = ""; this._searchQuery = ""; this._searchText = ""; acDropdown.style.display = "none"; this._filterVisible(listWrap, ""); }
     };
     addBtn.addEventListener("click", doAdd);
     input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
@@ -1428,12 +1589,21 @@ class ShoppingListCard extends HTMLElement {
     });
     input.addEventListener("focus", () => { if (input.value.trim()) input.dispatchEvent(new Event("input")); });
 
+    // Restore a query that was active before the rebuild (search text survives
+    // full renders now instead of silently clearing).
+    if (this._searchQuery) {
+      input.value = this._searchText || this._searchQuery;
+      this._filterVisible(listWrap, this._searchQuery);
+    }
+
     return listWrap;
   }
 
   _renderCategory(cat, catItems) {
     const catWrap = document.createElement("div");
     catWrap.className = "sl-cat";
+    catWrap.dataset.section = "active";
+    catWrap.dataset.cat = cat;
     catWrap.style.marginBottom = "16px";
 
     const header = document.createElement("div");
@@ -1478,9 +1648,8 @@ class ShoppingListCard extends HTMLElement {
       count.style.cssText = contentStyle + "font-size:12px;color:#fff;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,0.5);";
       count.textContent = catItems.length;
       header.appendChild(count);
-      const chevron = document.createElement("ha-icon");
-      chevron.setAttribute("icon", "mdi:chevron-down");
-      chevron.style.cssText = contentStyle + "color:#fff;width:18px;height:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));";
+      const chevron = this._mdiEl("chevron-down", 18, contentStyle + "color:#fff;width:18px;height:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));");
+      chevron.classList.add("sl-chevron");
       header.appendChild(chevron);
       catWrap.appendChild(header);
     } else {
@@ -1510,9 +1679,8 @@ class ShoppingListCard extends HTMLElement {
       count.style.cssText = "font-size:12px;color:var(--sl-text-muted);font-weight:400;";
       count.textContent = catItems.length;
       header.appendChild(count);
-      const chevron = document.createElement("ha-icon");
-      chevron.setAttribute("icon", "mdi:chevron-down");
-      chevron.style.cssText = "color:var(--sl-text-muted);width:18px;height:18px;";
+      const chevron = this._mdiEl("chevron-down", 18, "color:var(--sl-text-muted);width:18px;height:18px;");
+      chevron.classList.add("sl-chevron");
       header.appendChild(chevron);
       catWrap.appendChild(header);
     }
@@ -1524,7 +1692,9 @@ class ShoppingListCard extends HTMLElement {
       collapsed = !collapsed;
       grid.style.display = collapsed ? "none" : "grid";
       grid.dataset.collapsed = collapsed ? "true" : "";
-      chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
+      // v2.4.0: chevron is a static inline SVG; the collapse state rotates it
+      // (down → -90° = right) instead of re-resolving an <ha-icon>.
+      chevron.style.transform = collapsed ? "rotate(-90deg)" : "";
       header.setAttribute("aria-expanded", collapsed ? "false" : "true");
     };
     header.addEventListener("click", toggle);
@@ -1539,14 +1709,22 @@ class ShoppingListCard extends HTMLElement {
       grid.appendChild(tile);
     }
 
+    grid.appendChild(this._buildAddTile());
+    catWrap.appendChild(grid);
+    return catWrap;
+  }
+
+  // The "+" tile appended to every active category grid. Its own method so the
+  // surgical active-section rebuild can re-create it without touching
+  // _renderCategory's header/toggle wiring. Hover feedback is pure CSS
+  // (.sl-add-tile:hover) — the accent color comes from the --sl-accent /
+  // --sl-accent-soft card variables set in _render.
+  _buildAddTile() {
     const addTile = document.createElement("div");
-    addTile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:12px;border:2px dashed " + color + "60;background:var(--sl-bg);cursor:pointer;min-height:72px;transition:all 0.15s;position:relative;";
-    const plusIcon = document.createElement("ha-icon");
-    plusIcon.setAttribute("icon", "mdi:plus");
-    plusIcon.style.cssText = "color:" + color + ";width:22px;height:22px;";
+    addTile.className = "sl-add-tile";
+    addTile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:12px;border:2px dashed var(--sl-accent-soft);background:var(--sl-bg);cursor:pointer;min-height:72px;transition:all 0.15s;position:relative;";
+    const plusIcon = this._mdiEl("plus", 22, "color:var(--sl-accent);width:22px;height:22px;display:flex;");
     addTile.appendChild(plusIcon);
-    addTile.addEventListener("mouseenter", () => { addTile.style.background = "var(--sl-hover)"; addTile.style.borderColor = color; });
-    addTile.addEventListener("mouseleave", () => { addTile.style.background = "var(--sl-bg)"; addTile.style.borderColor = color + "60"; });
     let tileInput = null;
     let tileAcMouseDown = false;
     addTile.addEventListener("click", () => {
@@ -1562,10 +1740,7 @@ class ShoppingListCard extends HTMLElement {
         const allItems = this._getAutocompleteItems();
         const resetTile = () => {
           addTile.innerHTML = "";
-          const pi = document.createElement("ha-icon");
-          pi.setAttribute("icon", "mdi:plus");
-          pi.style.cssText = "color:" + color + ";width:22px;height:22px;";
-          addTile.appendChild(pi);
+          addTile.appendChild(this._mdiEl("plus", 22, "color:var(--sl-accent);width:22px;height:22px;display:flex;"));
           tileInput = null;
         };
         tileInput.addEventListener("input", () => {
@@ -1579,10 +1754,8 @@ class ShoppingListCard extends HTMLElement {
           if (matches.length) {
             matches.forEach(m => {
               const row = document.createElement("div");
-              row.style.cssText = "padding:8px 12px;cursor:pointer;font-size:13px;color:var(--sl-text);border-bottom:1px solid var(--sl-border);";
+              row.className = "sl-ac-row sm";
               row.textContent = m;
-              row.addEventListener("mouseenter", () => row.style.background = "var(--sl-hover)");
-              row.addEventListener("mouseleave", () => row.style.background = "var(--sl-bg)");
               row.addEventListener("click", () => { this._addItem(m); resetTile(); });
               tileAc.appendChild(row);
             });
@@ -1598,12 +1771,14 @@ class ShoppingListCard extends HTMLElement {
         tileInput.focus();
       }
     });
-    grid.appendChild(addTile);
-    catWrap.appendChild(grid);
-    return catWrap;
+    return addTile;
   }
 
-  _renderMirrorSection(items, order, maxPerCat = 20) {
+  // Shared catalog computation for the mirror/backlog section: every
+  // autocomplete text that is NOT on the active list (plus completed extras
+  // not in the catalog), grouped by category. Used by the full mirror render
+  // AND by the surgical per-category mirror grid rebuild.
+  _computeMirrorCatalog(items) {
     const onListSummaries = new Set(items.filter(i => i.status === "needs_action").map(i => i.summary.toLowerCase()));
     const itemBySummary = new Map();
     for (const item of items) itemBySummary.set(item.summary.toLowerCase(), item);
@@ -1623,16 +1798,23 @@ class ShoppingListCard extends HTMLElement {
         allAvailSet.add(ci.summary);
       }
     }
-    if (allAvail.length === 0) return null;
-
-    const availByCat = {};
+    const byCat = {};
     for (const text of allAvail) {
       // Use the pre-computed autocomplete category cache; fall back to the
       // live lookup for completed extras that aren't in the autocomplete list.
       const cat = this._autocompleteCatCache.get(text) || this._getItemCategory(text);
-      if (!availByCat[cat]) availByCat[cat] = [];
-      availByCat[cat].push(text);
+      if (!byCat[cat]) byCat[cat] = [];
+      byCat[cat].push(text);
     }
+    return { byCat, allAvail, itemBySummary };
+  }
+
+  _renderMirrorSection(items, order, maxPerCat = 20) {
+    const { byCat: availByCat, allAvail, itemBySummary } = this._computeMirrorCatalog(items);
+    if (allAvail.length === 0) return null;
+    // Remember the limit the DOM was built with so surgical mirror rebuilds
+    // don't shrink an expanded "Mehr laden"/"Alle anzeigen" section back to 20.
+    this._mirrorMaxPerCat = maxPerCat;
 
     let hasAnyLimit = false;
     for (const cat of order) {
@@ -1641,6 +1823,10 @@ class ShoppingListCard extends HTMLElement {
 
     const color = this._color;
     const mirrorWrap = document.createElement("div");
+    // sl-mirror-wrap carries content-visibility:auto (see stylesheet in
+    // _render) so the browser skips layout/paint of the large offscreen
+    // backlog until it approaches the viewport.
+    mirrorWrap.className = "sl-mirror-wrap";
     mirrorWrap.style.cssText = "margin-top:56px;padding-top:8px;";
 
     // Visual separator between active list and backlog/mirror section.
@@ -1653,9 +1839,7 @@ class ShoppingListCard extends HTMLElement {
     rightLine.style.cssText = lineBase;
     const sepLabel = document.createElement("div");
     sepLabel.style.cssText = "display:flex;align-items:center;gap:8px;flex-shrink:0;padding:7px 16px;border-radius:999px;background:var(--sl-bg);border:2px solid var(--sl-border);color:var(--sl-text-muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;box-shadow:0 1px 2px rgba(0,0,0,0.05);";
-    const sepIcon = document.createElement("ha-icon");
-    sepIcon.setAttribute("icon", "mdi:archive-outline");
-    sepIcon.style.cssText = "display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;min-width:16px;min-height:16px;color:var(--sl-text-muted);";
+    const sepIcon = this._mdiEl("archive-outline", 16, "display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;min-width:16px;min-height:16px;color:var(--sl-text-muted);");
     sepLabel.appendChild(sepIcon);
     const sepText = document.createElement("span");
     sepText.style.cssText = "white-space:nowrap;";
@@ -1668,9 +1852,7 @@ class ShoppingListCard extends HTMLElement {
 
     const mirrorTitle = document.createElement("div");
     mirrorTitle.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:0 4px;";
-    const checkIcon = document.createElement("ha-icon");
-    checkIcon.setAttribute("icon", "mdi:check-circle");
-    checkIcon.style.cssText = "color:var(--sl-text-muted);width:20px;height:20px;";
+    const checkIcon = this._mdiEl("check-circle", 20, "color:var(--sl-text-muted);width:20px;height:20px;display:flex;");
     mirrorTitle.appendChild(checkIcon);
     const mt = document.createElement("div");
     mt.style.cssText = "font-weight:600;font-size:14px;color:var(--sl-text-muted);flex:1;";
@@ -1695,6 +1877,8 @@ class ShoppingListCard extends HTMLElement {
       const catTexts = isLimited ? fullCatTexts.slice(0, maxPerCat) : fullCatTexts;
       const catWrap = document.createElement("div");
       catWrap.className = "sl-cat";
+      catWrap.dataset.section = "mirror";
+      catWrap.dataset.cat = cat;
       catWrap.style.marginBottom = "12px";
 
       const header = document.createElement("div");
@@ -1707,8 +1891,8 @@ class ShoppingListCard extends HTMLElement {
       const headerPadding = useBanner ? "8px 12px" : "6px 4px";
 
       // Chevron is declared early so the collapse toggle can reference it.
-      const chevron = document.createElement("ha-icon");
-      chevron.setAttribute("icon", "mdi:chevron-down");
+      const chevron = this._mdiEl("chevron-down", 16, "");
+      chevron.classList.add("sl-chevron");
 
       if (useBanner) {
         header.className = "sl-header sl-banner-header";
@@ -1772,7 +1956,9 @@ class ShoppingListCard extends HTMLElement {
         collapsed = !collapsed;
         grid.style.display = collapsed ? "none" : "grid";
         grid.dataset.collapsed = collapsed ? "true" : "";
-        chevron.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
+        // v2.4.0: chevron is a static inline SVG; the collapse state rotates it
+      // (down → -90° = right) instead of re-resolving an <ha-icon>.
+      chevron.style.transform = collapsed ? "rotate(-90deg)" : "";
         header.setAttribute("aria-expanded", collapsed ? "false" : "true");
       };
       header.addEventListener("click", toggle);
@@ -1792,31 +1978,7 @@ class ShoppingListCard extends HTMLElement {
       }
 
       if (isLimited) {
-        const loadMore = document.createElement("div");
-        loadMore.style.cssText = "display:flex;align-items:center;justify-content:center;padding:8px;border-radius:12px;background:var(--sl-bg-input);border:1px dashed var(--sl-border);cursor:pointer;margin-top:4px;grid-column:1 / -1;transition:all 0.15s;";
-        loadMore.textContent = "Mehr laden (" + (fullCatTexts.length - catTexts.length) + ")";
-        loadMore.style.fontSize = "12px";
-        loadMore.style.color = "var(--sl-text-muted)";
-        loadMore.addEventListener("mouseenter", () => { loadMore.style.background = "var(--sl-hover)"; loadMore.style.borderColor = color; });
-        loadMore.addEventListener("mouseleave", () => { loadMore.style.background = "var(--sl-bg-input)"; loadMore.style.borderColor = "var(--sl-border)"; });
-        let expanded = false;
-        loadMore.addEventListener("click", () => {
-          if (expanded) return;
-          expanded = true;
-          loadMore.remove();
-          for (let i = maxPerCat; i < fullCatTexts.length; i++) {
-            const text = fullCatTexts[i];
-            const existing = itemBySummary.get(text.toLowerCase());
-            if (existing) {
-              const tile = this._renderTile(existing, catWrap);
-              tile.dataset.section = "mirror";
-              grid.appendChild(tile);
-            } else {
-              grid.appendChild(this._renderGhostTile(text, catWrap));
-            }
-          }
-        });
-        grid.appendChild(loadMore);
+        grid.appendChild(this._buildLoadMore(catWrap, grid, fullCatTexts, catTexts.length, itemBySummary, maxPerCat));
       }
 
       catWrap.appendChild(grid);
@@ -1825,12 +1987,12 @@ class ShoppingListCard extends HTMLElement {
 
     if (hasAnyLimit) {
       const showAll = document.createElement("div");
-      showAll.style.cssText = "display:flex;align-items:center;justify-content:center;padding:10px;border-radius:12px;background:var(--sl-bg-input);border:1px dashed var(--sl-border);cursor:pointer;margin-top:8px;transition:all 0.15s;";
-      showAll.textContent = "Alle Artikel anzeigen";
+      // v2.4.0: hover feedback via .sl-more-btn:hover CSS rule, no JS listeners.
+      showAll.className = "sl-more-btn";
+      showAll.style.cssText = "margin-top:8px;";
       showAll.style.fontSize = "13px";
       showAll.style.color = "var(--sl-text-sec)";
-      showAll.addEventListener("mouseenter", () => { showAll.style.background = "var(--sl-hover)"; showAll.style.borderColor = color; });
-      showAll.addEventListener("mouseleave", () => { showAll.style.background = "var(--sl-bg-input)"; showAll.style.borderColor = "var(--sl-border)"; });
+      showAll.textContent = "Alle Artikel anzeigen";
       showAll.addEventListener("click", () => {
         const newMirror = this._renderMirrorSection(items, order, Infinity);
         if (newMirror) mirrorWrap.replaceWith(newMirror);
@@ -1839,6 +2001,34 @@ class ShoppingListCard extends HTMLElement {
     }
 
     return mirrorWrap;
+  }
+
+  // v2.4.0: "Mehr laden" button for limited mirror categories. Extracted from
+  // _renderMirrorSection so surgical grid rebuilds can re-append it; hover
+  // feedback comes from .sl-more-btn:hover, no per-element JS listeners.
+  _buildLoadMore(catWrap, grid, fullCatTexts, visibleCount, itemBySummary, maxPerCat) {
+    const loadMore = document.createElement("div");
+    loadMore.className = "sl-more-btn";
+    loadMore.style.cssText = "margin-top:4px;grid-column:1 / -1;font-size:12px;color:var(--sl-text-muted);";
+    loadMore.textContent = "Mehr laden (" + (fullCatTexts.length - visibleCount) + ")";
+    let expanded = false;
+    loadMore.addEventListener("click", () => {
+      if (expanded) return;
+      expanded = true;
+      loadMore.remove();
+      for (let i = maxPerCat; i < fullCatTexts.length; i++) {
+        const text = fullCatTexts[i];
+        const existing = itemBySummary.get(text.toLowerCase());
+        if (existing) {
+          const tile = this._renderTile(existing, catWrap);
+          tile.dataset.section = "mirror";
+          grid.appendChild(tile);
+        } else {
+          grid.appendChild(this._renderGhostTile(text, catWrap));
+        }
+      }
+    });
+    return loadMore;
   }
 
   _render() {
@@ -1881,6 +2071,12 @@ class ShoppingListCard extends HTMLElement {
     card.style.setProperty("--sl-danger", "var(--error-color, #ef5350)");
     card.style.setProperty("--sl-save", "var(--primary-color, #43A047)");
     card.style.setProperty("--sl-save-text", "var(--text-primary-color, #fff)");
+    // v2.4.0: tiles derive their chrome (background/border/opacity) from
+    // [data-status] via the stylesheet below, so _lightUpdate/_applySurgicalUpdate
+    // only sync datasets — no inline style writes per tile. Hover feedback is
+    // pure CSS (no JS mouseenter/mouseleave listeners).
+    card.style.setProperty("--sl-accent", this._color);
+    card.style.setProperty("--sl-accent-soft", this._color + "60");
     const style = document.createElement("style");
     style.textContent = `
       .sl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px;padding:12px;}
@@ -1891,6 +2087,29 @@ class ShoppingListCard extends HTMLElement {
       @media (max-width:420px){.sl-banner-header{aspect-ratio:6/1;min-height:30px;}}
       .sl-cat-banner{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0;}
       @keyframes sl-cat-banner{0%{transform:scale(1) translate(0,0);}100%{transform:scale(1.05) translate(-1%,-0.5%);}}
+      .sl-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;border-radius:12px;cursor:pointer;min-height:96px;position:relative;overflow:hidden;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;}
+      .sl-tile[data-status="needs_action"]{background:var(--sl-accent);border:none;opacity:1;}
+      .sl-tile[data-status="completed"]{background:var(--sl-bg);border:2px solid var(--sl-border);opacity:0.55;}
+      .sl-tile.sl-ghost{background:var(--sl-bg);border:2px solid var(--sl-border);opacity:0.55;}
+      .sl-tile:hover{opacity:0.8;}
+      .sl-icon-wrap{display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;}
+      .sl-label-overlay{position:absolute;left:0;right:0;bottom:0;padding:4px 6px;z-index:2;}
+      .sl-tile[data-status="needs_action"] .sl-label-overlay,.sl-tile.sl-ghost .sl-label-overlay{background:linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);}
+      .sl-tile[data-status="completed"] .sl-label-overlay{background:linear-gradient(0deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 70%, transparent 100%);}
+      .sl-label{font-size:10px;font-weight:600;text-align:center;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;text-shadow:0 1px 2px rgba(0,0,0,0.5);}
+      .sl-badge{position:absolute;top:4px;right:4px;z-index:3;display:inline-block;padding:2px 6px;border-radius:8px;font-size:9px;font-weight:700;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;backdrop-filter:blur(2px);}
+      .sl-tile[data-status="completed"] .sl-badge{background:var(--sl-border);color:var(--sl-text-muted);}
+      .sl-tile[data-status="needs_action"] .sl-badge{background:rgba(0,0,0,0.35);color:#fff;}
+      .sl-chevron{transition:transform 0.15s ease;display:flex;align-items:center;justify-content:center;}
+      .sl-search{margin-bottom:14px;position:relative;}
+      .sl-ac-row{padding:10px 16px;cursor:pointer;font-size:15px;color:var(--sl-text);border-bottom:1px solid var(--sl-border);}
+      .sl-ac-row.sm{padding:8px 12px;font-size:13px;}
+      .sl-ac-row:hover{background:var(--sl-hover);}
+      .sl-add-tile{display:flex;align-items:center;justify-content:center;min-height:96px;border-radius:12px;border:2px dashed var(--sl-accent-soft);background:var(--sl-bg);cursor:pointer;transition:all 0.15s;}
+      .sl-add-tile:hover{background:var(--sl-hover);border-color:var(--sl-accent);}
+      .sl-more-btn{display:flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;background:var(--sl-bg-input);border:1px dashed var(--sl-border);cursor:pointer;transition:all 0.15s;}
+      .sl-more-btn:hover{background:var(--sl-hover);border-color:var(--sl-accent);}
+      .sl-mirror-wrap{content-visibility:auto;contain-intrinsic-size:auto 600px;}
     `;
     card.appendChild(style);
 
@@ -1945,6 +2164,10 @@ class ShoppingListCard extends HTMLElement {
     const mirror = this._renderMirrorSection(items, order);
     if (mirror) card.appendChild(mirror);
 
+    // v2.4.0: one card-level listener set replaces the per-tile listener suite
+    // (click/touch/contextmenu/press). The card element is rebuilt on full
+    // renders, so binding here keeps the delegation chain tied to the live DOM.
+    this._bindCardEvents(card);
     this.replaceChildren(card);
     this._pruneStaleModal();
     // Kick off a background warmup of the persistent SVG cache in idle time
@@ -1954,35 +2177,27 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _renderTile(item, catWrap) {
-    const isDone = item.status === "completed";
-    const color = this._color;
+    // v2.4.0: listener-free tile. All visual state lives in data attributes; the
+    // card stylesheet derives background/border/opacity/badge colors from
+    // [data-status], and hover comes from .sl-tile:hover. Tap/long-press are
+    // handled by the card-level delegation in _bindCardEvents — no per-tile
+    // listeners (~11 per tile previously, ~1,500+ per full rebuild).
     const tile = document.createElement("div");
     tile.className = "sl-tile";
     tile.dataset.uid = item.uid;
     tile.dataset.summary = item.summary.toLowerCase();
     tile.dataset.status = item.status;
     tile.dataset.qty = String(item.quantity || 1);
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;border-radius:12px;background:" + (isDone ? "var(--sl-bg)" : color) + ";border:" + (isDone ? "2px solid var(--sl-border)" : "none") + ";opacity:" + (isDone ? "0.55" : "1") + ";cursor:pointer;min-height:96px;position:relative;overflow:hidden;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
-    // v2.1.8: Vereinheitlichtes Hover-Modell (Opazität 0.8) für alle drei Kachel-Arten.
-    // Bisher war das Hover der aktiven Kacheln unsichtbar (var(--sl-save) == #43A047
-    // == eigene Kachelgrün) und das der erledigten durch den completed-Guard ganz
-    // deaktiviert — nur Ghost-Kacheln hellten auf. Jetzt dimmt Aktiv (1.0→0.8,
-    // "Press"-Feedback) und Erledigte hellen auf (0.55→0.8), analog zu den Ghosts.
-    // Hintergrund bleibt unverändert; nur opacity wird beim Hover berührt.
-    tile.addEventListener("mouseenter", () => { tile.style.opacity = "0.8"; });
-    tile.addEventListener("mouseleave", () => { tile.style.opacity = tile.dataset.status === "completed" ? "0.55" : "1"; });
 
     const iconWrap = document.createElement("div");
-    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;";
+    iconWrap.className = "sl-icon-wrap";
     this._renderItemIcon(iconWrap, item, 56);
     tile.appendChild(iconWrap);
 
     const labelOverlay = document.createElement("div");
     labelOverlay.className = "sl-label-overlay";
-    labelOverlay.style.cssText = "position:absolute;left:0;right:0;bottom:0;padding:4px 6px;background:linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);z-index:2;";
     const label = document.createElement("div");
     label.className = "sl-label";
-    label.style.cssText = "font-size:10px;font-weight:600;text-align:center;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;text-shadow:0 1px 2px rgba(0,0,0,0.5);";
     label.textContent = item.summary;
     labelOverlay.appendChild(label);
     tile.appendChild(labelOverlay);
@@ -1990,73 +2205,10 @@ class ShoppingListCard extends HTMLElement {
     if ((item.quantity || 1) > 1) {
       const badge = document.createElement("div");
       badge.className = "sl-badge";
-      badge.style.cssText = "position:absolute;top:4px;right:4px;z-index:3;display:inline-block;padding:2px 6px;border-radius:8px;background:" + (isDone ? "var(--sl-border)" : "rgba(0,0,0,0.35)") + ";color:" + (isDone ? "var(--sl-text-muted)" : "#fff") + ";font-size:9px;font-weight:700;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;backdrop-filter:blur(2px);";
       badge.textContent = (item.quantity || 1) + "x";
       tile.appendChild(badge);
     }
 
-    let pressTimer = null;
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let touchHandled = false;
-    let longPressFired = false;
-    const fireLongPress = () => {
-      if (longPressFired) return;
-      longPressFired = true;
-      this._haptic(80);
-      const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
-      if (currentItem) this._showEditModal(currentItem, tile);
-    };
-    const startPress = () => {
-      longPressFired = false;
-      pressTimer = setTimeout(() => {
-        pressTimer = null;
-        fireLongPress();
-      }, 500);
-    };
-    const LONG_PRESS_MOVE_THRESHOLD = 12;
-    const endPress = () => {
-      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-    };
-    tile.addEventListener("touchstart", e => {
-      touchHandled = true;
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-      startPress();
-    }, { passive: true });
-    tile.addEventListener("touchend", () => {
-      const wasTap = pressTimer && !longPressFired;
-      endPress();
-      if (wasTap) {
-        const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
-        if (currentItem) this._toggleItem(currentItem);
-      }
-      setTimeout(() => touchHandled = false, 300);
-    });
-    tile.addEventListener("touchcancel", () => { endPress(); setTimeout(() => touchHandled = false, 300); });
-    tile.addEventListener("touchmove", e => {
-      if (pressTimer) {
-        const dx = e.touches[0].clientX - touchStartX;
-        const dy = e.touches[0].clientY - touchStartY;
-        if (Math.sqrt(dx * dx + dy * dy) > LONG_PRESS_MOVE_THRESHOLD) endPress();
-      }
-    }, { passive: true });
-    tile.addEventListener("mousedown", e => {
-      if (touchHandled) return;
-      startPress();
-    });
-    tile.addEventListener("mouseup", () => { endPress(); });
-    tile.addEventListener("mouseleave", () => { endPress(); });
-    tile.addEventListener("contextmenu", e => {
-      e.preventDefault();
-      endPress();
-      fireLongPress();
-    });
-    tile.addEventListener("click", () => {
-      if (touchHandled || longPressFired) return;
-      const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
-      if (currentItem) this._toggleItem(currentItem);
-    });
     if (catWrap) this._tileIndex.push({ tile, cat: catWrap, summary: item.summary.toLowerCase() });
     return tile;
   }
@@ -2078,12 +2230,12 @@ class ShoppingListCard extends HTMLElement {
     tile.className = "sl-tile sl-ghost";
     tile.dataset.summary = text.toLowerCase();
     tile.dataset.status = "ghost";
-    tile.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;border-radius:12px;background:var(--sl-bg);border:2px solid var(--sl-border);opacity:0.55;cursor:pointer;min-height:96px;position:relative;overflow:hidden;transition:all 0.15s;user-select:none;-webkit-touch-callout:none;-webkit-user-select:none;touch-action:manipulation;";
-    tile.addEventListener("mouseenter", () => { tile.style.opacity = "0.8"; });
-    tile.addEventListener("mouseleave", () => { tile.style.opacity = "0.55"; });
+    // v2.4.0: original-case text for the delegated click handler — it adds the
+    // item with original capitalization, like the old per-tile listener did.
+    tile.dataset.addText = text;
 
     const iconWrap = document.createElement("div");
-    iconWrap.style.cssText = "display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;";
+    iconWrap.className = "sl-icon-wrap";
     // lazy=true: backlog tiles defer their SVG fetch until near the viewport,
     // so a full backlog render (~116 tiles) doesn't fire ~116 synchronous
     // SVG loads in one frame. First-screen tiles still load immediately.
@@ -2092,17 +2244,300 @@ class ShoppingListCard extends HTMLElement {
 
     const labelOverlay = document.createElement("div");
     labelOverlay.className = "sl-label-overlay";
-    labelOverlay.style.cssText = "position:absolute;left:0;right:0;bottom:0;padding:4px 6px;background:linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);z-index:2;";
     const label = document.createElement("div");
     label.className = "sl-label";
-    label.style.cssText = "font-size:10px;font-weight:600;text-align:center;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;text-shadow:0 1px 2px rgba(0,0,0,0.5);";
     label.textContent = text;
     labelOverlay.appendChild(label);
     tile.appendChild(labelOverlay);
 
-    tile.addEventListener("click", () => this._addItem(text));
     if (catWrap) this._tileIndex.push({ tile, cat: catWrap, summary: text.toLowerCase() });
     return tile;
+  }
+
+  // v2.4.0: card-level event delegation. Replaces the per-tile listener suite
+  // (click, touchstart/move/end/cancel, mousedown/up/leave, contextmenu,
+  // mouseenter/leave ≈ 11 listeners × ~150 tiles). Semantics match the old
+  // per-tile handlers exactly:
+  //  - Tap (mouse) toggles via click; tap (touch) toggles in touchend, and the
+  //    trailing synthetic click is suppressed via _touchTile/_touchAt.
+  //  - Ghost tiles toggle nothing — their click ADDS the item (original case
+  //    via dataset.addText). They intentionally have no touch press path, so
+  //    their click event is used on touch devices as well.
+  //  - Long-press (500 ms hold, >12 px move cancels) opens the edit modal;
+  //    the click after a fired long-press is suppressed via _longPressTile.
+  //  - contextmenu on real tiles opens the modal too (right-click / long tap).
+  _bindCardEvents(card) {
+    card.addEventListener("click", e => {
+      const tile = e.target.closest(".sl-tile");
+      if (!tile) return;
+      if (this._longPressTile === tile) return;
+      const isGhost = tile.classList.contains("sl-ghost");
+      if (!isGhost && this._touchTile === tile && Date.now() - this._touchAt < 400) return;
+      if (isGhost) {
+        this._addItem(tile.dataset.addText || tile.dataset.summary || "");
+      } else {
+        const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
+        if (currentItem) this._toggleItem(currentItem);
+      }
+    });
+
+    card.addEventListener("touchstart", e => {
+      const tile = e.target.closest(".sl-tile");
+      if (!tile || tile.classList.contains("sl-ghost")) return;
+      this._touchTile = tile;
+      this._touchAt = Date.now();
+      this._startPress(tile, e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    card.addEventListener("touchmove", e => {
+      const p = this._press;
+      if (!p) return;
+      // Mouse presses carry no coordinates (x/y undefined) → NaN distance →
+      // never cancels; the mouse path uses mouseout instead.
+      const dx = e.touches[0].clientX - p.x;
+      const dy = e.touches[0].clientY - p.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 12) this._cancelPress();
+    }, { passive: true });
+
+    card.addEventListener("touchend", e => {
+      const p = this._press;
+      const tile = e.target.closest(".sl-tile");
+      const wasTap = p && p.timer && this._longPressTile !== p.tile;
+      this._cancelPress();
+      if (wasTap && tile === p.tile && !tile.classList.contains("sl-ghost")) {
+        const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
+        if (currentItem) this._toggleItem(currentItem);
+      }
+      setTimeout(() => { this._touchTile = null; this._touchAt = 0; }, 300);
+    });
+
+    card.addEventListener("touchcancel", () => {
+      this._cancelPress();
+      setTimeout(() => { this._touchTile = null; this._touchAt = 0; }, 300);
+    });
+
+    card.addEventListener("mousedown", e => {
+      // Ignore the synthetic mouse events that trail a real touch.
+      if (this._touchTile) return;
+      const tile = e.target.closest(".sl-tile");
+      if (!tile || tile.classList.contains("sl-ghost")) return;
+      this._startPress(tile);
+    });
+
+    card.addEventListener("mouseup", () => this._cancelPress());
+
+    card.addEventListener("mouseout", e => {
+      const p = this._press;
+      if (!p) return;
+      // Leaving the pressed tile cancels the pending long press (old per-tile
+      // mouseleave behavior). Moves between the tile's own children are fine.
+      if (e.target.closest(".sl-tile") === p.tile &&
+          !(e.relatedTarget && p.tile.contains(e.relatedTarget))) {
+        this._cancelPress();
+      }
+    });
+
+    card.addEventListener("contextmenu", e => {
+      const tile = e.target.closest(".sl-tile");
+      if (!tile || tile.classList.contains("sl-ghost")) return;
+      e.preventDefault();
+      this._cancelPress();
+      this._fireLongPressTile(tile);
+    });
+  }
+
+  _startPress(tile, x, y) {
+    this._cancelPress();
+    this._longPressTile = null;
+    const timer = setTimeout(() => {
+      this._press = null;
+      this._fireLongPressTile(tile);
+    }, 500);
+    this._press = { tile, timer, x, y };
+  }
+
+  _cancelPress() {
+    const p = this._press;
+    if (p) { clearTimeout(p.timer); this._press = null; }
+  }
+
+  _fireLongPressTile(tile) {
+    if (!tile || tile.classList.contains("sl-ghost")) return;
+    if (this._longPressTile === tile) return; // already fired for this tile
+    this._longPressTile = tile;
+    this._haptic(80);
+    const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
+    if (currentItem) this._showEditModal(currentItem, tile);
+  }
+
+  // v2.4.0: surgical update path. Instead of rebuilding the whole card on
+  // every backend change, diff the previous vs current items and patch only
+  // the affected category grids. The common interactions while shopping —
+  // toggling an item, changing a quantity, removing one item — touch one or
+  // two categories instead of re-rendering ~150 tiles. Anything structural
+  // (active search filter, new category needing a fresh header, fingerprint
+  // mismatch, mirror appearing/vanishing) bails with false → full render.
+  // Returns true when the DOM is up to date and no full render is needed.
+  _applySurgicalUpdate() {
+    if (this._searchQuery) return false;
+    const card = this.querySelector("ha-card");
+    if (!card) return false;
+    // A card without any section (missing-sensor message, fresh state) has
+    // nothing to patch surgically.
+    if (!card.querySelector(".sl-cat") && !card.querySelector(".sl-mirror-wrap")) return false;
+    // The DOM must still correspond to the previous fingerprint — if not
+    // (raced render, DOM touched elsewhere), only a rebuild is safe.
+    if (this._fingerprintOf(this._prevItems || []) !== this._lastFingerprint) return false;
+
+    const prev = this._prevItems || [];
+    const cur = this._items;
+    const prevByUid = new Map(prev.map(i => [i.uid, i]));
+    const curByUid = new Map(cur.map(i => [i.uid, i]));
+    const added = cur.filter(i => !prevByUid.has(i.uid));
+    const removed = prev.filter(i => !curByUid.has(i.uid));
+    const changed = cur.filter(i => {
+      const p = prevByUid.get(i.uid);
+      return p && (p.status !== i.status || p.summary !== i.summary ||
+        String(p.quantity || 1) !== String(i.quantity || 1) ||
+        (p.icon || "") !== (i.icon || ""));
+    });
+    if (!added.length && !removed.length && !changed.length) {
+      // Only reachable when the fingerprint changed but no item field did →
+      // the backend reordered items → full render to refresh tile order.
+      return false;
+    }
+
+    // --- structural bail conditions ---
+    // A category that just gained its first active item needs a fresh section
+    // header (icon/banner wiring) → cheaper and safer to rebuild fully.
+    const activeCatsBefore = new Set();
+    for (const s of card.querySelectorAll('.sl-cat[data-section="active"]')) activeCatsBefore.add(s.dataset.cat);
+    const activeCatsNow = new Set(cur.filter(i => i.status === "needs_action").map(i => this._itemCategoryKey(i)));
+    for (const cat of activeCatsNow) if (!activeCatsBefore.has(cat)) return false;
+
+    // Mirror composition must stay section-compatible: no brand-new mirror
+    // category, and the wrap exists exactly when there are available items.
+    const catalogNow = this._computeMirrorCatalog(cur);
+    const mirrorCatsNow = new Set(Object.keys(catalogNow.byCat));
+    const mirrorWrap = card.querySelector(".sl-mirror-wrap");
+    if (!mirrorWrap && mirrorCatsNow.size > 0) return false;
+    if (mirrorWrap && mirrorCatsNow.size === 0) return false;
+    if (mirrorWrap) {
+      const mirrorCatsBefore = new Set();
+      for (const s of card.querySelectorAll('.sl-cat[data-section="mirror"]')) mirrorCatsBefore.add(s.dataset.cat);
+      for (const cat of mirrorCatsNow) if (!mirrorCatsBefore.has(cat)) return false;
+    }
+
+    // --- touched categories (prev AND new: a summary edit may move category) ---
+    const touched = new Set();
+    for (const i of added) touched.add(this._itemCategoryKey(i));
+    for (const i of removed) touched.add(this._itemCategoryKey(i));
+    for (const i of changed) {
+      touched.add(this._itemCategoryKey(i));
+      touched.add(this._itemCategoryKey(prevByUid.get(i.uid)));
+    }
+
+    // --- patch active sections ---
+    for (const cat of activeCatsBefore) {
+      const section = card.querySelector('.sl-cat[data-section="active"][data-cat="' + cat + '"]');
+      if (!section) continue;
+      const needsNow = cur.filter(i => i.status === "needs_action" && this._itemCategoryKey(i) === cat);
+      if (!needsNow.length) { section.remove(); continue; }
+      if (touched.has(cat)) this._rebuildActiveGrid(section, needsNow);
+      const count = section.querySelector(".sl-header .sl-count");
+      if (count) count.textContent = needsNow.length;
+    }
+
+    // --- patch mirror sections ---
+    if (mirrorWrap) {
+      for (const cat of touched) {
+        const section = card.querySelector('.sl-cat[data-section="mirror"][data-cat="' + cat + '"]');
+        if (!section) continue;
+        const texts = catalogNow.byCat[cat] || [];
+        if (!texts.length) { section.remove(); continue; }
+        this._rebuildMirrorGrid(section, texts, catalogNow.itemBySummary);
+      }
+      // Refresh the "Verfügbar (N)" separator count.
+      for (const span of mirrorWrap.querySelectorAll("span")) {
+        if (span.textContent.startsWith("Verfügbar (")) {
+          span.textContent = "Verfügbar (" + catalogNow.allAvail.length + ")";
+          break;
+        }
+      }
+    }
+
+    this._updateEmptyHint(card);
+    this._rebuildTileIndex(card);
+    this._pruneStaleModal();
+    return true;
+  }
+
+  // Rebuild one active category's tile grid in place. Header, collapse toggle
+  // wiring and the add-tile are preserved/re-created; the grid element itself
+  // stays in the DOM, so its collapsed state survives.
+  _rebuildActiveGrid(section, needsItems) {
+    const grid = section.querySelector(".sl-grid");
+    if (!grid) return;
+    grid.replaceChildren();
+    for (const item of needsItems) {
+      const tile = this._renderTile(item, section);
+      tile.dataset.section = "active";
+      grid.appendChild(tile);
+    }
+    grid.appendChild(this._buildAddTile());
+  }
+
+  // Rebuild one mirror category's tile grid in place (same structure as
+  // _renderMirrorSection's loop). Known trade-off: a per-category "Mehr laden"
+  // expansion collapses back to _mirrorMaxPerCat tiles when this category gets
+  // rebuilt; the "Alle anzeigen" (Infinity) state IS preserved.
+  _rebuildMirrorGrid(section, texts, itemBySummary) {
+    const grid = section.querySelector(".sl-grid");
+    if (!grid) return;
+    const maxPerCat = this._mirrorMaxPerCat || 20;
+    grid.replaceChildren();
+    const catTexts = texts.slice(0, maxPerCat);
+    for (const text of catTexts) {
+      const existing = itemBySummary.get(text.toLowerCase());
+      if (existing) {
+        const tile = this._renderTile(existing, section);
+        tile.dataset.section = "mirror";
+        grid.appendChild(tile);
+      } else {
+        grid.appendChild(this._renderGhostTile(text, section));
+      }
+    }
+    if (texts.length > maxPerCat) {
+      grid.appendChild(this._buildLoadMore(section, grid, texts, catTexts.length, itemBySummary, maxPerCat));
+    }
+    const count = section.querySelector(".sl-header .sl-count");
+    if (count) count.textContent = texts.length;
+  }
+
+  // Keep the "list is empty" hint under the search bar in sync after surgical
+  // updates (full renders rebuild it with the rest of the search bar).
+  _updateEmptyHint(card) {
+    const search = card.querySelector(".sl-search");
+    if (!search) return;
+    const hint = search.querySelector(".sl-empty-hint");
+    if (this._items.length === 0 && !hint) {
+      search.appendChild(this._buildEmptyHint());
+    } else if (this._items.length > 0 && hint) {
+      hint.remove();
+    }
+  }
+
+  // Rebuild _tileIndex from the live DOM after surgical grid rebuilds — the
+  // grid rebuilds pushed entries for their new tiles, but removed tiles'
+  // entries and cross-category ordering are only consistent when derived
+  // from the DOM itself.
+  _rebuildTileIndex(card) {
+    this._tileIndex = [];
+    for (const cat of card.querySelectorAll(".sl-cat")) {
+      for (const tile of cat.querySelectorAll(".sl-tile")) {
+        this._tileIndex.push({ tile, cat, summary: tile.dataset.summary || "" });
+      }
+    }
   }
 
   _showEditModal(item, triggerEl) {
