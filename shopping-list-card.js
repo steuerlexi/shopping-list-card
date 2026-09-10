@@ -1,4 +1,8 @@
-// Shopping List Card v2.4.1 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.5.0 — AppDaemon backend edition (local SVG icons).
+// v2.5.0: Offline-Fähigkeit — Snapshot-Persistenz (localStorage), optimistische
+// Updates und persistente Sync-Queue: Befehle, die bei schlechtem Netz nicht
+// zustande kommen, werden lokal zwischengespeichert und bei Reconnect
+// nacheinander über den input_text-Kanal nachgesendet.
 // v2.4.1: einheitliche Kachel-Beschriftung — derselbe dunkle Label-Verlauf auf
 // allen Kacheln (vorher schwächerer Verlauf auf completed-Kacheln).
 //
@@ -154,6 +158,17 @@ class ShoppingListCard extends HTMLElement {
     this._warmupScheduled = false;
     this._warmupIdleHandle = null;   // requestIdleCallback/setTimeout handle for _scheduleWarmup
     this._warmupStepHandle = null;   // handle for the staggered _warmupSvgCache step loop
+
+    // v2.5.0: Offline support. See _persistSnapshot / _offlineMutate /
+    // _queueCommand / _flushQueue. _offlineMode is true while the backend
+    // sensor is missing and the list is served from the localStorage snapshot.
+    this._offlineMode = false;
+    this._renderedOffline = false;   // offline state of the DOM (banner logic)
+    this._snapSaveTimer = null;      // debounce handle for snapshot persist
+    this._queue = null;              // lazy array of queued command payloads
+    this._flushTimer = null;         // setTimeout handle for queue replay
+    this._flushing = false;          // a replay is in progress
+    this._cmdSeq = 0;                // nonce counter (state dedup on replay)
   }
 
   setConfig(config) {
@@ -502,7 +517,18 @@ class ShoppingListCard extends HTMLElement {
       this._renderPending = false;
       this._renderRaf = null;
       this._loadItems();
-      if (this._fingerprint === this._lastFingerprint) return;
+      // Also re-render on offline↔online transitions even when the item list
+      // is byte-identical (e.g. HA restarted, sensor gone, snapshot has the
+      // same items) — the offline banner lives outside the fingerprint.
+      if (this._fingerprint === this._lastFingerprint &&
+          this._renderedOffline === this._offlineMode) return;
+      // The offline banner lives at card level, outside the category sections
+      // a surgical pass touches — an online↔offline transition always needs
+      // the full render so the banner is added or removed.
+      if (this._renderedOffline !== this._offlineMode) {
+        this._scheduleFullRender();
+        return;
+      }
       if (this._applySurgicalUpdate()) {
         this._lastFingerprint = this._fingerprint;
         // A pending full rebuild is now obsolete — the surgical pass already
@@ -534,10 +560,58 @@ class ShoppingListCard extends HTMLElement {
     // Stash the previous items BEFORE replacing, so _applySurgicalUpdate can
     // diff prev→current and be certain the DOM still reflects _prevItems.
     this._prevItems = this._items;
-    if (!st) { this._items = []; this._fingerprint = 0; return; }
+    if (!st) {
+      // Backend sensor missing → serve the list from the localStorage snapshot
+      // (offline mode) instead of an empty card. Without a snapshot we still
+      // enter offline mode with an empty list; _render then shows the regular
+      // "sensor missing" hint.
+      const snap = this._readSnapshot();
+      this._items = snap ? snap.filter(i => (i.list || "standard") === this._listId) : [];
+      this._offlineMode = true;
+      this._fingerprint = this._fingerprintOf(this._items);
+      return;
+    }
+    const wasOffline = this._offlineMode;
+    this._offlineMode = false;
     const all = Array.isArray(st.attributes?.items) ? st.attributes.items : [];
     this._items = all.filter(i => (i.list || "standard") === this._listId);
     this._fingerprint = this._fingerprintOf(this._items);
+    // Persist the fresh server list (all lists, unfiltered) so a later outage
+    // or a fresh app open without network can render it. Debounced — bursts
+    // of state updates coalesce into one write.
+    this._persistSnapshot(all);
+    // Backend recovered (offline → online): replay queued commands. This
+    // covers the case where the WebSocket stayed up but AppDaemon / the
+    // sensor was down and commands went into the queue.
+    if (wasOffline) this._scheduleFlush(600);
+    else if (this._loadQueue().length) {
+      // Commands queued in a previous session (page closed while offline):
+      // flush them shortly after a healthy start.
+      this._scheduleFlush(1500);
+    }
+  }
+
+  // --- v2.5.0: snapshot persistence (offline rendering) -------------------
+
+  // Debounced persist of the full item list. Stored unfiltered so the offline
+  // path can rebuild the card for any configured listId.
+  _persistSnapshot(items) {
+    if (this._snapSaveTimer != null) clearTimeout(this._snapSaveTimer);
+    this._snapSaveTimer = setTimeout(() => {
+      this._snapSaveTimer = null;
+      try {
+        localStorage.setItem("slc_list_snapshot_v1", JSON.stringify({ t: Date.now(), items: items || [] }));
+      } catch (e) { /* quota / private mode — offline fallback simply unavailable */ }
+    }, 500);
+  }
+
+  _readSnapshot() {
+    try {
+      const raw = localStorage.getItem("slc_list_snapshot_v1");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed?.items) ? parsed.items : null;
+    } catch (e) { return null; }
   }
 
   _fingerprintOf(items) {
@@ -1290,26 +1364,40 @@ class ShoppingListCard extends HTMLElement {
   // input_text/set_value service, which AppDaemon listens to with listen_state.
   // The backend clears the input after executing the command.
   _fireEvent(eventType, data) {
-    if (!this._hass) {
-      console.warn("Shopping List Card: no HA connection, cannot send", eventType);
-      this._showToast("Fehler: keine HA-Verbindung");
+    // The `_n` nonce guarantees a byte-distinct input_text value even when the
+    // same command is repeated (e.g. toggling an item back and forth offline).
+    // HA dedupes unchanged states, so without it a replayed identical command
+    // would never trigger AppDaemon's listen_state. AppDaemon ignores unknown
+    // top-level fields like _n.
+    const payload = JSON.stringify({ event: eventType, data: data || {}, _n: ++this._cmdSeq });
+    if (this._offlineMode || !this._hass) {
+      this._queueCommand(payload);
       return;
     }
-    const payload = JSON.stringify({ event: eventType, data: data || {} });
-    const call = (fn) => {
-      try {
-        fn();
-      } catch (e) {
-        console.warn("Shopping List Card: command send failed", eventType, e);
-        this._showToast("Fehler: " + (e.message || "Befehl fehlgeschlagen"));
-      }
-    };
 
     if (typeof this._hass.callService === "function") {
-      call(() => this._hass.callService("input_text", "set_value", {
-        entity_id: "input_text.einkaufsliste_command",
-        value: payload
-      }));
+      let p = null;
+      try {
+        p = this._hass.callService("input_text", "set_value", {
+          entity_id: "input_text.einkaufsliste_command",
+          value: payload
+        });
+      } catch (e) {
+        // Synchronous throw (validation, suspended connection): queue it.
+        console.warn("Shopping List Card: command send failed, queued", eventType, e);
+        this._queueCommand(payload);
+        return;
+      }
+      // callService returns a Promise that only rejects once a reconnect
+      // attempt fails (ERR_CONNECTION_LOST) — a short outage keeps it pending
+      // while the WS library buffers the message. So a rejection means the
+      // command never reached HA: park it for the next flush.
+      if (p && typeof p.catch === "function") {
+        p.catch(e => {
+          console.warn("Shopping List Card: command send failed, queued", eventType, e);
+          this._queueCommand(payload);
+        });
+      }
       return;
     }
 
@@ -1319,52 +1407,246 @@ class ShoppingListCard extends HTMLElement {
       this._hass.connection.sendMessagePromise({
         type: "fire_event",
         event_type: eventType,
-        event_data: data || {}
+        event_data: Object.assign({}, data || {}, { _n: this._cmdSeq })
       }).catch(e => {
-        console.warn("Shopping List Card: fire_event failed", eventType, e);
-        this._showToast("Fehler: " + (e.message || "Event fehlgeschlagen"));
+        console.warn("Shopping List Card: fire_event failed, queued", eventType, e);
+        this._queueCommand(payload);
       });
       return;
     }
 
-    console.warn("Shopping List Card: no way to send command", eventType);
-    this._showToast("Fehler: keine HA-Verbindung");
+    console.warn("Shopping List Card: no way to send command, queued", eventType);
+    this._queueCommand(payload);
+  }
+
+  // --- v2.5.0: persistent sync queue ---------------------------------------
+  // Commands that cannot be delivered (offline / no hass / rejected call)
+  // are stored in localStorage and replayed sequentially over the same
+  // input_text channel once the connection or the backend sensor is back.
+
+  _loadQueue() {
+    if (this._queue) return this._queue;
+    try {
+      const raw = localStorage.getItem("slc_cmd_queue_v1");
+      const parsed = raw ? JSON.parse(raw) : [];
+      this._queue = Array.isArray(parsed) ? parsed : [];
+    } catch (e) { this._queue = []; }
+    return this._queue;
+  }
+
+  _saveQueue() {
+    try {
+      localStorage.setItem("slc_cmd_queue_v1", JSON.stringify(this._queue || []));
+    } catch (e) { /* quota / private mode — queue lives on in RAM */ }
+  }
+
+  _queueCommand(payload) {
+    const q = this._loadQueue();
+    const wasEmpty = q.length === 0;
+    q.push(payload);
+    // Hard cap: drop the oldest commands rather than growing without bound.
+    if (q.length > 100) q.splice(0, q.length - 100);
+    this._saveQueue();
+    // The offline banner shows the pending count — surgical passes only touch
+    // category sections, so keep the banner text in sync from here.
+    this._refreshOfflineBanner();
+    if (wasEmpty) this._showToast("📴 Ohne Verbindung — wird später synchronisiert");
+  }
+
+  // Single source for the offline banner text, shared by _render and the
+  // live refresh when the queue length changes.
+  _offlineBannerText(qn) {
+    return "📴 Offline — Liste aus dem letzten Stand" +
+      (qn ? " · " + qn + " Änderung" + (qn === 1 ? "" : "en") + " warten auf Sync" :
+        " · Änderungen werden automatisch synchronisiert");
+  }
+
+  _refreshOfflineBanner() {
+    const banner = this.querySelector(".sl-offline-banner");
+    if (banner) banner.textContent = this._offlineBannerText(this._loadQueue().length);
+  }
+
+  // Replay trigger. Debounced so a "ready" event right before the sensor
+  // returns doesn't start two interleaved passes (_flushing guards anyway).
+  _scheduleFlush(delay) {
+    if (this._flushTimer != null) return;
+    this._flushTimer = setTimeout(() => {
+      this._flushTimer = null;
+      this._flushQueue();
+    }, delay || 800);
+  }
+
+  _flushQueue() {
+    if (this._flushing || this._offlineMode || !this._hass ||
+        typeof this._hass.callService !== "function") return;
+    const q = this._loadQueue();
+    if (!q.length) return;
+    const payload = q[0];
+    let p = null;
+    try {
+      p = this._hass.callService("input_text", "set_value", {
+        entity_id: "input_text.einkaufsliste_command",
+        value: payload
+      });
+    } catch (e) { p = null; }
+    if (!p || typeof p.then !== "function") {
+      // Runtime without a promise — assume delivered (previously this was
+      // a fire-and-forget with no feedback; retrying risks duplicates).
+      q.shift();
+      this._saveQueue();
+      this._afterFlushStep(q);
+      return;
+    }
+    this._flushing = true;
+    p.then(() => {
+      this._flushing = false;
+      q.shift();
+      this._saveQueue();
+      this._afterFlushStep(q);
+    }, () => {
+      this._flushing = false;
+      // Failed head stays queued; retry with spacing until it goes through.
+      // _loadItems flips _offlineMode (sensor gone) → next pass bails out.
+      this._scheduleFlush(5000);
+    });
+  }
+
+  _afterFlushStep(q) {
+    if (q.length) {
+      // Space consecutive commands: AppDaemon parses them one listen_state
+      // at a time, and each set_value must land as a distinct state.
+      this._scheduleFlush(400);
+    } else {
+      this._showToast("📤 Einkaufsliste synchronisiert");
+    }
+  }
+
+  // Apply a local mutation to the offline snapshot, persist it immediately
+  // (not debounced — offline writes are deliberate user actions) and re-run
+  // the normal load+render pipeline, which picks the snapshot up in offline
+  // mode. fn receives the full (all lists) item array.
+  _offlineMutate(fn) {
+    const snap = this._readSnapshot() || [];
+    try { fn(snap); } catch (e) { /* malformed entry — skip */ }
+    try {
+      localStorage.setItem("slc_list_snapshot_v1", JSON.stringify({ t: Date.now(), items: snap }));
+    } catch (e) { /* quota — in-RAM rendering still works this session */ }
+    this._fetchAndRender();
+  }
+
+  // Commit an optimistically-modified item list through the normal
+  // fingerprint → surgical-update / full-render pipeline. `next` MUST NOT
+  // share item objects with the current DOM state (clone the touched items),
+  // otherwise the prev→cur diff in _applySurgicalUpdate sees no change.
+  _commitOptimistic(next) {
+    this._items = next;
+    this._fingerprint = this._fingerprintOf(next);
+    if (this._applySurgicalUpdate()) {
+      this._lastFingerprint = this._fingerprint;
+      return;
+    }
+    this._scheduleFullRender();
   }
 
   _addItem(text) {
     const val = String(text || "").trim();
-    if (!val || !this._hass) return;
+    if (!val) return;
+    if (this._offlineMode || !this._hass) {
+      // Local offline add with a temp uid. The queued einkaufsliste_add is
+      // replayed with summary+quantity; the server assigns its own uid and
+      // auto-dedupes. Toggling an offline-added item before sync sends the
+      // temp uid, which the backend ignores — an accepted edge case.
+      this._offlineMutate(items => {
+        const dup = items.find(i => (i.list || "standard") === this._listId &&
+          i.status === "needs_action" &&
+          String(i.summary || "").toLowerCase() === val.toLowerCase());
+        if (!dup) items.push({
+          uid: "off_" + Date.now(), summary: val, quantity: 1,
+          list: this._listId, status: "needs_action", category: "custom"
+        });
+      });
+    }
     this._fireEvent("einkaufsliste_add", { summary: val, quantity: 1, list: this._listId });
     this._haptic(60);
   }
 
   _toggleItem(item) {
-    if (!this._hass || !item) return;
+    if (!item) return;
+    const target = this._items.find(i => i.uid === item.uid) || item;
+    if (this._offlineMode || !this._hass) {
+      this._offlineMutate(items => {
+        const it = items.find(i => i.uid === item.uid);
+        if (it) it.status = it.status === "needs_action" ? "completed" : "needs_action";
+      });
+    } else {
+      // Optimistic flip: the tile changes the instant it is tapped. The
+      // server echo arrives via the normal subscription and confirms or
+      // corrects the state; if it agrees, the fingerprint matches and no
+      // further render happens.
+      const idx = this._items.findIndex(i => i.uid === target.uid);
+      if (idx >= 0) {
+        const next = this._items.slice();
+        next[idx] = Object.assign({}, next[idx], {
+          status: next[idx].status === "needs_action" ? "completed" : "needs_action"
+        });
+        this._commitOptimistic(next);
+      }
+    }
     this._fireEvent("einkaufsliste_toggle", { uid: item.uid });
-    this._haptic(item.status === "needs_action" ? 60 : 40);
+    this._haptic(target.status === "needs_action" ? 60 : 40);
   }
 
   _removeItem(item) {
-    if (!this._hass || !item) return;
+    if (!item) return;
+    if (this._offlineMode || !this._hass) {
+      this._offlineMutate(items => {
+        const idx = items.findIndex(i => i.uid === item.uid);
+        if (idx >= 0) items.splice(idx, 1);
+      });
+    } else {
+      const next = this._items.filter(i => i.uid !== item.uid);
+      this._commitOptimistic(next);
+    }
     this._fireEvent("einkaufsliste_remove", { uid: item.uid });
     this._haptic(40);
   }
 
   _clearDone() {
-    if (!this._hass) return;
+    if (this._offlineMode || !this._hass) {
+      this._offlineMutate(items => {
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (items[i].status !== "needs_action" && (items[i].list || "standard") === this._listId) items.splice(i, 1);
+        }
+      });
+    } else {
+      this._commitOptimistic(this._items.filter(i => i.status === "needs_action"));
+    }
     this._fireEvent("einkaufsliste_clear_completed", { list: this._listId });
     this._haptic(80);
   }
 
   _updateQuantity(item, delta) {
-    if (!this._hass || !item) return;
+    if (!item) return;
     const q = Math.max(0, (item.quantity || 1) + delta);
+    if (this._offlineMode || !this._hass) {
+      this._offlineMutate(items => {
+        const it = items.find(i => i.uid === item.uid);
+        if (it) it.quantity = q;
+      });
+    } else {
+      const idx = this._items.findIndex(i => i.uid === item.uid);
+      if (idx >= 0) {
+        const next = this._items.slice();
+        next[idx] = Object.assign({}, next[idx], { quantity: q });
+        this._commitOptimistic(next);
+      }
+    }
     this._fireEvent("einkaufsliste_update", { uid: item.uid, quantity: q });
     this._haptic(40);
   }
 
   _subscribeChanges() {
-    if ((this._unsub || this._unsubEvents) || !this._hass || !this.isConnected) return;
+    if ((this._unsub || this._unsubEvents || this._unsubReady) || !this._hass || !this.isConnected) return;
     const entities = [this._entity];
     // Primary: compressed entity subscription (efficient). BUT it may not
     // deliver attribute-only updates for AppDaemon REST-set states — e.g.
@@ -1382,6 +1664,20 @@ class ShoppingListCard extends HTMLElement {
     this._unsubEvents = this._hass.connection.subscribeEvents(ev => {
       if (ev.data?.entity_id === this._entity) this._fetchAndRender();
     }, "state_changed");
+    // v2.5.0: the Connection (home-assistant-js-websocket) fires "ready" on
+    // every (re)connect. Replay queued offline commands and refresh states —
+    // the frontend's hass.states may be stale from before the outage.
+    if (this._hass.connection && typeof this._hass.connection.addEventListener === "function") {
+      const conn = this._hass.connection;
+      const onReady = () => {
+        this._scheduleFlush(800);
+        this._fetchAndRender();
+      };
+      conn.addEventListener("ready", onReady);
+      this._unsubReady = () => {
+        try { conn.removeEventListener("ready", onReady); } catch (e) { /* already gone */ }
+      };
+    }
   }
 
   connectedCallback() {
@@ -1401,6 +1697,12 @@ class ShoppingListCard extends HTMLElement {
       Promise.resolve(this._unsubEvents).then(fn => fn());
       this._unsubEvents = null;
     }
+    // v2.5.0: release timers/listeners of the offline machinery so a removed
+    // card doesn't fire renders or queue flushes from beyond the grave. The
+    // sync queue itself persists in localStorage on purpose.
+    if (this._unsubReady) { this._unsubReady(); this._unsubReady = null; }
+    if (this._snapSaveTimer != null) { clearTimeout(this._snapSaveTimer); this._snapSaveTimer = null; }
+    if (this._flushTimer != null) { clearTimeout(this._flushTimer); this._flushTimer = null; }
     // Release the lazy-icon IntersectionObserver; observed nodes are dropped
     // by replaceChildren during teardown anyway, but disconnecting avoids a
     // dangling observer if the card is removed without a final render.
@@ -2038,7 +2340,10 @@ class ShoppingListCard extends HTMLElement {
     this._tileIndex = [];
 
     const existingCard = this.querySelector("ha-card");
-    if (existingCard && this._fingerprint === this._lastFingerprint) {
+    // The offline banner is not part of the fingerprint — a pure online↔offline
+    // transition with an unchanged list must still re-render.
+    if (existingCard && this._fingerprint === this._lastFingerprint &&
+        this._renderedOffline === this._offlineMode) {
       let sectionChanged = false;
       const itemMap = new Map();
       for (const item of this._items) itemMap.set(item.uid, item);
@@ -2056,6 +2361,7 @@ class ShoppingListCard extends HTMLElement {
       }
     }
     this._lastFingerprint = this._fingerprint;
+    this._renderedOffline = this._offlineMode;
 
     const card = document.createElement("ha-card");
     card.style.cssText = "padding:12px;display:block;";
@@ -2122,13 +2428,25 @@ class ShoppingListCard extends HTMLElement {
 
     const sensorState = this._hass?.states?.[this._entity];
     if (!sensorState) {
-      const missing = document.createElement("div");
-      missing.style.cssText = "padding:16px;text-align:center;color:var(--sl-text-muted);font-size:14px;line-height:1.5;";
-      missing.textContent = "Sensor „" + (this._entity || "?") + "“ nicht gefunden. Läuft das AppDaemon-Backend? Siehe README (Installation).";
-      card.appendChild(missing);
-      this.replaceChildren(card);
-      this._pruneStaleModal();
-      return;
+      if (!this._offlineMode) {
+        // Not (yet) in offline mode — no snapshot was ever loaded. Show the
+        // regular backend-missing hint.
+        const missing = document.createElement("div");
+        missing.style.cssText = "padding:16px;text-align:center;color:var(--sl-text-muted);font-size:14px;line-height:1.5;";
+        missing.textContent = "Sensor „" + (this._entity || "?") + "“ nicht gefunden. Läuft das AppDaemon-Backend? Siehe README (Installation).";
+        card.appendChild(missing);
+        this.replaceChildren(card);
+        this._pruneStaleModal();
+        return;
+      }
+      // Offline mode: render the snapshot with an amber banner. Mutations go
+      // through _offlineMutate + the persistent sync queue.
+      const qn = this._loadQueue().length;
+      const banner = document.createElement("div");
+      banner.className = "sl-offline-banner";
+      banner.style.cssText = "padding:8px 12px;margin-bottom:12px;border-radius:10px;background:rgba(255,167,38,0.12);border:1px solid rgba(255,167,38,0.45);color:#ffb74d;font-size:13px;line-height:1.4;";
+      banner.textContent = this._offlineBannerText(qn);
+      card.appendChild(banner);
     }
 
     const items = this._items;
@@ -2169,6 +2487,11 @@ class ShoppingListCard extends HTMLElement {
     // renders, so binding here keeps the delegation chain tied to the live DOM.
     this._bindCardEvents(card);
     this.replaceChildren(card);
+    // The freshly built DOM corresponds 1:1 to this._items — publish that
+    // baseline so the next surgical pass (e.g. an optimistic toggle right
+    // after the first render) can verify DOM↔state correspondence instead
+    // of falling back to the debounced full render.
+    this._prevItems = this._items;
     this._pruneStaleModal();
     // Kick off a background warmup of the persistent SVG cache in idle time
     // so the next render and scrolling offscreen tiles hit only the cache.
