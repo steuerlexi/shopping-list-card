@@ -1,4 +1,6 @@
-// Shopping List Card v2.4.0 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.4.1 — AppDaemon backend edition (local SVG icons).
+// v2.4.1: einheitliche Kachel-Beschriftung — derselbe dunkle Label-Verlauf auf
+// allen Kacheln (vorher schwächerer Verlauf auf completed-Kacheln).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -2093,9 +2095,7 @@ class ShoppingListCard extends HTMLElement {
       .sl-tile.sl-ghost{background:var(--sl-bg);border:2px solid var(--sl-border);opacity:0.55;}
       .sl-tile:hover{opacity:0.8;}
       .sl-icon-wrap{display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;}
-      .sl-label-overlay{position:absolute;left:0;right:0;bottom:0;padding:4px 6px;z-index:2;}
-      .sl-tile[data-status="needs_action"] .sl-label-overlay,.sl-tile.sl-ghost .sl-label-overlay{background:linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);}
-      .sl-tile[data-status="completed"] .sl-label-overlay{background:linear-gradient(0deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 70%, transparent 100%);}
+      .sl-label-overlay{position:absolute;left:0;right:0;bottom:0;padding:4px 6px;z-index:2;background:linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);}
       .sl-label{font-size:10px;font-weight:600;text-align:center;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;text-shadow:0 1px 2px rgba(0,0,0,0.5);}
       .sl-badge{position:absolute;top:4px;right:4px;z-index:3;display:inline-block;padding:2px 6px;border-radius:8px;font-size:9px;font-weight:700;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;backdrop-filter:blur(2px);}
       .sl-tile[data-status="completed"] .sl-badge{background:var(--sl-border);color:var(--sl-text-muted);}
