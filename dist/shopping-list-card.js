@@ -1,5 +1,7 @@
-// Shopping List Card v2.4.1 — AppDaemon backend edition (local SVG icons).
-// v2.4.1: einheitliche Kachel-Beschriftung — derselbe dunkle Label-Verlauf auf
+// Shopping List Card v2.5.1 — AppDaemon backend edition (local SVG icons).
+// v2.5.1: schlank — Offline-Modus (Snapshot/Sync-Queue/optimistische Updates)
+// entfernt, da die Offline-Funktion zu Problemen beim Abhaken/Offlinestate
+// geführt hat. Karte funktioniert online wie v2.4.1, sauber ohne Queue.
 // allen Kacheln (vorher schwächerer Verlauf auf completed-Kacheln).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
