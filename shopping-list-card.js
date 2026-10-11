@@ -1,4 +1,4 @@
-// Shopping List Card v2.5.1 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.5.2 — AppDaemon backend edition (local SVG icons).
 // v2.5.1: schlank — Offline-Modus (Snapshot/Sync-Queue/optimistische Updates)
 // entfernt, da die Offline-Funktion zu Problemen beim Abhaken/Offlinestate
 // geführt hat. Karte funktioniert online wie v2.4.1, sauber ohne Queue.
@@ -1445,6 +1445,10 @@ class ShoppingListCard extends HTMLElement {
       if (tile.dataset.status === item.status && tile.dataset.qty === qty) continue;
       tile.dataset.status = item.status;
       tile.dataset.qty = qty;
+      // v2.5.2: keep the screen-reader state in step with the visual state, so a
+      // keyboard toggle is announced as checked/unchecked immediately.
+      tile.setAttribute("aria-checked", item.status === "completed" ? "true" : "false");
+      tile.setAttribute("aria-label", this._tileAriaLabel(item));
 
       // Quantity badge ("Nx") — created/removed; colors come from CSS.
       let badge = tile.querySelector(".sl-badge");
@@ -2096,6 +2100,14 @@ class ShoppingListCard extends HTMLElement {
       .sl-tile[data-status="completed"]{background:var(--sl-bg);border:2px solid var(--sl-border);opacity:0.55;}
       .sl-tile.sl-ghost{background:var(--sl-bg);border:2px solid var(--sl-border);opacity:0.55;}
       .sl-tile:hover{opacity:0.8;}
+      /* v2.5.2: keyboard focus ring. Tiles are focusable (tabindex 0) and the card
+         previously had NO visible focus style at all. The plain :focus rule keeps
+         the ring in older engines (where the two modern selectors below are
+         dropped as invalid); :focus:not(:focus-visible) then hides it again for
+         mouse/touch taps in engines that support :focus-visible, so only keyboard
+         focus shows the ring. */
+      .sl-tile:focus{outline:3px solid #2196F3;outline-offset:2px;}
+      .sl-tile:focus:not(:focus-visible){outline:none;}
       .sl-icon-wrap{display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;}
       .sl-label-overlay{position:absolute;left:0;right:0;bottom:0;padding:4px 6px;z-index:2;background:linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);}
       .sl-label{font-size:10px;font-weight:600;text-align:center;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;text-shadow:0 1px 2px rgba(0,0,0,0.5);}
@@ -2178,6 +2190,14 @@ class ShoppingListCard extends HTMLElement {
     this._scheduleWarmup();
   }
 
+  // v2.5.2: accessible name for a real tile. The quantity is invisible to a
+  // screen reader otherwise, because role="checkbox" takes its name from
+  // aria-label and ignores the badge's "Nx" text.
+  _tileAriaLabel(item) {
+    const q = item.quantity || 1;
+    return q > 1 ? `${item.summary}, ${q} Stück` : item.summary;
+  }
+
   _renderTile(item, catWrap) {
     // v2.4.0: listener-free tile. All visual state lives in data attributes; the
     // card stylesheet derives background/border/opacity/badge colors from
@@ -2190,6 +2210,15 @@ class ShoppingListCard extends HTMLElement {
     tile.dataset.summary = item.summary.toLowerCase();
     tile.dataset.status = item.status;
     tile.dataset.qty = String(item.quantity || 1);
+
+    // v2.5.2: the list is a checkbox list — each entry is one tab stop and the
+    // checked state is exposed via aria-checked. Space/Enter toggle and F2 opens
+    // the edit modal, both via the keydown delegation in _bindCardEvents.
+    tile.setAttribute("role", "checkbox");
+    tile.tabIndex = 0;
+    tile.setAttribute("aria-checked", item.status === "completed" ? "true" : "false");
+    tile.setAttribute("aria-label", this._tileAriaLabel(item));
+    tile.setAttribute("aria-keyshortcuts", "F2");
 
     const iconWrap = document.createElement("div");
     iconWrap.className = "sl-icon-wrap";
@@ -2235,6 +2264,12 @@ class ShoppingListCard extends HTMLElement {
     // v2.4.0: original-case text for the delegated click handler — it adds the
     // item with original capitalization, like the old per-tile listener did.
     tile.dataset.addText = text;
+
+    // v2.5.2: ghosts are buttons ("add to list"), one tab stop each; Space/Enter
+    // adds the item (keydown delegation in _bindCardEvents).
+    tile.setAttribute("role", "button");
+    tile.tabIndex = 0;
+    tile.setAttribute("aria-label", text + " zur Liste hinzufügen");
 
     const iconWrap = document.createElement("div");
     iconWrap.className = "sl-icon-wrap";
@@ -2345,6 +2380,32 @@ class ShoppingListCard extends HTMLElement {
       e.preventDefault();
       this._cancelPress();
       this._fireLongPressTile(tile);
+    });
+
+    // v2.5.2: keyboard parity for the now-focusable tiles. Space/Enter performs
+    // the primary action (toggle a real tile, add a ghost); F2 opens the edit
+    // modal, mirroring the contextmenu path above. F2 is deliberate: the
+    // ContextMenu key and Shift+F10 also raise a `contextmenu` event in most
+    // engines, so handling those here would open the modal twice.
+    card.addEventListener("keydown", e => {
+      const tile = e.target.closest(".sl-tile");
+      if (!tile) return;
+      const isGhost = tile.classList.contains("sl-ghost");
+      if (e.key === "F2") {
+        if (isGhost) return;
+        e.preventDefault();
+        this._cancelPress();
+        this._fireLongPressTile(tile);
+        return;
+      }
+      if (e.key !== " " && e.key !== "Enter" && e.key !== "Spacebar") return;
+      e.preventDefault(); // Space must not scroll the page
+      if (isGhost) {
+        this._addItem(tile.dataset.addText || tile.dataset.summary || "");
+      } else {
+        const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
+        if (currentItem) this._toggleItem(currentItem);
+      }
     });
   }
 
