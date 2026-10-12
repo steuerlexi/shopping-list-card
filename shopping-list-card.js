@@ -1,4 +1,4 @@
-// Shopping List Card v2.5.4 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.5.5 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is not a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -75,97 +75,16 @@ const AUTOCOMPLETE_ITEMS = [...new Set([
   "Biobeutel"
 ])];
 const ICON_MAP = {
-  eier:"1F95A", ei:"1F95A", apfel:"1F34E", äpfel:"1F34E", banane:"1F34C", bananen:"1F34C",
-  birne:"1F350", birnen:"1F350", kiwi:"1F95D", orange:"1F34A", orangen:"1F34A",
-  traube:"1F347", trauben:"1F347", weintrauben:"1F347", kirsche:"1F352", kirschen:"1F352",
-  erdbeere:"1F353", erdbeeren:"1F353", himbeere:"1F353", himbeeren:"1F353", holunder:"1F347",
-  heidelbeere:"1FAD0", heidelbeeren:"1FAD0", pfirsich:"1F351", pflaume:"1F351",
-  zitrone:"1F34B", limette:"1F34B", grapefruit:"1F34A", melone:"1F348", ananas:"1F34D",
-  mango:"1F96D", avocado:"1F951", tomate:"1F345", tomaten:"1F345", gurke:"1F952",
-  paprika:"1FAD1", karotte:"1F955", karotten:"1F955", zucchini:"1F955", aubergine:"1F346",
-  brokkoli:"1F966", blumenkohl:"1F966", spinat:"1F96C", blattspinat:"1F96C", salat:"1F96C",
-  kartoffel:"1F954", kartoffeln:"1F954", zwiebel:"1F9C5", zwiebeln:"1F9C5", knoblauch:"1F9C4",
-  lauch:"1F96C", schnittlauch:"1F96C", dill:"1F33F", frühlingszwiebel:"1F9C5", schalotte:"1F9C5",
-  radieschen:"1F955", sellerie:"1F96C", "rote bete":"1F345", rotebete:"1F345", pilz:"1F344",
-  champignon:"1F344", champignons:"1F344", pfifferling:"1F344", steinpilz:"1F344", kräuterseitling:"1F344",
-  austernpilz:"1F344", pilze:"1F344", gemüse:"1F955", obst:"1F353", frucht:"1F353",
-  brot:"1F35E", brötchen:"1F35E", toast:"1F35E", semmel:"1F35E", baguette:"1F35E", "kräuterbaguette":"1F35E", "kräuterbaguettes":"1F35E",
-  ciabatta:"1F35E", croissant:"1F950", croissants:"1F950", schrippe:"1F35E", weckle:"1F35E",
-  laugenbrezel:"1F35E", brezel:"1F35E", milch:"1F95B", joghurt:"1FAD9", sahne:"1F95B",
-  schmand:"1F95B", schlagsahne:"1F95B", butter:"1F9C8", käse:"1F9C0", quark:"1FAD9",
-  frischkäse:"1F9C0", mozzarella:"1F9C0", brie:"1F9C0", gouda:"1F9C0", emmentaler:"1F9C0", ofenkäse:"1F9C0",
-  parmesan:"1F9C0", "cream cheese":"1F9C0", mascarpone:"1F9C0", burrata:"1F9C0",
-  cheddar:"1F9C0", fleisch:"1F969", hähnchen:"1F357", pute:"1F357",
-  ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"bratwurst.svg", bratwürstchen:"bratwurst.svg", salami:"1F32D",
-  mettwurst:"1F32D", aufschnitt:"1F953", steak:"steak.svg", steaks:"steak.svg", rindersteak:"steak.svg", rindersteaks:"steak.svg", beefsteak:"steak.svg",
-  putensteak:"putensteak.svg", putensteaks:"putensteak.svg", schweinesteak:"schweinesteak.svg", schweinesteaks:"schweinesteak.svg", schweinskotelett:"schweinesteak.svg",
-  schnitzel:"1F969", hackfleisch:"1F356", fisch:"1F41F", lachs:"1F41F",
-  thunfisch:"1F41F", forelle:"1F41F", scholle:"1F41F", makrele:"1F41F", garnelen:"1F990",
-  krabben:"1F990", tofu:"1F96C", "tk-gemüse":"2744", seitan:"1F969", vegan:"1F96C", vegetarisch:"1F96C",
-  nudeln:"1F35D", spaghetti:"1F35D", penne:"1F35D", rigatoni:"1F35D", fettuccine:"1F35D",
-  lasagne:"1F35D", reis:"1F35A", couscous:"1F35A", bulgur:"1F35A", mehl:"1F33E",
-  zucker:"1F36C", salz:"1F9C2", pfeffer:"1F336", öl:"1F6E2", olivenöl:"1F6E2",
-  essig:"1F9C2", soße:"1F963", ketchup:"1F345", mayo:"1F9C2", mayonnaise:"1F9C2",
-  senf:"1F336", gewürz:"1F336", gewürze:"1F336", kräuter:"1F33F", vanille:"1F33F",
-  zimt:"1F33F", honig:"1F36F", marmelade:"1F36F", nutella:"1F36F", aufstrich:"1F36F",
-  kapern:"1F952", oliven:"1F95C", essiggurke:"1F952", sauerkraut:"1F96C",
-  peperoni:"1F336", antipasti:"1F952", kaffee:"2615", espresso:"2615", cappuccino:"2615",
-  tee:"1FAD6", bier:"1F37A", wein:"1F377", weißwein:"1F377", rotwein:"1F377",
-  wasser:"1F4A7", getränke:"1F964", cola:"1F964", limonade:"1F964", sprite:"1F964",
-  fanta:"1F964", apfelschorle:"1F964", saft:"1F9C3", orangensaft:"1F9C3", kapseln:"2615",
-  kakao:"2615", tiefkühl:"2744", tiefkühlpizza:"1F355", pizza:"1F355", frikassee:"1F963",
-  fischstäbchen:"1F41F", pommes:"1F35F", eis:"1F366", eiskrem:"1F366",
-  toilettenpapier:"1F9FB", küchenrolle:"papierhandtuch.svg", kuechenrolle:"papierhandtuch.svg", papier:"1F4C4", taschentuch:"1F9FB",
-  waschmittel:"1F9FC", spülmittel:"1FAE7", spüli:"1FAE7", zahnpasta:"1FAE5",
-  zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"1F9FC",
-  deodorant:"1F9F4", rasierer:"1FA92", dusch:"1F6BF", bad:"1F6BF", weichspüler:"1F9F5",
-  reiniger:"1F9F9", tabs:"1F9FC", schokolade:"1F36B", kekse:"1F36A", chips:"1F35F",
-  nüsse:"1F330", mandeln:"1F330", müllbeutel:"1F5D1", aprikose:"1F351",
-  brombeeren:"1F347", clementine:"1F34A", klementine:"1F34A", cranberry:"1F347",
-  datteln:"1F36C", feige:"1F34A", granatapfel:"1F347", johannisbeeren:"1F353",
-  nektarine:"1F351", pampelmuse:"1F34A", preiselbeeren:"1F353", stachelbeeren:"1F353",
-  wassermelone:"1F349", chinakohl:"1F96C", eisbergsalat:"1F96C", feldsalat:"1F96C",
-  kürbis:"1F383", lauch:"1F96C", mais:"1F33D", mangold:"1F96C", "pak choi":"1F96C",
-  pastinake:"1F955", petersilie:"1F33F", porree:"1F96C", rettich:"1F955",
-  rosenkohl:"1F966", rotkohl:"1F966", rucola:"1F96C", spargel:"1F966",
-  süßkartoffel:"1F360", topinambur:"1F954", weißkohl:"1F966", buttermilch:"1F95B",
-  camembert:"1F9C0", "creme fraiche":"1F95B", feta:"1F9C0", schafskäse:"1F9C0",
-  "griechischer joghurt":"1FAD9", kefir:"1F95B", kochkäse:"1F9C0", leerdammer:"1F9C0",
-  milchreis:"1F35A", ricotta:"1F9C0", calamari:"1F991", ente:"1F357",
-  hähnchenbrust:"1F357", hähnchenkeule:"1F357", kalbfleisch:"1F969", kassler:"1F953",
-  lamm:"1F411", leber:"1F969", lunge:"1F969", putenbrust:"1F357",
-  putenschnitzel:"1F357", rinderfilet:"1F969", rinderhack:"1F969",
-  rinderroulade:"1F969", rollmops:"1F41F", sülze:"1F963", zander:"1F41F",
-  backpulver:"1F9C2", balsamico:"1F9C2", brühe:"1F963", gnocchi:"1F35D",
-  haferflocken:"1F33E", kartoffelstärke:"1F33E", kichererbsen:"1F96C",
-  kidneybohnen:"1F96C", linsen:"1F96C", paniermehl:"1F33E", pesto:"1F33F",
-  polenta:"1F35A", rosinen:"1F347", sahnesteif:"1F3FA", sojasoße:"1F963",
-  sonnenblumenöl:"1F6E2", soßenbinder:"1F9C2", vanillezucker:"1F36C",
-  worcestersauce:"1F9C2", energydrink:"1F964", granatapfelsaft:"1F9C3",
-  hugo:"1F377", mineralwasser:"1F4A7", prosecco:"1F377", radler:"1F37A",
-  sekt:"1F37E", smoothie:"1F964", sprudelwasser:"1F4A7", traubensaft:"1F9C3",
-  aufbackbrötchen:"1F35E", blätterteig:"1F35E", gemüsepfanne:"1F966",
-  knödel:"1F35D", kuchen:"1F370", lasagne:"1F35D", maultaschen:"1F35D",
-  nuggets:"1F357", paniertes:"1F357", piroggen:"1F35D", ravioli:"1F35D",
-  reibekuchen:"1F35F", schaschlik:"1F357", tortellini:"1F35D", waffeln:"1F367",
-  wraps:"1F35D", abwaschbürste:"1FAE7", alufolie:"1F4E6", backpapier:"1F4C4",
-  bonbons:"1F36C", deo:"1F9F4", desinfektionsmittel:"1F9F9", drano:"1F9F9",
-  feuchttücher:"1F9FB", frischhaltefolie:"1F4E6", geschirrtabs:"1F9FC",
-  glühbirne:"1F4A1", haargel:"1F9FC", handcreme:"1F9F5", handschuhe:"1F9E4",
-  hustensaft:"1F9EA", insektenspray:"1F9F4", kerze:"1F56F", kerzen:"1F56F",
-  klorollen:"1F9FB", kondome:"1F9F4", körperöl:"1F9F7", küchentücher:"1F9FB",
-  leinöl:"1F6E2", lotion:"1F9F5", lufterfrischer:"1F33F", "make-up":"1F484",
-  mascara:"1F484", medikamente:"1F48A", milchreiniger:"1F9FC", mülltüten:"1F5D1",
-  mundspülung:"1F9F4", nasenspray:"1F9EA", orangenschalen:"1F34A",
-  papiertüten:"1F4E6", parfüm:"1F484", pfefferkörner:"1F336", pflaster:"1F48A",
-  rasierklingen:"1FA92", rasierschaum:"1FAE6", räucherstäbchen:"1F56F",
-  salbei:"1F33F", spülbürste:"1FAE7", staubsaugerbeutel:"1F9F9",
-  streichhölzer:"1F522", taschentücher:"1F9FB", teebaumöl:"1F33F",
-  toilettenreiniger:"1F9F9", zahnbürste:"1FAE5", zitronenmelisse:"1F34B",
-  zündhölzer:"1F522", bubblegum:"1F36C", gummibärchen:"1F36C", kaugummi:"1F36C",
-  knuspermüsli:"1F33E", lebkuchen:"1F36A", lutscher:"1F36D", marshmallow:"1F36C",
-  nougat:"1F36B", pralinen:"1F36B", salzstangen:"1F35F", studentenfutter:"1F330",
-  trockenobst:"1F347", weinbrand:"1F377"
+  // Local SVG filename overrides — the only entries _resolveItemIconFile's
+  // step 4 consumes (it filters values for .svg/.png/.jpg/.jpeg). The legacy
+  // per-item OpenMoji hex map (~380 entries) was dead code: no path ever read
+  // a hex value back out of this table (category icons use _getCategoryIcon's
+  // own hex map instead), so it was removed.
+  wurst:"bratwurst.svg", bratwürstchen:"bratwurst.svg",
+  steak:"steak.svg", steaks:"steak.svg", rindersteak:"steak.svg", rindersteaks:"steak.svg", beefsteak:"steak.svg",
+  putensteak:"putensteak.svg", putensteaks:"putensteak.svg",
+  schweinesteak:"schweinesteak.svg", schweinesteaks:"schweinesteak.svg", schweinskotelett:"schweinesteak.svg",
+  küchenrolle:"papierhandtuch.svg", kuechenrolle:"papierhandtuch.svg",
 };
 const CAT_MAP = [
   { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","traube","trauben","weintrauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","dill","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder","orangenschalen","salbei","zitronenmelisse","trockenobst"]) },
@@ -523,7 +442,15 @@ class ShoppingListCard extends HTMLElement {
       this._renderPending = false;
       this._renderRaf = null;
       this._loadItems();
-      if (this._fingerprint === this._lastFingerprint) return;
+      if (this._fingerprint === this._lastFingerprint) {
+        // v2.5.5: a full rebuild may already be queued from a prior change; if
+        // the state is back to what's rendered, that rebuild is now obsolete.
+        if (this._fullRenderTimer) {
+          clearTimeout(this._fullRenderTimer);
+          this._fullRenderTimer = null;
+        }
+        return;
+      }
       if (this._applySurgicalUpdate()) {
         this._lastFingerprint = this._fingerprint;
         // A pending full rebuild is now obsolete — the surgical pass already
@@ -1451,6 +1378,16 @@ class ShoppingListCard extends HTMLElement {
       const item = itemMap.get(tile.dataset.uid);
       if (!item) { tile.remove(); continue; } // stale tile (item deleted in backend)
       const qty = String(item.quantity || 1);
+      // v2.5.5: summary/label are the one tile property _applyTileState does not
+      // manage (only _renderTile sets them), so sync them here if a tile ever
+      // drifts. The upstream fingerprint check hashes summary, so this is
+      // defensive — but a stale label would otherwise survive _lightUpdate.
+      const summary = item.summary.toLowerCase();
+      if (tile.dataset.summary !== summary) {
+        tile.dataset.summary = summary;
+        const label = tile.querySelector(".sl-label");
+        if (label) label.textContent = item.summary;
+      }
       if (tile.dataset.status === item.status && tile.dataset.qty === qty) continue;
       // v2.5.3: dataset/ARIA/badge rules are shared with _renderTile — see
       // _applyTileState. The guard above stays correct: aria-checked and the
@@ -2499,8 +2436,11 @@ class ShoppingListCard extends HTMLElement {
     const activeCatsNow = new Set(cur.filter(i => i.status === "needs_action").map(i => this._itemCategoryKey(i)));
     for (const cat of activeCatsNow) if (!activeCatsBefore.has(cat)) return false;
 
-    const catalogNow = this._computeMirrorCatalog(cur);
     const mirrorWrap = card.querySelector(".sl-mirror-wrap");
+    // v2.5.5: build the catalog only when the mirror is on — when it's off,
+    // mirrorWrap is always null (see _render) and neither block below reads it,
+    // so the per-update catalog build was pure waste.
+    const catalogNow = this._mirrorEnabled ? this._computeMirrorCatalog(cur) : null;
     // Mirror composition must stay section-compatible: no brand-new mirror
     // category, and the wrap exists exactly when there are available items.
     // Skipped when the mirror is off — nothing to keep compatible, and the check
@@ -2632,7 +2572,7 @@ class ShoppingListCard extends HTMLElement {
   _showEditModal(item, triggerEl) {
     const existing = document.querySelector(".shopping-list-modal");
     existing && existing.remove();
-    const close = () => { overlay.remove(); triggerEl && triggerEl.focus(); };
+    const close = () => { overlay.remove(); this._longPressTile = null; triggerEl && triggerEl.focus(); };
     const overlay = document.createElement("div");
     overlay.className = "shopping-list-modal";
     overlay.setAttribute("role", "dialog");
