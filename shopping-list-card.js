@@ -52,6 +52,249 @@ function mdiSvgString(name, size) {
     '" height="' + size + '" style="fill:currentColor;display:block;"><path d="' + d + '"/></svg>';
 }
 
+// ---------------------------------------------------------------------------
+// Shared data tables. Pure, instance-independent literals, hoisted to module
+// scope so they are built once instead of per card instance.
+// ---------------------------------------------------------------------------
+const AUTOCOMPLETE_ITEMS = [...new Set([
+  "Apfel","Bananen","Birne","Kiwi","Orange","Weintrauben","Kirschen","Erdbeeren","Himbeeren",
+  "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
+  "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln","Knoblauch",
+  "Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants","Milch",
+  "Joghurt","Sahne","Butter","Käse","Schafskäse","Ofenkäse","Quark","Frischkäse","Mozzarella","Eier",
+  "Hähnchen","Hackfleisch","Schnitzel","Schinken","Aufschnitt","Rindersteak","Putensteak","Schweinesteak","Fisch","Lachs","Garnelen","Tofu",
+  "Bratwürstchen","Nudeln","Spaghetti","Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig",
+  "Ketchup","Mayonnaise","Senf","Honig","Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser",
+  "Saft","Cola","Bier","Weißwein","Rotwein","Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo",
+  "Duschgel","Seife","Zahnpasta","Waschmittel","Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse",
+  "Mandeln","TK-Gemüse","Müllbeutel","Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel",
+  "Heidelbeeren","Johannisbeeren","Nektarine","Pampelmuse","Preiselbeeren","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat","Dill",
+  "Kürbis","Lauch","Mais","Mangold","Pak Choi","Pastinake","Peperoni","Petersilie","Buttermilch","Griechischer Joghurt",
+  "Kefir","Ricotta","Hähnchenbrust","Hähnchenkeule","Lamm","Linsen","Sekt","Gemüsepfanne","Kuchen","Ravioli",
+  "Tortellini","Waffeln","Wraps","Abwaschbürste","Alufolie","Deo","Frischhaltefolie","Küchentücher","Lebkuchen","Kaviar",
+  "Biobeutel"
+])];
+const ICON_MAP = {
+  eier:"1F95A", ei:"1F95A", apfel:"1F34E", äpfel:"1F34E", banane:"1F34C", bananen:"1F34C",
+  birne:"1F350", birnen:"1F350", kiwi:"1F95D", orange:"1F34A", orangen:"1F34A",
+  traube:"1F347", trauben:"1F347", weintrauben:"1F347", kirsche:"1F352", kirschen:"1F352",
+  erdbeere:"1F353", erdbeeren:"1F353", himbeere:"1F353", himbeeren:"1F353", holunder:"1F347",
+  heidelbeere:"1FAD0", heidelbeeren:"1FAD0", pfirsich:"1F351", pflaume:"1F351",
+  zitrone:"1F34B", limette:"1F34B", grapefruit:"1F34A", melone:"1F348", ananas:"1F34D",
+  mango:"1F96D", avocado:"1F951", tomate:"1F345", tomaten:"1F345", gurke:"1F952",
+  paprika:"1FAD1", karotte:"1F955", karotten:"1F955", zucchini:"1F955", aubergine:"1F346",
+  brokkoli:"1F966", blumenkohl:"1F966", spinat:"1F96C", blattspinat:"1F96C", salat:"1F96C",
+  kartoffel:"1F954", kartoffeln:"1F954", zwiebel:"1F9C5", zwiebeln:"1F9C5", knoblauch:"1F9C4",
+  lauch:"1F96C", schnittlauch:"1F96C", dill:"1F33F", frühlingszwiebel:"1F9C5", schalotte:"1F9C5",
+  radieschen:"1F955", sellerie:"1F96C", "rote bete":"1F345", rotebete:"1F345", pilz:"1F344",
+  champignon:"1F344", champignons:"1F344", pfifferling:"1F344", steinpilz:"1F344", kräuterseitling:"1F344",
+  austernpilz:"1F344", pilze:"1F344", gemüse:"1F955", obst:"1F353", frucht:"1F353",
+  brot:"1F35E", brötchen:"1F35E", toast:"1F35E", semmel:"1F35E", baguette:"1F35E", "kräuterbaguette":"1F35E", "kräuterbaguettes":"1F35E",
+  ciabatta:"1F35E", croissant:"1F950", croissants:"1F950", schrippe:"1F35E", weckle:"1F35E",
+  laugenbrezel:"1F35E", brezel:"1F35E", milch:"1F95B", joghurt:"1FAD9", sahne:"1F95B",
+  schmand:"1F95B", schlagsahne:"1F95B", butter:"1F9C8", käse:"1F9C0", quark:"1FAD9",
+  frischkäse:"1F9C0", mozzarella:"1F9C0", brie:"1F9C0", gouda:"1F9C0", emmentaler:"1F9C0", ofenkäse:"1F9C0",
+  parmesan:"1F9C0", "cream cheese":"1F9C0", mascarpone:"1F9C0", burrata:"1F9C0",
+  cheddar:"1F9C0", fleisch:"1F969", hähnchen:"1F357", pute:"1F357",
+  ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"bratwurst.svg", bratwürstchen:"bratwurst.svg", salami:"1F32D",
+  mettwurst:"1F32D", aufschnitt:"1F953", steak:"steak.svg", steaks:"steak.svg", rindersteak:"steak.svg", rindersteaks:"steak.svg", beefsteak:"steak.svg",
+  putensteak:"putensteak.svg", putensteaks:"putensteak.svg", schweinesteak:"schweinesteak.svg", schweinesteaks:"schweinesteak.svg", schweinskotelett:"schweinesteak.svg",
+  schnitzel:"1F969", hackfleisch:"1F356", fisch:"1F41F", lachs:"1F41F",
+  thunfisch:"1F41F", forelle:"1F41F", scholle:"1F41F", makrele:"1F41F", garnelen:"1F990",
+  krabben:"1F990", tofu:"1F96C", "tk-gemüse":"2744", seitan:"1F969", vegan:"1F96C", vegetarisch:"1F96C",
+  nudeln:"1F35D", spaghetti:"1F35D", penne:"1F35D", rigatoni:"1F35D", fettuccine:"1F35D",
+  lasagne:"1F35D", reis:"1F35A", couscous:"1F35A", bulgur:"1F35A", mehl:"1F33E",
+  zucker:"1F36C", salz:"1F9C2", pfeffer:"1F336", öl:"1F6E2", olivenöl:"1F6E2",
+  essig:"1F9C2", soße:"1F963", ketchup:"1F345", mayo:"1F9C2", mayonnaise:"1F9C2",
+  senf:"1F336", gewürz:"1F336", gewürze:"1F336", kräuter:"1F33F", vanille:"1F33F",
+  zimt:"1F33F", honig:"1F36F", marmelade:"1F36F", nutella:"1F36F", aufstrich:"1F36F",
+  kapern:"1F952", oliven:"1F95C", essiggurke:"1F952", sauerkraut:"1F96C",
+  peperoni:"1F336", antipasti:"1F952", kaffee:"2615", espresso:"2615", cappuccino:"2615",
+  tee:"1FAD6", bier:"1F37A", wein:"1F377", weißwein:"1F377", rotwein:"1F377",
+  wasser:"1F4A7", getränke:"1F964", cola:"1F964", limonade:"1F964", sprite:"1F964",
+  fanta:"1F964", apfelschorle:"1F964", saft:"1F9C3", orangensaft:"1F9C3", kapseln:"2615",
+  kakao:"2615", tiefkühl:"2744", tiefkühlpizza:"1F355", pizza:"1F355", frikassee:"1F963",
+  fischstäbchen:"1F41F", pommes:"1F35F", eis:"1F366", eiskrem:"1F366",
+  toilettenpapier:"1F9FB", küchenrolle:"papierhandtuch.svg", kuechenrolle:"papierhandtuch.svg", papier:"1F4C4", taschentuch:"1F9FB",
+  waschmittel:"1F9FC", spülmittel:"1FAE7", spüli:"1FAE7", zahnpasta:"1FAE5",
+  zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"1F9FC",
+  deodorant:"1F9F4", rasierer:"1FA92", dusch:"1F6BF", bad:"1F6BF", weichspüler:"1F9F5",
+  reiniger:"1F9F9", tabs:"1F9FC", schokolade:"1F36B", kekse:"1F36A", chips:"1F35F",
+  nüsse:"1F330", mandeln:"1F330", müllbeutel:"1F5D1", aprikose:"1F351",
+  brombeeren:"1F347", clementine:"1F34A", klementine:"1F34A", cranberry:"1F347",
+  datteln:"1F36C", feige:"1F34A", granatapfel:"1F347", johannisbeeren:"1F353",
+  nektarine:"1F351", pampelmuse:"1F34A", preiselbeeren:"1F353", stachelbeeren:"1F353",
+  wassermelone:"1F349", chinakohl:"1F96C", eisbergsalat:"1F96C", feldsalat:"1F96C",
+  kürbis:"1F383", lauch:"1F96C", mais:"1F33D", mangold:"1F96C", "pak choi":"1F96C",
+  pastinake:"1F955", petersilie:"1F33F", porree:"1F96C", rettich:"1F955",
+  rosenkohl:"1F966", rotkohl:"1F966", rucola:"1F96C", spargel:"1F966",
+  süßkartoffel:"1F360", topinambur:"1F954", weißkohl:"1F966", buttermilch:"1F95B",
+  camembert:"1F9C0", "creme fraiche":"1F95B", feta:"1F9C0", schafskäse:"1F9C0",
+  "griechischer joghurt":"1FAD9", kefir:"1F95B", kochkäse:"1F9C0", leerdammer:"1F9C0",
+  milchreis:"1F35A", ricotta:"1F9C0", calamari:"1F991", ente:"1F357",
+  hähnchenbrust:"1F357", hähnchenkeule:"1F357", kalbfleisch:"1F969", kassler:"1F953",
+  lamm:"1F411", leber:"1F969", lunge:"1F969", putenbrust:"1F357",
+  putenschnitzel:"1F357", rinderfilet:"1F969", rinderhack:"1F969",
+  rinderroulade:"1F969", rollmops:"1F41F", sülze:"1F963", zander:"1F41F",
+  backpulver:"1F9C2", balsamico:"1F9C2", brühe:"1F963", gnocchi:"1F35D",
+  haferflocken:"1F33E", kartoffelstärke:"1F33E", kichererbsen:"1F96C",
+  kidneybohnen:"1F96C", linsen:"1F96C", paniermehl:"1F33E", pesto:"1F33F",
+  polenta:"1F35A", rosinen:"1F347", sahnesteif:"1F3FA", sojasoße:"1F963",
+  sonnenblumenöl:"1F6E2", soßenbinder:"1F9C2", vanillezucker:"1F36C",
+  worcestersauce:"1F9C2", energydrink:"1F964", granatapfelsaft:"1F9C3",
+  hugo:"1F377", mineralwasser:"1F4A7", prosecco:"1F377", radler:"1F37A",
+  sekt:"1F37E", smoothie:"1F964", sprudelwasser:"1F4A7", traubensaft:"1F9C3",
+  aufbackbrötchen:"1F35E", blätterteig:"1F35E", gemüsepfanne:"1F966",
+  knödel:"1F35D", kuchen:"1F370", lasagne:"1F35D", maultaschen:"1F35D",
+  nuggets:"1F357", paniertes:"1F357", piroggen:"1F35D", ravioli:"1F35D",
+  reibekuchen:"1F35F", schaschlik:"1F357", tortellini:"1F35D", waffeln:"1F367",
+  wraps:"1F35D", abwaschbürste:"1FAE7", alufolie:"1F4E6", backpapier:"1F4C4",
+  bonbons:"1F36C", deo:"1F9F4", desinfektionsmittel:"1F9F9", drano:"1F9F9",
+  feuchttücher:"1F9FB", frischhaltefolie:"1F4E6", geschirrtabs:"1F9FC",
+  glühbirne:"1F4A1", haargel:"1F9FC", handcreme:"1F9F5", handschuhe:"1F9E4",
+  hustensaft:"1F9EA", insektenspray:"1F9F4", kerze:"1F56F", kerzen:"1F56F",
+  klorollen:"1F9FB", kondome:"1F9F4", körperöl:"1F9F7", küchentücher:"1F9FB",
+  leinöl:"1F6E2", lotion:"1F9F5", lufterfrischer:"1F33F", "make-up":"1F484",
+  mascara:"1F484", medikamente:"1F48A", milchreiniger:"1F9FC", mülltüten:"1F5D1",
+  mundspülung:"1F9F4", nasenspray:"1F9EA", orangenschalen:"1F34A",
+  papiertüten:"1F4E6", parfüm:"1F484", pfefferkörner:"1F336", pflaster:"1F48A",
+  rasierklingen:"1FA92", rasierschaum:"1FAE6", räucherstäbchen:"1F56F",
+  salbei:"1F33F", spülbürste:"1FAE7", staubsaugerbeutel:"1F9F9",
+  streichhölzer:"1F522", taschentücher:"1F9FB", teebaumöl:"1F33F",
+  toilettenreiniger:"1F9F9", zahnbürste:"1FAE5", zitronenmelisse:"1F34B",
+  zündhölzer:"1F522", bubblegum:"1F36C", gummibärchen:"1F36C", kaugummi:"1F36C",
+  knuspermüsli:"1F33E", lebkuchen:"1F36A", lutscher:"1F36D", marshmallow:"1F36C",
+  nougat:"1F36B", pralinen:"1F36B", salzstangen:"1F35F", studentenfutter:"1F330",
+  trockenobst:"1F347", weinbrand:"1F377"
+};
+const CAT_MAP = [
+  { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","traube","trauben","weintrauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","dill","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder","orangenschalen","salbei","zitronenmelisse","trockenobst"]) },
+  { key: "brot_backwaren", keys: new Set(["brot","brötchen","toast","semmel","baguette","kräuterbaguette","kräuterbaguettes","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","wraps"]) },
+  { key: "milch_eier", keys: new Set(["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta","schafskäse","ofenkäse"]) },
+  { key: "fleisch_fisch", keys: new Set(["fleisch","steak","steaks","rindersteak","rindersteaks","beefsteak","putensteak","putensteaks","schweinesteak","schweinesteaks","schweinskotelett","hähnchen","pute","ente","schinken","speck","wurst","bratwürstchen","aufschnitt","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"]) },
+  { key: "trockenwaren", keys: new Set(["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","olivenöl","sonnenblumenöl","speiseöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","soßenbinder","vanillezucker","worcestersauce","schokolade","keks","chips","nüsse","mandeln","bonbons","bubblegum","gummibärchen","kaugummi","knuspermüsli","lebkuchen","lutscher","marshmallow","nougat","pralinen","salzstangen","studentenfutter","pfefferkörner"]) },
+  { key: "tiefkuehlprodukte", keys: new Set(["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem","gemüsepfanne","knödel","nuggets","paniertes","piroggen","ravioli","reibekuchen","schaschlik","tortellini","tk-gemüse","waffeln"]) },
+  { key: "getraenke", keys: new Set(["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"]) },
+  { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","müllbeutel","mundspülung","nasenspray","papiertüten","parfüm","pflaster","rasierklingen","rasierschaum","räucherstäbchen","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zündhölzer"]) }
+];
+const CATEGORY_NAME_TO_KEY = {
+  "Obst & Gemüse": "obst_gemuese",
+  "Brot & Backwaren": "brot_backwaren",
+  "Milchprodukte & Eier": "milch_eier",
+  "Fleisch & Fisch": "fleisch_fisch",
+  "Trockenwaren": "trockenwaren",
+  "Tiefkühlprodukte": "tiefkuehlprodukte",
+  "Getränke": "getraenke",
+  "Haushalt & Hygiene": "haushalt_hygiene",
+  "Sonstiges": "sonstiges"
+};
+// Animated inline SVG category icons. Embedded directly (not as <img> or
+// <ha-icon>) so the CSS animations actually run. Replace an individual SVG by
+// editing its string; the key names must stay stable.
+const CATEGORY_SVGS = {
+  obst_gemuese: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-swing { animation: sl-cat-swing 2.5s ease-in-out infinite; transform-origin: 12px 5px; }
+      @keyframes sl-cat-swing { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+    </style>
+    <g class="sl-cat-swing">
+      <path d="M12 6c-3 0-5.5 2-5.5 5.5S9 18 12 18s5.5-3 5.5-6.5S15 6 12 6z"/>
+      <path d="M12 6c0-1.5.5-3 1.5-4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+      <path d="M12 6c2-.5 3.5-.5 4.5.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+    </g>
+  </svg>`,
+  brot_backwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-rise { animation: sl-cat-rise 2s ease-in-out infinite; transform-origin: center bottom; }
+      @keyframes sl-cat-rise { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.08); } }
+    </style>
+    <g class="sl-cat-rise">
+      <path d="M5 9c0-3 3-5 7-5s7 2 7 5v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9z"/>
+      <path d="M8 9c0-1 1.5-2 4-2s4 1 4 2" stroke="rgba(255,255,255,0.4)" stroke-width="1" fill="none"/>
+    </g>
+  </svg>`,
+  milch_eier: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-tilt { animation: sl-cat-tilt 3s ease-in-out infinite; transform-origin: center bottom; }
+      @keyframes sl-cat-tilt { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+    </style>
+    <g class="sl-cat-tilt">
+      <path d="M7 5h10l2 4v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9l2-4z"/>
+      <circle cx="12" cy="17" r="2" fill="rgba(255,255,255,0.5)"/>
+    </g>
+  </svg>`,
+  fleisch_fisch: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-meat { animation: sl-cat-pulse 2s ease-in-out infinite; transform-origin: center; }
+      .sl-cat-steam { animation: sl-cat-steam 2s ease-in-out infinite; }
+      @keyframes sl-cat-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+      @keyframes sl-cat-steam { 0%,100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+    </style>
+    <g class="sl-cat-meat">
+      <path d="M7 11c0-3 2.5-6 6-6s6 3 6 6-2.5 6-6 6-6-3-6-6z"/>
+      <path d="M9 14l-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+    </g>
+    <path class="sl-cat-steam" d="M9 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none"/>
+    <path class="sl-cat-steam" d="M15 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none" style="animation-delay:0.5s"/>
+  </svg>`,
+  trockenwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-wiggle { animation: sl-cat-wiggle 2.2s ease-in-out infinite; transform-origin: center bottom; }
+      @keyframes sl-cat-wiggle { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+    </style>
+    <g class="sl-cat-wiggle">
+      <path d="M4 7h16l2 4v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z"/>
+      <path d="M4 7l2-3h12l2 3" stroke="currentColor" stroke-width="1.5" fill="none"/>
+    </g>
+  </svg>`,
+  tiefkuehlprodukte: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-flake { animation: sl-cat-spin 4s linear infinite; transform-origin: center; }
+      .sl-cat-dot { animation: sl-cat-fade 1.8s ease-in-out infinite; }
+      @keyframes sl-cat-spin { to { transform: rotate(360deg); } }
+      @keyframes sl-cat-fade { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+    </style>
+    <g class="sl-cat-flake">
+      <path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none"/>
+    </g>
+    <circle class="sl-cat-dot" cx="8" cy="8" r="1"/>
+    <circle class="sl-cat-dot" cx="16" cy="8" r="1" style="animation-delay:0.4s"/>
+    <circle class="sl-cat-dot" cx="12" cy="16" r="1" style="animation-delay:0.8s"/>
+  </svg>`,
+  getraenke: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-bubble { animation: sl-cat-bubble 1.6s ease-in-out infinite; }
+      @keyframes sl-cat-bubble { 0%,100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-3px); opacity: 1; } }
+    </style>
+    <path d="M7 3h10l1 4v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7l1-4z"/>
+    <circle class="sl-cat-bubble" cx="10" cy="14" r="1"/>
+    <circle class="sl-cat-bubble" cx="14" cy="11" r="1.2" style="animation-delay:0.5s"/>
+    <circle class="sl-cat-bubble" cx="12" cy="17" r="0.8" style="animation-delay:1s"/>
+  </svg>`,
+  haushalt_hygiene: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-scrub { animation: sl-cat-scrub 1.5s ease-in-out infinite; transform-origin: bottom right; }
+      @keyframes sl-cat-scrub { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-10deg); } }
+    </style>
+    <g class="sl-cat-scrub">
+      <path d="M7 4h10v4H7z"/>
+      <path d="M8 8l-1 9h10l-1-9"/>
+      <path d="M10 17h4" stroke="currentColor" stroke-width="2" fill="none"/>
+    </g>
+  </svg>`,
+  sonstiges: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-wag { animation: sl-cat-wag 2s ease-in-out infinite; transform-origin: center bottom; }
+      @keyframes sl-cat-wag { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
+    </style>
+    <g class="sl-cat-wag">
+      <path d="M5 6h2l2 11h8l2-9H7"/>
+      <circle cx="10" cy="19" r="1.5"/>
+      <circle cx="17" cy="19" r="1.5"/>
+    </g>
+  </svg>`
+};
+
 class ShoppingListCard extends HTMLElement {
   constructor() {
     super();
@@ -195,130 +438,12 @@ class ShoppingListCard extends HTMLElement {
 
   _initCaches() {
     if (this._cachesReady) return;
-    this._autocompleteItems = [...new Set([
-      "Apfel","Bananen","Birne","Kiwi","Orange","Weintrauben","Kirschen","Erdbeeren","Himbeeren",
-      "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
-      "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln","Knoblauch",
-      "Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants","Milch",
-      "Joghurt","Sahne","Butter","Käse","Schafskäse","Ofenkäse","Quark","Frischkäse","Mozzarella","Eier",
-      "Hähnchen","Hackfleisch","Schnitzel","Schinken","Aufschnitt","Rindersteak","Putensteak","Schweinesteak","Fisch","Lachs","Garnelen","Tofu",
-      "Bratwürstchen","Nudeln","Spaghetti","Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig",
-      "Ketchup","Mayonnaise","Senf","Honig","Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser",
-      "Saft","Cola","Bier","Weißwein","Rotwein","Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo",
-      "Duschgel","Seife","Zahnpasta","Waschmittel","Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse",
-      "Mandeln","TK-Gemüse","Müllbeutel","Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel",
-      "Heidelbeeren","Johannisbeeren","Nektarine","Pampelmuse","Preiselbeeren","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat","Dill",
-      "Kürbis","Lauch","Mais","Mangold","Pak Choi","Pastinake","Peperoni","Petersilie","Buttermilch","Griechischer Joghurt",
-      "Kefir","Ricotta","Hähnchenbrust","Hähnchenkeule","Lamm","Linsen","Sekt","Gemüsepfanne","Kuchen","Ravioli",
-      "Tortellini","Waffeln","Wraps","Abwaschbürste","Alufolie","Deo","Frischhaltefolie","Küchentücher","Lebkuchen","Kaviar",
-      "Biobeutel"
-    ])];
+    this._autocompleteItems = AUTOCOMPLETE_ITEMS;
 
-    this._iconMap = {
-      eier:"1F95A", ei:"1F95A", apfel:"1F34E", äpfel:"1F34E", banane:"1F34C", bananen:"1F34C",
-      birne:"1F350", birnen:"1F350", kiwi:"1F95D", orange:"1F34A", orangen:"1F34A",
-      traube:"1F347", trauben:"1F347", weintrauben:"1F347", kirsche:"1F352", kirschen:"1F352",
-      erdbeere:"1F353", erdbeeren:"1F353", himbeere:"1F353", himbeeren:"1F353", holunder:"1F347",
-      heidelbeere:"1FAD0", heidelbeeren:"1FAD0", pfirsich:"1F351", pflaume:"1F351",
-      zitrone:"1F34B", limette:"1F34B", grapefruit:"1F34A", melone:"1F348", ananas:"1F34D",
-      mango:"1F96D", avocado:"1F951", tomate:"1F345", tomaten:"1F345", gurke:"1F952",
-      paprika:"1FAD1", karotte:"1F955", karotten:"1F955", zucchini:"1F955", aubergine:"1F346",
-      brokkoli:"1F966", blumenkohl:"1F966", spinat:"1F96C", blattspinat:"1F96C", salat:"1F96C",
-      kartoffel:"1F954", kartoffeln:"1F954", zwiebel:"1F9C5", zwiebeln:"1F9C5", knoblauch:"1F9C4",
-      lauch:"1F96C", schnittlauch:"1F96C", dill:"1F33F", frühlingszwiebel:"1F9C5", schalotte:"1F9C5",
-      radieschen:"1F955", sellerie:"1F96C", "rote bete":"1F345", rotebete:"1F345", pilz:"1F344",
-      champignon:"1F344", champignons:"1F344", pfifferling:"1F344", steinpilz:"1F344", kräuterseitling:"1F344",
-      austernpilz:"1F344", pilze:"1F344", gemüse:"1F955", obst:"1F353", frucht:"1F353",
-      brot:"1F35E", brötchen:"1F35E", toast:"1F35E", semmel:"1F35E", baguette:"1F35E", "kräuterbaguette":"1F35E", "kräuterbaguettes":"1F35E",
-      ciabatta:"1F35E", croissant:"1F950", croissants:"1F950", schrippe:"1F35E", weckle:"1F35E",
-      laugenbrezel:"1F35E", brezel:"1F35E", milch:"1F95B", joghurt:"1FAD9", sahne:"1F95B",
-      schmand:"1F95B", schlagsahne:"1F95B", butter:"1F9C8", käse:"1F9C0", quark:"1FAD9",
-      frischkäse:"1F9C0", mozzarella:"1F9C0", brie:"1F9C0", gouda:"1F9C0", emmentaler:"1F9C0", ofenkäse:"1F9C0",
-      parmesan:"1F9C0", "cream cheese":"1F9C0", mascarpone:"1F9C0", burrata:"1F9C0",
-      cheddar:"1F9C0", fleisch:"1F969", hähnchen:"1F357", pute:"1F357",
-      ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"bratwurst.svg", bratwürstchen:"bratwurst.svg", salami:"1F32D",
-      mettwurst:"1F32D", aufschnitt:"1F953", steak:"steak.svg", steaks:"steak.svg", rindersteak:"steak.svg", rindersteaks:"steak.svg", beefsteak:"steak.svg",
-      putensteak:"putensteak.svg", putensteaks:"putensteak.svg", schweinesteak:"schweinesteak.svg", schweinesteaks:"schweinesteak.svg", schweinskotelett:"schweinesteak.svg",
-      schnitzel:"1F969", hackfleisch:"1F356", fisch:"1F41F", lachs:"1F41F",
-      thunfisch:"1F41F", forelle:"1F41F", scholle:"1F41F", makrele:"1F41F", garnelen:"1F990",
-      krabben:"1F990", tofu:"1F96C", "tk-gemüse":"2744", seitan:"1F969", vegan:"1F96C", vegetarisch:"1F96C",
-      nudeln:"1F35D", spaghetti:"1F35D", penne:"1F35D", rigatoni:"1F35D", fettuccine:"1F35D",
-      lasagne:"1F35D", reis:"1F35A", couscous:"1F35A", bulgur:"1F35A", mehl:"1F33E",
-      zucker:"1F36C", salz:"1F9C2", pfeffer:"1F336", öl:"1F6E2", olivenöl:"1F6E2",
-      essig:"1F9C2", soße:"1F963", ketchup:"1F345", mayo:"1F9C2", mayonnaise:"1F9C2",
-      senf:"1F336", gewürz:"1F336", gewürze:"1F336", kräuter:"1F33F", vanille:"1F33F",
-      zimt:"1F33F", honig:"1F36F", marmelade:"1F36F", nutella:"1F36F", aufstrich:"1F36F",
-      kapern:"1F952", oliven:"1F95C", essiggurke:"1F952", sauerkraut:"1F96C",
-      peperoni:"1F336", antipasti:"1F952", kaffee:"2615", espresso:"2615", cappuccino:"2615",
-      tee:"1FAD6", bier:"1F37A", wein:"1F377", weißwein:"1F377", rotwein:"1F377",
-      wasser:"1F4A7", getränke:"1F964", cola:"1F964", limonade:"1F964", sprite:"1F964",
-      fanta:"1F964", apfelschorle:"1F964", saft:"1F9C3", orangensaft:"1F9C3", kapseln:"2615",
-      kakao:"2615", tiefkühl:"2744", tiefkühlpizza:"1F355", pizza:"1F355", frikassee:"1F963",
-      fischstäbchen:"1F41F", pommes:"1F35F", eis:"1F366", eiskrem:"1F366",
-      toilettenpapier:"1F9FB", küchenrolle:"papierhandtuch.svg", kuechenrolle:"papierhandtuch.svg", papier:"1F4C4", taschentuch:"1F9FB",
-      waschmittel:"1F9FC", spülmittel:"1FAE7", spüli:"1FAE7", zahnpasta:"1FAE5",
-      zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"1F9FC",
-      deodorant:"1F9F4", rasierer:"1FA92", dusch:"1F6BF", bad:"1F6BF", weichspüler:"1F9F5",
-      reiniger:"1F9F9", tabs:"1F9FC", schokolade:"1F36B", kekse:"1F36A", chips:"1F35F",
-      nüsse:"1F330", mandeln:"1F330", müllbeutel:"1F5D1", aprikose:"1F351",
-      brombeeren:"1F347", clementine:"1F34A", klementine:"1F34A", cranberry:"1F347",
-      datteln:"1F36C", feige:"1F34A", granatapfel:"1F347", johannisbeeren:"1F353",
-      nektarine:"1F351", pampelmuse:"1F34A", preiselbeeren:"1F353", stachelbeeren:"1F353",
-      wassermelone:"1F349", chinakohl:"1F96C", eisbergsalat:"1F96C", feldsalat:"1F96C",
-      kürbis:"1F383", lauch:"1F96C", mais:"1F33D", mangold:"1F96C", "pak choi":"1F96C",
-      pastinake:"1F955", petersilie:"1F33F", porree:"1F96C", rettich:"1F955",
-      rosenkohl:"1F966", rotkohl:"1F966", rucola:"1F96C", spargel:"1F966",
-      süßkartoffel:"1F360", topinambur:"1F954", weißkohl:"1F966", buttermilch:"1F95B",
-      camembert:"1F9C0", "creme fraiche":"1F95B", feta:"1F9C0", schafskäse:"1F9C0",
-      "griechischer joghurt":"1FAD9", kefir:"1F95B", kochkäse:"1F9C0", leerdammer:"1F9C0",
-      milchreis:"1F35A", ricotta:"1F9C0", calamari:"1F991", ente:"1F357",
-      hähnchenbrust:"1F357", hähnchenkeule:"1F357", kalbfleisch:"1F969", kassler:"1F953",
-      lamm:"1F411", leber:"1F969", lunge:"1F969", putenbrust:"1F357",
-      putenschnitzel:"1F357", rinderfilet:"1F969", rinderhack:"1F969",
-      rinderroulade:"1F969", rollmops:"1F41F", sülze:"1F963", zander:"1F41F",
-      backpulver:"1F9C2", balsamico:"1F9C2", brühe:"1F963", gnocchi:"1F35D",
-      haferflocken:"1F33E", kartoffelstärke:"1F33E", kichererbsen:"1F96C",
-      kidneybohnen:"1F96C", linsen:"1F96C", paniermehl:"1F33E", pesto:"1F33F",
-      polenta:"1F35A", rosinen:"1F347", sahnesteif:"1F3FA", sojasoße:"1F963",
-      sonnenblumenöl:"1F6E2", soßenbinder:"1F9C2", vanillezucker:"1F36C",
-      worcestersauce:"1F9C2", energydrink:"1F964", granatapfelsaft:"1F9C3",
-      hugo:"1F377", mineralwasser:"1F4A7", prosecco:"1F377", radler:"1F37A",
-      sekt:"1F37E", smoothie:"1F964", sprudelwasser:"1F4A7", traubensaft:"1F9C3",
-      aufbackbrötchen:"1F35E", blätterteig:"1F35E", gemüsepfanne:"1F966",
-      knödel:"1F35D", kuchen:"1F370", lasagne:"1F35D", maultaschen:"1F35D",
-      nuggets:"1F357", paniertes:"1F357", piroggen:"1F35D", ravioli:"1F35D",
-      reibekuchen:"1F35F", schaschlik:"1F357", tortellini:"1F35D", waffeln:"1F367",
-      wraps:"1F35D", abwaschbürste:"1FAE7", alufolie:"1F4E6", backpapier:"1F4C4",
-      bonbons:"1F36C", deo:"1F9F4", desinfektionsmittel:"1F9F9", drano:"1F9F9",
-      feuchttücher:"1F9FB", frischhaltefolie:"1F4E6", geschirrtabs:"1F9FC",
-      glühbirne:"1F4A1", haargel:"1F9FC", handcreme:"1F9F5", handschuhe:"1F9E4",
-      hustensaft:"1F9EA", insektenspray:"1F9F4", kerze:"1F56F", kerzen:"1F56F",
-      klorollen:"1F9FB", kondome:"1F9F4", körperöl:"1F9F7", küchentücher:"1F9FB",
-      leinöl:"1F6E2", lotion:"1F9F5", lufterfrischer:"1F33F", "make-up":"1F484",
-      mascara:"1F484", medikamente:"1F48A", milchreiniger:"1F9FC", mülltüten:"1F5D1",
-      mundspülung:"1F9F4", nasenspray:"1F9EA", orangenschalen:"1F34A",
-      papiertüten:"1F4E6", parfüm:"1F484", pfefferkörner:"1F336", pflaster:"1F48A",
-      rasierklingen:"1FA92", rasierschaum:"1FAE6", räucherstäbchen:"1F56F",
-      salbei:"1F33F", spülbürste:"1FAE7", staubsaugerbeutel:"1F9F9",
-      streichhölzer:"1F522", taschentücher:"1F9FB", teebaumöl:"1F33F",
-      toilettenreiniger:"1F9F9", zahnbürste:"1FAE5", zitronenmelisse:"1F34B",
-      zündhölzer:"1F522", bubblegum:"1F36C", gummibärchen:"1F36C", kaugummi:"1F36C",
-      knuspermüsli:"1F33E", lebkuchen:"1F36A", lutscher:"1F36D", marshmallow:"1F36C",
-      nougat:"1F36B", pralinen:"1F36B", salzstangen:"1F35F", studentenfutter:"1F330",
-      trockenobst:"1F347", weinbrand:"1F377"
-    };
+    this._iconMap = ICON_MAP;
     this._iconMapEntries = Object.entries(this._iconMap).sort((a, b) => b[0].length - a[0].length);
 
-    this._catMap = [
-      { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","traube","trauben","weintrauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","dill","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder","orangenschalen","salbei","zitronenmelisse","trockenobst"]) },
-      { key: "brot_backwaren", keys: new Set(["brot","brötchen","toast","semmel","baguette","kräuterbaguette","kräuterbaguettes","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","wraps"]) },
-      { key: "milch_eier", keys: new Set(["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta","schafskäse","ofenkäse"]) },
-      { key: "fleisch_fisch", keys: new Set(["fleisch","steak","steaks","rindersteak","rindersteaks","beefsteak","putensteak","putensteaks","schweinesteak","schweinesteaks","schweinskotelett","hähnchen","pute","ente","schinken","speck","wurst","bratwürstchen","aufschnitt","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"]) },
-      { key: "trockenwaren", keys: new Set(["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","olivenöl","sonnenblumenöl","speiseöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","soßenbinder","vanillezucker","worcestersauce","schokolade","keks","chips","nüsse","mandeln","bonbons","bubblegum","gummibärchen","kaugummi","knuspermüsli","lebkuchen","lutscher","marshmallow","nougat","pralinen","salzstangen","studentenfutter","pfefferkörner"]) },
-      { key: "tiefkuehlprodukte", keys: new Set(["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem","gemüsepfanne","knödel","nuggets","paniertes","piroggen","ravioli","reibekuchen","schaschlik","tortellini","tk-gemüse","waffeln"]) },
-      { key: "getraenke", keys: new Set(["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"]) },
-      { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","müllbeutel","mundspülung","nasenspray","papiertüten","parfüm","pflaster","rasierklingen","rasierschaum","räucherstäbchen","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zündhölzer"]) }
-    ];
+    this._catMap = CAT_MAP;
     this._catLookup = new Map();
     for (const cat of this._catMap) {
       for (const key of cat.keys) {
@@ -351,124 +476,8 @@ class ShoppingListCard extends HTMLElement {
 
     // Reverse map: backend publishes category NAME (e.g. "Obst & Gemüse"),
     // but grouping/icon/color need the canonical key. Fall back to summary scan.
-    this._categoryNameToKey = {
-      "Obst & Gemüse": "obst_gemuese",
-      "Brot & Backwaren": "brot_backwaren",
-      "Milchprodukte & Eier": "milch_eier",
-      "Fleisch & Fisch": "fleisch_fisch",
-      "Trockenwaren": "trockenwaren",
-      "Tiefkühlprodukte": "tiefkuehlprodukte",
-      "Getränke": "getraenke",
-      "Haushalt & Hygiene": "haushalt_hygiene",
-      "Sonstiges": "sonstiges"
-    };
-
-    // Animated inline SVG category icons. Embedded directly so CSS animations
-    // run reliably (img/ha-icon cannot animate). Replace individual SVGs by
-    // editing the strings below; the key names must stay stable.
-    this._categorySvgs = {
-      obst_gemuese: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-swing { animation: sl-cat-swing 2.5s ease-in-out infinite; transform-origin: 12px 5px; }
-          @keyframes sl-cat-swing { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
-        </style>
-        <g class="sl-cat-swing">
-          <path d="M12 6c-3 0-5.5 2-5.5 5.5S9 18 12 18s5.5-3 5.5-6.5S15 6 12 6z"/>
-          <path d="M12 6c0-1.5.5-3 1.5-4" stroke="currentColor" stroke-width="1.5" fill="none"/>
-          <path d="M12 6c2-.5 3.5-.5 4.5.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
-        </g>
-      </svg>`,
-      brot_backwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-rise { animation: sl-cat-rise 2s ease-in-out infinite; transform-origin: center bottom; }
-          @keyframes sl-cat-rise { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.08); } }
-        </style>
-        <g class="sl-cat-rise">
-          <path d="M5 9c0-3 3-5 7-5s7 2 7 5v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9z"/>
-          <path d="M8 9c0-1 1.5-2 4-2s4 1 4 2" stroke="rgba(255,255,255,0.4)" stroke-width="1" fill="none"/>
-        </g>
-      </svg>`,
-      milch_eier: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-tilt { animation: sl-cat-tilt 3s ease-in-out infinite; transform-origin: center bottom; }
-          @keyframes sl-cat-tilt { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
-        </style>
-        <g class="sl-cat-tilt">
-          <path d="M7 5h10l2 4v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9l2-4z"/>
-          <circle cx="12" cy="17" r="2" fill="rgba(255,255,255,0.5)"/>
-        </g>
-      </svg>`,
-      fleisch_fisch: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-meat { animation: sl-cat-pulse 2s ease-in-out infinite; transform-origin: center; }
-          .sl-cat-steam { animation: sl-cat-steam 2s ease-in-out infinite; }
-          @keyframes sl-cat-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-          @keyframes sl-cat-steam { 0%,100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
-        </style>
-        <g class="sl-cat-meat">
-          <path d="M7 11c0-3 2.5-6 6-6s6 3 6 6-2.5 6-6 6-6-3-6-6z"/>
-          <path d="M9 14l-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
-        </g>
-        <path class="sl-cat-steam" d="M9 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none"/>
-        <path class="sl-cat-steam" d="M15 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none" style="animation-delay:0.5s"/>
-      </svg>`,
-      trockenwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-wiggle { animation: sl-cat-wiggle 2.2s ease-in-out infinite; transform-origin: center bottom; }
-          @keyframes sl-cat-wiggle { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
-        </style>
-        <g class="sl-cat-wiggle">
-          <path d="M4 7h16l2 4v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z"/>
-          <path d="M4 7l2-3h12l2 3" stroke="currentColor" stroke-width="1.5" fill="none"/>
-        </g>
-      </svg>`,
-      tiefkuehlprodukte: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-flake { animation: sl-cat-spin 4s linear infinite; transform-origin: center; }
-          .sl-cat-dot { animation: sl-cat-fade 1.8s ease-in-out infinite; }
-          @keyframes sl-cat-spin { to { transform: rotate(360deg); } }
-          @keyframes sl-cat-fade { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
-        </style>
-        <g class="sl-cat-flake">
-          <path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none"/>
-        </g>
-        <circle class="sl-cat-dot" cx="8" cy="8" r="1"/>
-        <circle class="sl-cat-dot" cx="16" cy="8" r="1" style="animation-delay:0.4s"/>
-        <circle class="sl-cat-dot" cx="12" cy="16" r="1" style="animation-delay:0.8s"/>
-      </svg>`,
-      getraenke: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-bubble { animation: sl-cat-bubble 1.6s ease-in-out infinite; }
-          @keyframes sl-cat-bubble { 0%,100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-3px); opacity: 1; } }
-        </style>
-        <path d="M7 3h10l1 4v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7l1-4z"/>
-        <circle class="sl-cat-bubble" cx="10" cy="14" r="1"/>
-        <circle class="sl-cat-bubble" cx="14" cy="11" r="1.2" style="animation-delay:0.5s"/>
-        <circle class="sl-cat-bubble" cx="12" cy="17" r="0.8" style="animation-delay:1s"/>
-      </svg>`,
-      haushalt_hygiene: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-scrub { animation: sl-cat-scrub 1.5s ease-in-out infinite; transform-origin: bottom right; }
-          @keyframes sl-cat-scrub { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-10deg); } }
-        </style>
-        <g class="sl-cat-scrub">
-          <path d="M7 4h10v4H7z"/>
-          <path d="M8 8l-1 9h10l-1-9"/>
-          <path d="M10 17h4" stroke="currentColor" stroke-width="2" fill="none"/>
-        </g>
-      </svg>`,
-      sonstiges: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-wag { animation: sl-cat-wag 2s ease-in-out infinite; transform-origin: center bottom; }
-          @keyframes sl-cat-wag { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
-        </style>
-        <g class="sl-cat-wag">
-          <path d="M5 6h2l2 11h8l2-9H7"/>
-          <circle cx="10" cy="19" r="1.5"/>
-          <circle cx="17" cy="19" r="1.5"/>
-        </g>
-      </svg>`
-    };
+    this._categoryNameToKey = CATEGORY_NAME_TO_KEY;
+    this._categorySvgs = CATEGORY_SVGS;
 
     // Mirror section calls _getItemCategory for every autocomplete article on
     // every full render. Pre-compute the categories once here after the lookup
