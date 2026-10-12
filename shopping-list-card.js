@@ -1,6 +1,8 @@
 // Shopping List Card v2.5.3 — AppDaemon backend edition (local SVG icons).
-// v2.5.3: toten Code entfernt — _getItemIcon (alter Text→Hex-Resolver) war
-// nach der Umstellung auf _renderItemIcon ohne Aufrufer.
+// v2.5.3: aufgeräumt — toten Code entfernt (_getItemIcon, alter Text→Hex-Resolver
+// ohne Aufrufer) und den Kachel-Zustand (dataset/ARIA/Mengen-Badge) in
+// _applyTileState zusammengeführt: _renderTile und _lightUpdate teilen sich nun
+// eine Implementierung statt zweier Kopien, die auseinanderlaufen konnten.
 // v2.5.2: a11y — Kacheln sind per Tastatur (Tab, dann Leertaste/Enter) und für
 // Screenreader bedienbar: role=checkbox, aria-checked, aria-keyshortcuts und
 // ein :focus-visible-Ring mit :focus-Fallback.
@@ -1437,26 +1439,11 @@ class ShoppingListCard extends HTMLElement {
       if (!item) { tile.remove(); continue; } // stale tile (item deleted in backend)
       const qty = String(item.quantity || 1);
       if (tile.dataset.status === item.status && tile.dataset.qty === qty) continue;
-      tile.dataset.status = item.status;
-      tile.dataset.qty = qty;
-      // v2.5.2: keep the screen-reader state in step with the visual state, so a
-      // keyboard toggle is announced as checked/unchecked immediately.
-      tile.setAttribute("aria-checked", item.status === "completed" ? "true" : "false");
-      tile.setAttribute("aria-label", this._tileAriaLabel(item));
-
-      // Quantity badge ("Nx") — created/removed; colors come from CSS.
-      let badge = tile.querySelector(".sl-badge");
-      const showBadge = (item.quantity || 1) > 1;
-      if (showBadge) {
-        if (!badge) {
-          badge = document.createElement("div");
-          badge.className = "sl-badge";
-          tile.appendChild(badge);
-        }
-        badge.textContent = (item.quantity || 1) + "x";
-      } else if (badge) {
-        badge.remove();
-      }
+      // v2.5.3: dataset/ARIA/badge rules are shared with _renderTile — see
+      // _applyTileState. The guard above stays correct: aria-checked and the
+      // aria-label derive from status + summary + quantity alone, so an unchanged
+      // status/qty pair means nothing visible or announced changed either.
+      this._applyTileState(tile, item);
     }
 
     // Count headers only in the ACTIVE sections. Mirror/backlog headers show
@@ -2192,16 +2179,12 @@ class ShoppingListCard extends HTMLElement {
     return q > 1 ? `${item.summary}, ${q} Stück` : item.summary;
   }
 
-  _renderTile(item, catWrap) {
-    // v2.4.0: listener-free tile. All visual state lives in data attributes; the
-    // card stylesheet derives background/border/opacity/badge colors from
-    // [data-status], and hover comes from .sl-tile:hover. Tap/long-press are
-    // handled by the card-level delegation in _bindCardEvents — no per-tile
-    // listeners (~11 per tile previously, ~1,500+ per full rebuild).
-    const tile = document.createElement("div");
-    tile.className = "sl-tile";
-    tile.dataset.uid = item.uid;
-    tile.dataset.summary = item.summary.toLowerCase();
+  // v2.5.3: single source of truth for a tile's mutable state. Both render paths
+  // call it — _renderTile when a tile is built, _lightUpdate when an existing
+  // tile's item changed — so the dataset/ARIA/badge rules live in one place
+  // instead of being mirrored in two methods. (The v2.5.2 aria fix had to be
+  // applied twice for exactly that reason.)
+  _applyTileState(tile, item) {
     tile.dataset.status = item.status;
     tile.dataset.qty = String(item.quantity || 1);
 
@@ -2213,6 +2196,32 @@ class ShoppingListCard extends HTMLElement {
     tile.setAttribute("aria-checked", item.status === "completed" ? "true" : "false");
     tile.setAttribute("aria-label", this._tileAriaLabel(item));
     tile.setAttribute("aria-keyshortcuts", "F2");
+
+    // Quantity badge ("Nx") — created, updated or removed as needed. Colors and
+    // placement come from the stylesheet (.sl-badge is position:absolute).
+    let badge = tile.querySelector(".sl-badge");
+    if ((item.quantity || 1) > 1) {
+      if (!badge) {
+        badge = document.createElement("div");
+        badge.className = "sl-badge";
+        tile.appendChild(badge);
+      }
+      badge.textContent = (item.quantity || 1) + "x";
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+
+  _renderTile(item, catWrap) {
+    // v2.4.0: listener-free tile. All visual state lives in data attributes; the
+    // card stylesheet derives background/border/opacity/badge colors from
+    // [data-status], and hover comes from .sl-tile:hover. Tap/long-press are
+    // handled by the card-level delegation in _bindCardEvents — no per-tile
+    // listeners (~11 per tile previously, ~1,500+ per full rebuild).
+    const tile = document.createElement("div");
+    tile.className = "sl-tile";
+    tile.dataset.uid = item.uid;
+    tile.dataset.summary = item.summary.toLowerCase();
 
     const iconWrap = document.createElement("div");
     iconWrap.className = "sl-icon-wrap";
@@ -2227,12 +2236,9 @@ class ShoppingListCard extends HTMLElement {
     labelOverlay.appendChild(label);
     tile.appendChild(labelOverlay);
 
-    if ((item.quantity || 1) > 1) {
-      const badge = document.createElement("div");
-      badge.className = "sl-badge";
-      badge.textContent = (item.quantity || 1) + "x";
-      tile.appendChild(badge);
-    }
+    // datasets + ARIA + quantity badge — shared with _lightUpdate's diff pass.
+    // Called last so the badge keeps its slot as the final child.
+    this._applyTileState(tile, item);
 
     if (catWrap) this._tileIndex.push({ tile, cat: catWrap, summary: item.summary.toLowerCase() });
     return tile;
