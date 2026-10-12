@@ -1,8 +1,12 @@
-// Shopping List Card v2.5.2 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.5.3 — AppDaemon backend edition (local SVG icons).
+// v2.5.3: toten Code entfernt — _getItemIcon (alter Text→Hex-Resolver) war
+// nach der Umstellung auf _renderItemIcon ohne Aufrufer.
+// v2.5.2: a11y — Kacheln sind per Tastatur (Tab, dann Leertaste/Enter) und für
+// Screenreader bedienbar: role=checkbox, aria-checked, aria-keyshortcuts und
+// ein :focus-visible-Ring mit :focus-Fallback.
 // v2.5.1: schlank — Offline-Modus (Snapshot/Sync-Queue/optimistische Updates)
 // entfernt, da die Offline-Funktion zu Problemen beim Abhaken/Offlinestate
 // geführt hat. Karte funktioniert online wie v2.4.1, sauber ohne Queue.
-// allen Kacheln (vorher schwächerer Verlauf auf completed-Kacheln).
 //
 // Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -1008,16 +1012,6 @@ class ShoppingListCard extends HTMLElement {
       }
     };
     return img;
-  }
-
-  _getItemIcon(text) {
-    const t = text.toLowerCase();
-    const map = this.config.icon_map || {};
-    if (map[text] || map[t]) return map[text] || map[t];
-    for (const [key, hex] of this._iconMapEntries) {
-      if (t.includes(key)) return hex;
-    }
-    return "1F6D2";
   }
 
   _renderItemIcon(container, item, size, lazy = false) {
