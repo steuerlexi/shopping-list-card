@@ -1,33 +1,33 @@
-// Shopping List Card v2.5.3 — AppDaemon backend edition (local SVG icons).
-// v2.5.3: aufgeräumt — toten Code entfernt (_getItemIcon, alter Text→Hex-Resolver
-// ohne Aufrufer) und den Kachel-Zustand (dataset/ARIA/Mengen-Badge) in
-// _applyTileState zusammengeführt: _renderTile und _lightUpdate teilen sich nun
-// eine Implementierung statt zweier Kopien, die auseinanderlaufen konnten.
-// v2.5.2: a11y — Kacheln sind per Tastatur (Tab, dann Leertaste/Enter) und für
-// Screenreader bedienbar: role=checkbox, aria-checked, aria-keyshortcuts und
-// ein :focus-visible-Ring mit :focus-Fallback.
-// v2.5.1: schlank — Offline-Modus (Snapshot/Sync-Queue/optimistische Updates)
-// entfernt, da die Offline-Funktion zu Problemen beim Abhaken/Offlinestate
-// geführt hat. Karte funktioniert online wie v2.4.1, sauber ohne Queue.
+// Shopping List Card v2.5.4 — AppDaemon backend edition (local SVG icons).
 //
-// Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
+// Source of truth is not a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
-// fires `einkaufsliste_*` HA events via the WebSocket `fire_event` command and reads the
-// full list from the sensor's `items` attribute. Auto-categorization,
+// fires `einkaufsliste_*` HA events via the WebSocket `fire_event` command and
+// reads the full list from the sensor's `items` attribute. Auto-categorization,
 // auto-dedup and uid-stable removal all happen server-side; the card only
 // renders and emits intents.
 //
-// Config: { type: "custom:shopping-list-card", entity: "sensor.einkaufsliste_backend" }
-// Legacy `todo.*` entities and the old `lists:` array are detected and render
-// a migration warning instead of silently breaking.
+// Config:
+//   type:     custom:shopping-list-card
+//   entity:   sensor.einkaufsliste_backend   (required)
+//   title:    "Einkaufen"
+//   list:     "standard"
+//   color:    "#43A047"
+//   icon_map: {}                             per-article icon overrides
+//   mirror:   true                           false = no "Verfügbar" backlog section
+// Legacy `todo.*` entities and the removed `lists:` array are detected and
+// render a migration warning instead of silently breaking.
 //
-// v2.4.0 — performance edition: surgical section-level DOM updates instead of
-// full rebuilds, card-level event delegation (11 listeners/tile → ~10 per
-// card), CSS-class tiles (no inline cssText / JS hover), parsed-SVG prototype
-// cache (cloneNode instead of innerHTML reparse), content-visibility for
-// offscreen sections, 150ms trailing debounce for full rebuilds, Cache Storage
-// API for the persistent SVG store (localStorage fallback), and inline MDI
-// SVG paths instead of <ha-icon> for static UI icons.
+// Architecture: surgical section-level DOM updates instead of full rebuilds,
+// card-level event delegation (10 listeners per card, not per tile), tiles whose
+// whole visual state lives in data attributes (no inline cssText, no JS hover),
+// a parsed-SVG prototype cache (cloneNode instead of an innerHTML reparse),
+// content-visibility for offscreen sections, a 150ms trailing debounce for full
+// rebuilds, Cache Storage for the persistent SVG store (localStorage fallback),
+// and inline MDI paths instead of <ha-icon> for static UI icons. The shared
+// autocomplete/icon/category tables live at module scope.
+//
+// Version history lives in git and in the GitHub releases, not here.
 
 // Inline MDI path data (from @mdi/svg 7.4.47) so the card doesn't spin up a
 // <ha-icon> custom element (icon-set lookup + lit template) for each static
