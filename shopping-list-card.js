@@ -414,6 +414,10 @@ class ShoppingListCard extends HTMLElement {
     this._entity = config.entity;
     this._listId = config.list || "standard";
     this._color = config.color || "#43A047";
+    // Opt-out for the "Verfügbar" backlog mirror — the catalog section rendered
+    // under the list. When off it is never built and never kept compatible, which
+    // matters on weak clients (the kiosk tablet) where the mirror adds ~116 tiles.
+    this._mirrorEnabled = config.mirror !== false;
 
     // Legacy detection: old `todo.*` entity or the removed `lists:` array.
     let legacy = null;
@@ -1772,7 +1776,13 @@ class ShoppingListCard extends HTMLElement {
     return addTile;
   }
 
-  // Shared catalog computation for the mirror/backlog section: every
+  // === Mirror / backlog feature =============================================
+  // The "Verfügbar" catalog section below the list: every autocomplete article
+  // not currently on the list, grouped by category, with a per-category
+  // "Mehr laden". Self-contained — nothing outside this block depends on it
+  // except the two gated call sites (_render and _applySurgicalUpdate), so the
+  // whole feature can be switched off with `mirror: false` in the card config.
+  // Shared catalog computation: every
   // autocomplete text that is NOT on the active list (plus completed extras
   // not in the catalog), grouped by category. Used by the full mirror render
   // AND by the surgical per-category mirror grid rebuild.
@@ -2165,8 +2175,10 @@ class ShoppingListCard extends HTMLElement {
       card.appendChild(this._renderCategory(cat, catItems));
     }
 
-    const mirror = this._renderMirrorSection(items, order);
-    if (mirror) card.appendChild(mirror);
+    if (this._mirrorEnabled) {
+      const mirror = this._renderMirrorSection(items, order);
+      if (mirror) card.appendChild(mirror);
+    }
 
     // v2.4.0: one card-level listener set replaces the per-tile listener suite
     // (click/touch/contextmenu/press). The card element is rebuilt on full
@@ -2487,17 +2499,22 @@ class ShoppingListCard extends HTMLElement {
     const activeCatsNow = new Set(cur.filter(i => i.status === "needs_action").map(i => this._itemCategoryKey(i)));
     for (const cat of activeCatsNow) if (!activeCatsBefore.has(cat)) return false;
 
+    const catalogNow = this._computeMirrorCatalog(cur);
+    const mirrorWrap = card.querySelector(".sl-mirror-wrap");
     // Mirror composition must stay section-compatible: no brand-new mirror
     // category, and the wrap exists exactly when there are available items.
-    const catalogNow = this._computeMirrorCatalog(cur);
-    const mirrorCatsNow = new Set(Object.keys(catalogNow.byCat));
-    const mirrorWrap = card.querySelector(".sl-mirror-wrap");
-    if (!mirrorWrap && mirrorCatsNow.size > 0) return false;
-    if (mirrorWrap && mirrorCatsNow.size === 0) return false;
-    if (mirrorWrap) {
-      const mirrorCatsBefore = new Set();
-      for (const s of card.querySelectorAll('.sl-cat[data-section="mirror"]')) mirrorCatsBefore.add(s.dataset.cat);
-      for (const cat of mirrorCatsNow) if (!mirrorCatsBefore.has(cat)) return false;
+    // Skipped when the mirror is off — nothing to keep compatible, and the check
+    // would otherwise see a non-empty catalog with no wrap and bail to a full
+    // render on every single update.
+    if (this._mirrorEnabled) {
+      const mirrorCatsNow = new Set(Object.keys(catalogNow.byCat));
+      if (!mirrorWrap && mirrorCatsNow.size > 0) return false;
+      if (mirrorWrap && mirrorCatsNow.size === 0) return false;
+      if (mirrorWrap) {
+        const mirrorCatsBefore = new Set();
+        for (const s of card.querySelectorAll('.sl-cat[data-section="mirror"]')) mirrorCatsBefore.add(s.dataset.cat);
+        for (const cat of mirrorCatsNow) if (!mirrorCatsBefore.has(cat)) return false;
+      }
     }
 
     // --- touched categories (prev AND new: a summary edit may move category) ---
