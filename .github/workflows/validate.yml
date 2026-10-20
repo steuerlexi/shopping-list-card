@@ -2,7 +2,18 @@ name: Validate
 
 on:
   push:
+    branches:
+      # HACS loads the repository from its default branch, and the HACS action
+    # validates "<owner>/<repo>@<current branch>". Running it on any other
+    # branch fails with "Repository ... not loaded properly in HACS", so the
+    # validation is limited to the branches HACS actually knows.
+      - master
+      - hacs-submission
   pull_request:
+    # Pull requests are validated against the head branch; the action would
+    # fail there for the same reason as above.
+    branches:
+      - master
   schedule:
     - cron: "0 0 * * *"
 
