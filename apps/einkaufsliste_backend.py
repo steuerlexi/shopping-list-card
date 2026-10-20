@@ -1,5 +1,5 @@
 """
-AppDaemon backend for the Shopping-List-Card (v2.0.0).
+AppDaemon backend for the Shopping-List-Card (v2.5.6).
 
 Replaces the native HA `todo` shopping_list integration as the source of truth
 for the shopping list. The card talks to this backend exclusively via HA events
@@ -9,7 +9,7 @@ for the shopping list. The card talks to this backend exclusively via HA events
         state:       number of active (needs_action) items
         attributes:
             items:            JSON array of all items (active + completed)
-            catalog_version:  hash of the loaded artikel_katalog.json
+            catalog_version:  version string of the loaded artikel_katalog.json
             last_updated:     ISO timestamp of last mutation
             friendly_name:   "Einkaufsliste"
 
@@ -25,12 +25,30 @@ Why AppDaemon instead of `todo.*` services:
 Events handled:
     einkaufsliste_add             {summary, quantity?, list?, no_dedup?}
     einkaufsliste_remove          {uid}
-    einkaufsliste_toggle          {uid}
+    einkaufsliste_toggle          {uid, status?}   (status => idempotent)
     einkaufsliste_update          {uid, summary?, quantity?, category?, icon?}
     einkaufsliste_clear_completed {list?}
     einkaufsliste_clear_all       {list?}
     einkaufsliste_import          {from_entity?}   (one-shot migration)
     einkaufsliste_reload_catalog  {}                (reload artikel_katalog.json)
+
+Command channel:
+    The input_text entity `input_text.einkaufsliste_command` carries JSON
+    commands so that non-admin users can drive the list (they may not use the
+    WebSocket fire_event command). Two wire formats are accepted:
+
+        compact:  {"e": "add", "d": {"s": "Milch", "q": 2}}
+        verbose:  {"event": "einkaufsliste_add", "data": {"summary": "Milch"}}
+
+    The compact form exists because Home Assistant caps input_text at 255
+    characters and silently discards anything longer. Short field names and
+    omitted defaults keep a long article name within the limit.
+
+    Security: the channel is writable by every HA user, so every field is
+    validated. A summary is a bounded string, a quantity a bounded int, an
+    icon an OpenMoji codepoint (never a URL — the card would fetch and inline
+    it), a category a known catalog entry, and a list an allowed list id.
+    `clear_all` only ever clears the caller's own list.
 
 Persistence:
     einkaufsliste.json     - the list itself (survives restarts)
@@ -41,6 +59,7 @@ Persistence:
 
 import appdaemon.plugins.hass.hassapi as hass
 import json
+import math
 import os
 import re
 import tempfile
@@ -50,6 +69,21 @@ import uuid
 SENSOR_ID = "sensor.einkaufsliste_backend"
 COMMAND_INPUT = "input_text.einkaufsliste_command"
 DEFAULT_LIST = "standard"
+
+# Input limits for the user-writable command channel. The card's JSON envelope
+# costs ~90 characters, so MAX_SUMMARY leaves room inside the input_text's
+# 255-character limit.
+MAX_SUMMARY = 120
+MAX_QTY = 999
+
+# An icon is an OpenMoji codepoint (hex), never a URL or path. The card renders
+# a backend-supplied icon by fetching and inlining it as SVG, so an unvalidated
+# value would let any user inject a script into every user's dashboard.
+ICON_RE = re.compile(r"^[0-9A-Fa-f]{4,6}$")
+
+# Lists that may be addressed. The command channel is writable by any HA user,
+# so an unvalidated "list" value would let a user read or wipe other lists.
+ALLOWED_LISTS = (DEFAULT_LIST,)
 # OpenMoji HEX codepoints + category colors, aligned with artikel_katalog.json.
 # Used only when the catalog file is missing/corrupt; the real catalog is the
 # source of truth for category names, icons, and colors.
@@ -178,15 +212,30 @@ class EinkaufslisteBackend(hass.Hass):
         empty/partial if AppDaemon/HA is killed or the disk fills mid-write.
         os.replace is atomic on the same filesystem.
         """
+        tmp = None
         try:
             os.makedirs(self._data_dir, exist_ok=True)
             fd, tmp = tempfile.mkstemp(dir=self._data_dir, suffix=".tmp")
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump({"version": 1, "items": self._items},
                           fh, ensure_ascii=False, indent=2)
+                fh.flush()
+                # os.replace gives atomicity, not durability: without the flush
+                # to disk a power cut can leave the renamed file with empty
+                # content.
+                os.fsync(fh.fileno())
             os.replace(tmp, self._list_path)
+            tmp = None
         except Exception as e:
             self.log("List save failed: %s" % e, level="ERROR")
+        finally:
+            # A failed write must not leave the temp file behind: the data dir
+            # would fill up with garbage exactly when the disk is full.
+            if tmp is not None:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
 
     def _load_catalog(self):
         try:
@@ -208,7 +257,15 @@ class EinkaufslisteBackend(hass.Hass):
 
     # ------------------------------------------------------------- cataloging
 
-    _NORMALIZE_MAP = str.maketrans({"ä": "a", "ö": "o", "ü": "u", "ß": "ss"})
+    _NORMALIZE_MAP = str.maketrans({
+        "ä": "a", "ö": "o", "ü": "u", "ß": "ss",
+        "á": "a", "à": "a", "â": "a", "ã": "a",
+        "é": "e", "è": "e", "ê": "e", "ë": "e",
+        "í": "i", "ì": "i", "î": "i", "ï": "i",
+        "ó": "o", "ò": "o", "ô": "o", "õ": "o",
+        "ú": "u", "ù": "u", "û": "u",
+        "ñ": "n", "ç": "c", "ý": "y", "æ": "ae", "œ": "oe",
+    })
 
     @classmethod
     def _norm(cls, s):
@@ -220,6 +277,12 @@ class EinkaufslisteBackend(hass.Hass):
             return cache[key]
         n = key.lower().translate(cls._NORMALIZE_MAP)
         n = re.sub(r"[^a-z0-9]+", " ", n).strip()
+        if not n:
+            # A non-Latin script (Cyrillic, Greek, CJK, ...) reduces to the
+            # empty string here. Collapsing every such article to "" would
+            # merge unrelated items into one, so fall back to a casefolded,
+            # whitespace-collapsed form that keeps them distinct.
+            n = " ".join(key.casefold().split())
         cache[key] = n
         return n
 
@@ -319,16 +382,6 @@ class EinkaufslisteBackend(hass.Hass):
         return uuid.uuid4().hex
 
     @staticmethod
-    def _coerce_qty(raw, default=1):
-        """Parse a quantity, allowing 0. None -> default; bad values -> default."""
-        if raw is None:
-            return default
-        try:
-            return max(0, int(raw))
-        except (TypeError, ValueError):
-            return default
-
-    @staticmethod
     def _extract_todo_items(resp, entity_id):
         """Pull the items list out of a todo/get_items response.
 
@@ -367,17 +420,96 @@ class EinkaufslisteBackend(hass.Hass):
         }
         self.set_state(SENSOR_ID, state=str(active), attributes=attrs)
 
+    # -------------------------------------------------------------- validation
+
+    def _clean_summary(self, raw):
+        """Normalize an article name to a safe, bounded string.
+
+        The command channel accepts arbitrary JSON, so the value can be any
+        type. Anything that is not a string is rejected outright.
+        """
+        if not isinstance(raw, str):
+            return ""
+        # Replace control characters (newline, tab, ...) with a space so that
+        # words do not get glued together, then collapse the whitespace runs.
+        cleaned = "".join(" " if ch < " " else ch for ch in raw)
+        return " ".join(cleaned.split())[:MAX_SUMMARY]
+
+    def _clean_qty(self, raw, default=1):
+        """Parse a quantity into a bounded int. 0 is a valid value."""
+        if raw is None or isinstance(raw, bool):
+            return default
+        try:
+            qty = int(raw)
+        except (TypeError, ValueError, OverflowError):
+            return default
+        # int(float('inf')) raises, but a huge int must not be persisted either.
+        if not math.isfinite(qty):
+            return default
+        return max(0, min(qty, MAX_QTY))
+
+    def _clean_list(self, raw):
+        """Return an allowed list id, or the default list.
+
+        The command channel is writable by any user, so an arbitrary list id
+        would let one user read or wipe another user's list.
+        """
+        if raw is None:
+            return DEFAULT_LIST
+        if not isinstance(raw, str):
+            return DEFAULT_LIST
+        lst = raw.strip()
+        if lst not in ALLOWED_LISTS:
+            self.log("rejecting unknown list %r (allowed: %s)"
+                     % (lst, ", ".join(ALLOWED_LISTS)), level="WARNING")
+            return DEFAULT_LIST
+        return lst
+
+    def _clean_icon(self, raw):
+        """Return a known OpenMoji codepoint, or the fallback.
+
+        The card fetches a backend-supplied icon and inlines it as SVG. An
+        unvalidated value would let any user store a script that then runs in
+        every user's dashboard.
+        """
+        if raw is None:
+            return FALLBACK_ICON
+        if not isinstance(raw, str):
+            return FALLBACK_ICON
+        value = raw.strip()
+        if not ICON_RE.match(value):
+            self.log("rejecting invalid icon %r" % (value,), level="WARNING")
+            return FALLBACK_ICON
+        return value.upper()
+
+    def _clean_category(self, raw):
+        """Return a category name known to the catalog, or None to keep the
+        auto-assigned one."""
+        if not isinstance(raw, str):
+            return None
+        value = raw.strip()
+        if not value:
+            return None
+        known = {c.get("name") for c in self._catalog.get("categories", [])}
+        known |= {c.get("id") for c in self._catalog.get("categories", [])}
+        if value not in known:
+            self.log("rejecting unknown category %r" % (value,), level="WARNING")
+            return None
+        return value
+
     # ------------------------------------------------------------------ events
 
     def _on_add(self, event_name, data, **kwargs):
         data = data or {}
-        summary = (data.get("summary") or "").strip()
+        summary = self._clean_summary(data.get("summary"))
         if not summary:
             self.log("add ignored: empty summary", level="WARNING")
             return
-        list_id = data.get("list") or DEFAULT_LIST
-        qty = self._coerce_qty(data.get("quantity"), 1)
-        no_dedup = bool(data.get("no_dedup"))
+        list_id = self._clean_list(data.get("list"))
+        qty = self._clean_qty(data.get("quantity"), 1)
+        # Only an explicit boolean true disables the dedup merge. A truthy
+        # string like "false" would otherwise disable it unintentionally.
+        no_dedup = data.get("no_dedup") is True
 
         if not no_dedup:
             target = self._find_dedup_target(summary, list_id)
@@ -426,14 +558,27 @@ class EinkaufslisteBackend(hass.Hass):
         uid = data.get("uid")
         if not uid:
             return
+        # An explicit target status makes the command idempotent: a replayed
+        # command sets the same status again instead of flipping the item back.
+        target_status = data.get("status")
+        if target_status not in ("needs_action", "completed"):
+            target_status = None
         for it in self._items:
             if it.get("uid") == uid:
-                if it.get("status") == "needs_action":
-                    it["status"] = "completed"
-                    it["completed_at"] = self._now_iso()
+                if target_status is not None:
+                    if it.get("status") == target_status:
+                        self.log("toggle: %s already %s" % (uid, target_status))
+                        return
+                    it["status"] = target_status
+                    it["completed_at"] = (self._now_iso()
+                                          if target_status == "completed" else None)
                 else:
-                    it["status"] = "needs_action"
-                    it["completed_at"] = None
+                    if it.get("status") == "needs_action":
+                        it["status"] = "completed"
+                        it["completed_at"] = self._now_iso()
+                    else:
+                        it["status"] = "needs_action"
+                        it["completed_at"] = None
                 self._save_list()
                 self._publish()
                 self.log("toggle: %s -> %s" % (uid, it["status"]))
@@ -448,8 +593,9 @@ class EinkaufslisteBackend(hass.Hass):
         for it in self._items:
             if it.get("uid") != uid:
                 continue
-            if "summary" in data and data["summary"]:
-                it["summary"] = data["summary"].strip()
+            new_summary = self._clean_summary(data.get("summary"))
+            if new_summary:
+                it["summary"] = new_summary
                 cat_name, icon, _ = self._categorize(it["summary"])
                 # re-categorize unless caller pinned category/icon
                 if "category" not in data:
@@ -458,11 +604,15 @@ class EinkaufslisteBackend(hass.Hass):
                     it["icon"] = icon
             if "quantity" in data:
                 # allow 0 (clear quantity); keep existing on None/bad input
-                it["quantity"] = self._coerce_qty(data["quantity"], it.get("quantity", 1))
+                it["quantity"] = self._clean_qty(data["quantity"], it.get("quantity", 1))
             if "category" in data:
-                it["category"] = data["category"]
+                cat = self._clean_category(data["category"])
+                if cat is not None:
+                    it["category"] = cat
+                    it["category_pinned"] = True
             if "icon" in data:
-                it["icon"] = data["icon"]
+                it["icon"] = self._clean_icon(data["icon"])
+                it["icon_pinned"] = True
             self._save_list()
             self._publish()
             self.log("update: %s" % uid)
@@ -471,12 +621,12 @@ class EinkaufslisteBackend(hass.Hass):
 
     def _on_clear_completed(self, event_name, data, **kwargs):
         data = data or {}
-        list_id = data.get("list")
+        list_id = self._clean_list(data.get("list"))
         before = len(self._items)
         self._items = [
             it for it in self._items
             if not (it.get("status") == "completed"
-                    and (list_id is None or it.get("list", DEFAULT_LIST) == list_id))
+                    and it.get("list", DEFAULT_LIST) == list_id)
         ]
         removed = before - len(self._items)
         if removed == 0:
@@ -488,7 +638,9 @@ class EinkaufslisteBackend(hass.Hass):
 
     def _on_clear_all(self, event_name, data, **kwargs):
         data = data or {}
-        list_id = data.get("list")
+        # Default to the caller's own list. An omitted "list" used to wipe
+        # every list in the store.
+        list_id = self._clean_list(data.get("list"))
         before = len(self._items)
         if list_id is None:
             self._items = []
@@ -505,15 +657,21 @@ class EinkaufslisteBackend(hass.Hass):
     def _on_reload_catalog(self, event_name, data, **kwargs):
         data = data or {}
         self._load_catalog()
-        # re-categorize existing items so they pick up catalog changes
+        # Re-categorize existing items so they pick up catalog changes. Items
+        # whose category or icon was explicitly set by a user are pinned and
+        # must survive a reload.
+        recategorized = 0
         for it in self._items:
+            if it.get("category_pinned") or it.get("icon_pinned"):
+                continue
             cat_name, icon, _ = self._categorize(it.get("summary", ""))
             it["category"] = cat_name
             it["icon"] = icon
+            recategorized += 1
         self._save_list()
         self._publish()
         self.log("catalog reloaded (%s), re-categorized %d items"
-                 % (self._catalog_version, len(self._items)))
+                 % (self._catalog_version, recategorized))
 
     def _on_command_input(self, entity, attribute, old, new, **kwargs):
         """Handle commands written into input_text.einkaufsliste_command.
@@ -533,8 +691,20 @@ class EinkaufslisteBackend(hass.Hass):
             self._clear_command_input()
             return
 
-        event_type = data.get("event")
-        payload = data.get("data", {})
+        # json.loads accepts any JSON value, but only an object carries an
+        # "event" key. Anything else must not reach the handlers.
+        if not isinstance(data, dict):
+            self.log("command input: payload is %s, not an object"
+                     % type(data).__name__, level="WARNING")
+            self._clear_command_input()
+            return
+
+        # Two wire formats are accepted:
+        #   compact:  {"e": "add", "d": {"s": "Milch"}}
+        #   verbose:  {"event": "einkaufsliste_add", "data": {"summary": "Milch"}}
+        # The compact form exists because Home Assistant caps input_text at 255
+        # characters and silently discards longer values.
+        event_type, payload = self._parse_command(data)
         if event_type == "einkaufsliste_add":
             self._on_add(event_type, payload)
         elif event_type == "einkaufsliste_remove":
@@ -554,9 +724,46 @@ class EinkaufslisteBackend(hass.Hass):
 
         self._clear_command_input()
 
+    @staticmethod
+    def _parse_command(data):
+        """Normalize a command envelope to (event_type, payload).
+
+        Supports the compact form the card uses to stay within the 255-char
+        input_text limit, and the verbose form for hand-written events.
+        """
+        compact_fields = {
+            "s": "summary",
+            "q": "quantity",
+            "l": "list",
+            "u": "uid",
+            "st": "status",
+            "c": "category",
+            "i": "icon",
+        }
+        if "e" in data and "event" not in data:
+            event_type = "einkaufsliste_%s" % str(data.get("e") or "")
+            raw = data.get("d")
+            if not isinstance(raw, dict):
+                raw = {}
+            payload = {compact_fields.get(k, k): v for k, v in raw.items()}
+            return event_type, payload
+        event_type = data.get("event")
+        payload = data.get("data")
+        if not isinstance(payload, dict):
+            payload = {}
+        return event_type, payload
+
     def _clear_command_input(self):
+        """Clear the command channel.
+
+        The service must be used, not set_state: the input_text entity keeps
+        its authoritative value internally, and set_state only overwrites the
+        state machine entry. The stale value would be restored on the next
+        HA restart and would swallow an identically-shaped command.
+        """
         try:
-            self.set_state(COMMAND_INPUT, state="")
+            self.call_service("input_text", "set_value",
+                              entity_id=COMMAND_INPUT, value="")
         except Exception as e:
             self.log("failed to clear command input: %s" % e, level="WARNING")
 

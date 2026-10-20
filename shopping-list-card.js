@@ -1,4 +1,4 @@
-// Shopping List Card v2.5.5 — AppDaemon backend edition (local SVG icons).
+// Shopping List Card v2.5.6 — AppDaemon backend edition (local SVG icons).
 //
 // Source of truth is not a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
@@ -6,6 +6,21 @@
 // reads the full list from the sensor's `items` attribute. Auto-categorization,
 // auto-dedup and uid-stable removal all happen server-side; the card only
 // renders and emits intents.
+//
+// v2.5.6: security and correctness fixes from a full code review.
+//   - SVG icons are parsed with DOMParser and stripped of script/handlers
+//     (the previous innerHTML path let a crafted SVG run onerror).
+//   - Backend-supplied icons are only accepted as bare filenames, never URLs.
+//   - Commands are compacted ("e":{"e":"add","d":{"s":"Milch"}}) so they fit
+//     into the 255-character input_text limit; long article names are no
+//     longer silently dropped by Home Assistant.
+//   - Fixed the category-collapse toggle (chevron was block scoped and threw
+//     "chevron is not defined" on every click).
+//   - Fixed the search filter losing its tile index after a fast-path render.
+//   - The category is part of the fingerprint, so a catalog reload regroups
+//     the list instead of keeping the stale grouping.
+//   - quantity 0 is no longer rewritten to 1; the edit dialog is removed from
+//     the DOM with the card; the stylesheet is scoped to the host element.
 //
 // Config:
 //   type:     custom:shopping-list-card
@@ -218,6 +233,13 @@ class ShoppingListCard extends HTMLElement {
   constructor() {
     super();
     this._unsub = null;
+    this._unsubEvents = null;
+    // Set while the card is detached; a pending subscription promise checks it
+    // so it can unsubscribe instead of leaking.
+    this._disposed = false;
+    // The edit modal lives in document.body and is tracked here so
+    // disconnectedCallback can remove it.
+    this._modalOverlay = null;
     this._autocompleteItems = null;
     this._iconMap = null;
     this._catMap = null;
@@ -491,7 +513,10 @@ class ShoppingListCard extends HTMLElement {
   _fingerprintOf(items) {
     let fp = 0;
     for (const i of items) {
-      fp = (fp * 31 + this._hashString(i.uid + "|" + i.status + "|" + i.summary + "|" + (i.quantity || 1) + "|" + (i.icon || ""))) >>> 0;
+      // The category is part of the fingerprint: a catalog reload can move an
+      // item to a different category without touching any other field, and
+      // the render pipeline would not notice the regrouping.
+      fp = (fp * 31 + this._hashString(i.uid + "|" + i.status + "|" + i.summary + "|" + (i.quantity ?? 1) + "|" + (i.icon || "") + "|" + (i.category || ""))) >>> 0;
     }
     return fp;
   }
@@ -531,9 +556,11 @@ class ShoppingListCard extends HTMLElement {
     // 1. explicit config override
     const cfg = this.config?.icon_map || {};
     if (cfg[summary] || cfg[lower]) return cfg[summary] || cfg[lower];
-    // 2. backend icon field (treat as filename if it looks like one)
+    // 2. backend icon field (bare filename only — never a URL or path)
     const backendIcon = item?.icon;
-    if (backendIcon && /\.(svg|png|jpg|jpeg)$/i.test(String(backendIcon))) return String(backendIcon);
+    if (backendIcon && typeof backendIcon === "string" && /^[\w.-]+\.(svg|png|jpg|jpeg)$/i.test(backendIcon)) {
+      return backendIcon;
+    }
     // 3. mapping.json
     if (this._itemIconMapping[summary]) return this._itemIconMapping[summary];
     if (this._itemIconMapping[lower]) return this._itemIconMapping[lower];
@@ -550,16 +577,28 @@ class ShoppingListCard extends HTMLElement {
   // The prototype is cached per URL in _svgDomCache; applications clone it via
   // cloneNode(true), which is dramatically cheaper than re-running innerHTML
   // (HTML parser + full DOM build) for every tile on every render.
+  //
+  // The SVG source is fetched from a URL the backend controls, but the card
+  // must not trust it: innerHTML happily parses live event-handler attributes
+  // (<image onerror=...>), and cloning the result into the live DOM would run
+  // them. The content is therefore parsed as image/svg+xml and stripped of
+  // everything executable before it is cached.
   _parseSvgElement(text) {
     if (!text) return null;
     // Flaticon SVGs often start with <?xml + generator comments; strip
-    // everything before the first <svg so innerHTML parses cleanly.
+    // everything before the first <svg so the parser sees a clean document.
     const idx = text.toLowerCase().indexOf("<svg");
     if (idx < 0) return null;
-    const tmp = document.createElement("div");
-    tmp.innerHTML = text.slice(idx);
-    const svg = tmp.querySelector("svg");
+    let svg = null;
+    try {
+      const doc = new DOMParser().parseFromString(text.slice(idx), "image/svg+xml");
+      const root = doc.documentElement;
+      if (root && root.nodeName.toLowerCase() === "svg") svg = root;
+    } catch (e) {
+      return null;
+    }
     if (!svg) return null;
+    this._sanitizeSvg(svg);
     // Force a uniform rendered size regardless of the SVG's own width/height
     // attributes or internal styles. The wrapper guarantees the footprint,
     // the SVG fills it with preserved aspect ratio.
@@ -569,6 +608,32 @@ class ShoppingListCard extends HTMLElement {
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.style.flexShrink = "0";
     return svg;
+  }
+
+  // Remove everything executable from a parsed SVG. Scripting inside an SVG
+  // (script elements, event handlers, javascript: URLs, external references)
+  // must never reach the live DOM.
+  _sanitizeSvg(svg) {
+    const blocked = svg.querySelectorAll("script, foreignObject, iframe, object, embed, use, animate, set, handler");
+    for (const node of blocked) node.remove();
+    const all = svg.querySelectorAll("*");
+    for (const node of all) {
+      for (const attr of Array.from(node.attributes || [])) {
+        const name = (attr.name || "").toLowerCase();
+        const value = attr.value || "";
+        if (name.startsWith("on")) {
+          node.removeAttribute(attr.name);
+        } else if (/^\s*javascript:/i.test(value)) {
+          node.removeAttribute(attr.name);
+        } else if (name === "href" || name === "xlink:href") {
+          // Only same-document references are safe; a remote href can load an
+          // arbitrary document and an svg: one can carry script.
+          if (!/^#/.test(value.trim())) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      }
+    }
   }
 
   // Clone a (possibly null) prototype into a sized wrapper inside container.
@@ -908,7 +973,10 @@ class ShoppingListCard extends HTMLElement {
   _updateCatVisibility(catWrap, visible) {
     const header = catWrap.querySelector(".sl-header");
     const grid = catWrap.querySelector(".sl-grid");
-    if (header) header.style.display = visible > 0 ? "" : "none";
+    // "flex" instead of "": clearing the inline display falls back to the
+    // stylesheet, which has no rule for .sl-header, so the header's flex
+    // layout (icon/label/count/chevron) collapsed to block layout.
+    if (header) header.style.display = visible > 0 ? "flex" : "none";
     if (grid) {
       if (visible > 0) {
         grid.style.display = grid.dataset.collapsed === "true" ? "none" : "grid";
@@ -919,7 +987,10 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _filterVisible(listWrap, query) {
-    const q = query?.toLowerCase() || "";
+    // Transliterate both sides: a user typing "kaese" must find "Käse", and
+    // "muh" must find "Milch". The auto-categorization already normalizes
+    // umlauts, so the search has to do the same to stay consistent.
+    const q = this._translit(String(query || "").trim());
     let lastCat = null;
     let visibleInCat = 0;
     for (const entry of this._tileIndex || []) {
@@ -928,7 +999,7 @@ class ShoppingListCard extends HTMLElement {
         lastCat = entry.cat;
         visibleInCat = 0;
       }
-      const match = !q || entry.summary.includes(q);
+      const match = !q || this._translit(entry.summary).includes(q);
       entry.tile.style.display = match ? "flex" : "none";
       if (match) visibleInCat++;
     }
@@ -962,7 +1033,12 @@ class ShoppingListCard extends HTMLElement {
     let iconValue = override;
     if (!iconValue) {
       const backendIcon = item?.icon;
-      if (/\.(svg|png|jpg|jpeg)$/i.test(String(backendIcon))) iconValue = backendIcon;
+      // The backend icon is an OpenMoji codepoint or a plain filename, never
+      // a URL. A user-supplied URL would make the card fetch and inline an
+      // attacker-controlled document, so only bare filenames are accepted.
+      if (backendIcon && typeof backendIcon === "string" && /^[\w.-]+\.(svg|png|jpg|jpeg)$/i.test(backendIcon)) {
+        iconValue = backendIcon;
+      }
     }
     if (!iconValue) iconValue = this._resolveItemIconFile(item);
     if (!iconValue || !/\.(svg|png|jpg|jpeg)$/i.test(String(iconValue))) iconValue = "sonstiges.svg";
@@ -1227,13 +1303,18 @@ class ShoppingListCard extends HTMLElement {
   // JSON payload into input_text.einkaufsliste_command via the regular
   // input_text/set_value service, which AppDaemon listens to with listen_state.
   // The backend clears the input after executing the command.
+  //
+  // Home Assistant caps input_text at 255 characters and silently discards
+  // anything longer (it only logs "Invalid value"). The envelope costs ~90
+  // characters, so the payload is compacted: short field names and omitted
+  // default values keep a long article name within the limit.
   _fireEvent(eventType, data) {
     if (!this._hass) {
       console.warn("Shopping List Card: no HA connection, cannot send", eventType);
       this._showToast("Fehler: keine HA-Verbindung");
       return;
     }
-    const payload = JSON.stringify({ event: eventType, data: data || {} });
+    const payload = this._compactPayload(eventType, data);
     const call = (fn) => {
       try {
         fn();
@@ -1269,6 +1350,54 @@ class ShoppingListCard extends HTMLElement {
     this._showToast("Fehler: keine HA-Verbindung");
   }
 
+  // Compact command payload that fits into the 255-character input_text limit.
+  // Field names are shortened and default values are omitted; the backend
+  // expands them again. The event type itself is shortened to its suffix
+  // ("einkaufsliste_" + suffix).
+  _compactPayload(eventType, data) {
+    const FIELD_MAP = {
+      summary: "s",
+      quantity: "q",
+      list: "l",
+      uid: "u",
+      status: "st",
+      category: "c",
+      icon: "i",
+    };
+    const short = {};
+    for (const [key, value] of Object.entries(data || {})) {
+      const name = FIELD_MAP[key] || key;
+      // Omit values the backend treats as the default.
+      if (value === undefined || value === null) continue;
+      if (key === "quantity" && value === 1) continue;
+      if (key === "list" && value === "standard") continue;
+      short[name] = value;
+    }
+    const suffix = String(eventType || "").replace(/^einkaufsliste_/, "");
+    let payload = JSON.stringify({ e: suffix, d: short });
+    if (payload.length <= 255) return payload;
+    // Still too long: the article name itself is over the limit. Trim it to
+    // whatever fits and tell the user, instead of letting HA silently drop
+    // the whole command.
+    const limit = 255;
+    const summary = String((data && data.summary) || "");
+    if (summary) {
+      const overhead = payload.length - summary.length;
+      const room = Math.max(0, limit - overhead - 12);
+      if (summary.length > room) {
+        console.warn("Shopping List Card: article name too long, truncating to", room, "chars");
+        this._showToast("Artikelname zu lang — gekürzt auf " + room + " Zeichen");
+        short.s = summary.slice(0, room);
+        payload = JSON.stringify({ e: suffix, d: short });
+      }
+    }
+    if (payload.length > limit) {
+      console.warn("Shopping List Card: payload exceeds input_text limit", payload.length);
+      this._showToast("Fehler: Befehl zu lang für den Übertragungskanal");
+    }
+    return payload;
+  }
+
   _addItem(text) {
     const val = String(text || "").trim();
     if (!val || !this._hass) return;
@@ -1296,7 +1425,7 @@ class ShoppingListCard extends HTMLElement {
 
   _updateQuantity(item, delta) {
     if (!this._hass || !item) return;
-    const q = Math.max(0, (item.quantity || 1) + delta);
+    const q = Math.max(0, (item.quantity ?? 1) + delta);
     this._fireEvent("einkaufsliste_update", { uid: item.uid, quantity: q });
     this._haptic(40);
   }
@@ -1313,7 +1442,13 @@ class ShoppingListCard extends HTMLElement {
     this._hass.connection.subscribeMessage(
       () => { this._fetchAndRender(); },
       { type: "subscribe_entities", entity_ids: entities }
-    ).then(unsub => { this._unsub = unsub; }).catch(() => { this._unsub = null; });
+    ).then(unsub => {
+      // The card may have been removed while the promise was pending. In that
+      // case the unsubscribe function would be assigned to a dead card and
+      // never called, leaking the WebSocket subscription.
+      if (this._disposed) { unsub(); return; }
+      this._unsub = unsub;
+    }).catch(() => { this._unsub = null; });
     // Secondary: state_changed fires reliably for EVERY set_state, including
     // attribute-only changes. Filtered to our entity. The fingerprint check in
     // _render() collapses duplicate renders when both subscriptions fire.
@@ -1323,13 +1458,22 @@ class ShoppingListCard extends HTMLElement {
   }
 
   connectedCallback() {
+    this._disposed = false;
     if (this._hass) this._subscribeChanges();
   }
   disconnectedCallback() {
+    this._disposed = true;
     if (this._renderRaf != null) {
       cancelAnimationFrame(this._renderRaf);
       this._renderRaf = null;
       this._renderPending = false;
+    }
+    // The edit modal is appended to document.body, not to the card. Left
+    // behind it covers the whole viewport with an opaque overlay and blocks
+    // the entire dashboard.
+    if (this._modalOverlay) {
+      this._modalOverlay.remove();
+      this._modalOverlay = null;
     }
     if (this._unsub) {
       Promise.resolve(this._unsub).then(fn => fn());
@@ -1359,6 +1503,12 @@ class ShoppingListCard extends HTMLElement {
       clearTimeout(this._fullRenderTimer);
       this._fullRenderTimer = null;
     }
+    // The pending SVG-cache write is a multi-MB JSON.stringify on the main
+    // thread; a detached card must not perform it.
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
     this._cancelPress();
     this._touchTile = null;
     this._touchAt = 0;
@@ -1377,7 +1527,7 @@ class ShoppingListCard extends HTMLElement {
     for (const tile of tiles) {
       const item = itemMap.get(tile.dataset.uid);
       if (!item) { tile.remove(); continue; } // stale tile (item deleted in backend)
-      const qty = String(item.quantity || 1);
+      const qty = String(item.quantity ?? 1);
       // v2.5.5: summary/label are the one tile property _applyTileState does not
       // manage (only _renderTile sets them), so sync them here if a tile ever
       // drifts. The upstream fingerprint check hashes summary, so this is
@@ -1412,14 +1562,16 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _pruneStaleModal() {
-    const modal = document.querySelector(".shopping-list-modal");
-    if (!modal) return;
+    // Only this card's own modal: a document-wide lookup would remove another
+    // card instance's dialog because that instance's uid is not in this list.
+    const modal = this._modalOverlay;
+    if (!modal || !modal.isConnected) return;
     const uid = modal.dataset.itemUid;
     if (!uid) return;
     const cur = this._items.find(i => i.uid === uid);
-    if (!cur) { modal.remove(); return; }
+    if (!cur) { modal.remove(); this._modalOverlay = null; return; }
     const qtyEl = modal.querySelector(".sl-modal-qty");
-    if (qtyEl) qtyEl.textContent = String(cur.quantity || 1);
+    if (qtyEl) qtyEl.textContent = String(cur.quantity ?? 1);
   }
 
   // Static MDI chrome icon as inline SVG (falls back to <ha-icon> for
@@ -1550,6 +1702,11 @@ class ShoppingListCard extends HTMLElement {
     const catColor = this._getCategoryColor(cat);
     const showCatLabels = this.config?.show_category_labels !== false;
     const useBanner = this.config?.category_banner_mode === true;
+    // The chevron is declared before the branch because the collapse toggle
+    // below references it. Declaring it inside the branch made it block
+    // scoped, so every header click threw "chevron is not defined".
+    const chevron = this._mdiEl("chevron-down", 18, "");
+    chevron.classList.add("sl-chevron");
     if (useBanner) {
       // Banner-style category header: animated background image + dark overlay,
       // ensuring count/chevron remain readable. Fixed aspect-ratio via CSS class
@@ -1587,8 +1744,7 @@ class ShoppingListCard extends HTMLElement {
       count.style.cssText = contentStyle + "font-size:12px;color:#fff;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,0.5);";
       count.textContent = catItems.length;
       header.appendChild(count);
-      const chevron = this._mdiEl("chevron-down", 18, contentStyle + "color:#fff;width:18px;height:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));");
-      chevron.classList.add("sl-chevron");
+      chevron.style.cssText = contentStyle + "color:#fff;width:18px;height:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));";
       header.appendChild(chevron);
       catWrap.appendChild(header);
     } else {
@@ -1618,8 +1774,7 @@ class ShoppingListCard extends HTMLElement {
       count.style.cssText = "font-size:12px;color:var(--sl-text-muted);font-weight:400;";
       count.textContent = catItems.length;
       header.appendChild(count);
-      const chevron = this._mdiEl("chevron-down", 18, "color:var(--sl-text-muted);width:18px;height:18px;");
-      chevron.classList.add("sl-chevron");
+      chevron.style.cssText = "color:var(--sl-text-muted);width:18px;height:18px;";
       header.appendChild(chevron);
       catWrap.appendChild(header);
     }
@@ -1994,6 +2149,11 @@ class ShoppingListCard extends HTMLElement {
       }
       if (!sectionChanged) {
         this._lightUpdate();
+        // _lightUpdate does not repopulate _tileIndex, and _filterVisible
+        // (the search filter) iterates exactly that index. Without rebuilding
+        // it here, the index stays empty and every later search matches
+        // nothing.
+        this._rebuildTileIndex(existingCard);
         this._pruneStaleModal();
         return;
       }
@@ -2023,7 +2183,11 @@ class ShoppingListCard extends HTMLElement {
     card.style.setProperty("--sl-accent", this._color);
     card.style.setProperty("--sl-accent-soft", this._color + "60");
     const style = document.createElement("style");
-    style.textContent = `
+    // The card has no shadow root, so the stylesheet's rules are global to the
+    // whole document. Every selector is therefore prefixed with the host
+    // element, so a .sl-grid/.sl-tile/.sl-badge in another custom card is not
+    // restyled by this card.
+    style.textContent = this._scopeCss(`
       .sl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px;padding:12px;}
       @media (max-width:400px){.sl-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;padding:8px;}}
       @media (max-width:320px){.sl-grid{grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;}}
@@ -2061,7 +2225,7 @@ class ShoppingListCard extends HTMLElement {
       .sl-more-btn{display:flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;background:var(--sl-bg-input);border:1px dashed var(--sl-border);cursor:pointer;transition:all 0.15s;}
       .sl-more-btn:hover{background:var(--sl-hover);border-color:var(--sl-accent);}
       .sl-mirror-wrap{content-visibility:auto;contain-intrinsic-size:auto 600px;}
-    `;
+    `);
     card.appendChild(style);
 
     if (this._legacyWarning) {
@@ -2129,11 +2293,58 @@ class ShoppingListCard extends HTMLElement {
     this._scheduleWarmup();
   }
 
+  // Prefix every class selector in a stylesheet with the host element, so the
+  // rules cannot leak into other cards on the dashboard. At-rules (@media,
+  // @keyframes) are passed through, and @keyframes inner selectors are left
+  // alone — they name animation steps, not elements.
+  _scopeCss(css) {
+    const HOST = "shopping-list-card";
+    let out = "";
+    let i = 0;
+    const len = css.length;
+    while (i < len) {
+      // Find the next selector prelude: everything up to the next '{'.
+      const open = css.indexOf("{", i);
+      if (open === -1) { out += css.slice(i); break; }
+      const prelude = css.slice(i, open);
+      // Find the matching close brace for this block.
+      let depth = 1;
+      let j = open + 1;
+      while (j < len && depth > 0) {
+        if (css[j] === "{") depth++;
+        else if (css[j] === "}") depth--;
+        j++;
+      }
+      const body = css.slice(open + 1, j - 1);
+      const trimmed = prelude.trim();
+      if (trimmed.startsWith("@keyframes") || trimmed.startsWith("@font-face")) {
+        // Keyframe steps name animation phases, not elements — keep as is.
+        out += prelude + "{" + body + "}";
+      } else if (trimmed.startsWith("@")) {
+        // @media / @supports: scope the selectors inside the block.
+        out += prelude + "{" + this._scopeCss(body) + "}";
+      } else if (trimmed.includes(":") && !trimmed.includes(".")) {
+        // A declaration block, not a selector.
+        out += prelude + "{" + body + "}";
+      } else {
+        const scoped = trimmed
+          .split(",")
+          .map(sel => sel.trim())
+          .filter(Boolean)
+          .map(sel => sel.replace(/(^|[\s>+~])(\.[\w-]+)/, (m2, sep, cls) => sep + HOST + " " + cls))
+          .join(", ");
+        out += " " + scoped + "{" + body + "}";
+      }
+      i = j;
+    }
+    return out;
+  }
+
   // v2.5.2: accessible name for a real tile. The quantity is invisible to a
   // screen reader otherwise, because role="checkbox" takes its name from
   // aria-label and ignores the badge's "Nx" text.
   _tileAriaLabel(item) {
-    const q = item.quantity || 1;
+    const q = item.quantity ?? 1;
     return q > 1 ? `${item.summary}, ${q} Stück` : item.summary;
   }
 
@@ -2144,7 +2355,7 @@ class ShoppingListCard extends HTMLElement {
   // applied twice for exactly that reason.)
   _applyTileState(tile, item) {
     tile.dataset.status = item.status;
-    tile.dataset.qty = String(item.quantity || 1);
+    tile.dataset.qty = String(item.quantity ?? 1);
 
     // v2.5.2: the list is a checkbox list — each entry is one tab stop and the
     // checked state is exposed via aria-checked. Space/Enter toggle and F2 opens
@@ -2158,13 +2369,13 @@ class ShoppingListCard extends HTMLElement {
     // Quantity badge ("Nx") — created, updated or removed as needed. Colors and
     // placement come from the stylesheet (.sl-badge is position:absolute).
     let badge = tile.querySelector(".sl-badge");
-    if ((item.quantity || 1) > 1) {
+    if ((item.quantity ?? 1) > 1) {
       if (!badge) {
         badge = document.createElement("div");
         badge.className = "sl-badge";
         tile.appendChild(badge);
       }
-      badge.textContent = (item.quantity || 1) + "x";
+      badge.textContent = (item.quantity ?? 1) + "x";
     } else if (badge) {
       badge.remove();
     }
@@ -2419,7 +2630,7 @@ class ShoppingListCard extends HTMLElement {
     const changed = cur.filter(i => {
       const p = prevByUid.get(i.uid);
       return p && (p.status !== i.status || p.summary !== i.summary ||
-        String(p.quantity || 1) !== String(i.quantity || 1) ||
+        String(p.quantity ?? 1) !== String(i.quantity ?? 1) ||
         (p.icon || "") !== (i.icon || ""));
     });
     if (!added.length && !removed.length && !changed.length) {
@@ -2570,9 +2781,17 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _showEditModal(item, triggerEl) {
-    const existing = document.querySelector(".shopping-list-modal");
-    existing && existing.remove();
-    const close = () => { overlay.remove(); this._longPressTile = null; triggerEl && triggerEl.focus(); };
+    // Scope the lookup to this card: a document-wide query would let one card
+    // instance close another instance's dialog.
+    const existing = this._modalOverlay;
+    if (existing) existing.remove();
+    const close = () => {
+      overlay.remove();
+      document.removeEventListener("keydown", onKeyDown, true);
+      this._modalOverlay = null;
+      this._longPressTile = null;
+      triggerEl && triggerEl.focus && triggerEl.focus();
+    };
     const overlay = document.createElement("div");
     overlay.className = "shopping-list-modal";
     overlay.setAttribute("role", "dialog");
@@ -2599,7 +2818,7 @@ class ShoppingListCard extends HTMLElement {
     const qtyValue = document.createElement("div");
     qtyValue.className = "sl-modal-qty";
     qtyValue.style.cssText = "font-size:22px;font-weight:700;color:var(--primary-color, #2e7d32);min-width:40px;text-align:center;";
-    qtyValue.textContent = String(item.quantity || 1);
+    qtyValue.textContent = String(item.quantity ?? 1);
     qtyRow.appendChild(qtyValue);
 
     const minusBtn = document.createElement("button");
@@ -2610,7 +2829,7 @@ class ShoppingListCard extends HTMLElement {
       const cur = this._items.find(i => i.uid === item.uid);
       if (!cur) { close(); return; }
       this._updateQuantity(cur, -1);
-      qtyValue.textContent = String(Math.max(0, (cur.quantity || 1) - 1));
+      qtyValue.textContent = String(Math.max(0, (cur.quantity ?? 1) - 1));
     });
     qtyRow.appendChild(minusBtn);
     box.appendChild(qtyRow);
@@ -2628,7 +2847,7 @@ class ShoppingListCard extends HTMLElement {
         const cur = this._items.find(i => i.uid === item.uid);
         if (!cur) { close(); return; }
         this._updateQuantity(cur, n);
-        qtyValue.textContent = String((cur.quantity || 1) + n);
+        qtyValue.textContent = String((cur.quantity ?? 1) + n);
       });
       quickWrap.appendChild(btn);
     }
@@ -2658,8 +2877,10 @@ class ShoppingListCard extends HTMLElement {
 
     overlay.appendChild(box);
     overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
-    overlay.addEventListener("keydown", e => {
-      if (e.key === "Escape") { close(); return; }
+    // The keydown listener lives on the document: the overlay itself is never
+    // focused, so an overlay-local listener would never receive Escape.
+    const onKeyDown = e => {
+      if (e.key === "Escape") { e.stopPropagation(); close(); return; }
       if (e.key === "Tab") {
         const focusable = box.querySelectorAll("button, [tabindex]:not([tabindex='-1'])");
         if (!focusable.length) return;
@@ -2668,15 +2889,23 @@ class ShoppingListCard extends HTMLElement {
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       }
-    });
+    };
+    document.addEventListener("keydown", onKeyDown, true);
     document.body.appendChild(overlay);
+    // Track the overlay on the instance so disconnectedCallback can remove it.
+    // Left in the DOM it would cover the whole viewport with an opaque
+    // overlay and block the entire dashboard.
+    this._modalOverlay = overlay;
+    // Move focus into the dialog so the Tab trap and Escape work as intended.
+    const firstBtn = box.querySelector("button");
+    if (firstBtn) firstBtn.focus();
   }
 
   static getConfigForm() {
     return {
       schema: [
         { name: "title", required: true, selector: { text: {} } },
-        { name: "entity", selector: { entity: { domain: "sensor" } } }
+        { name: "entity", required: true, selector: { entity: { domain: "sensor" } } }
       ]
     };
   }
@@ -2685,14 +2914,28 @@ class ShoppingListCard extends HTMLElement {
     return { title: "Einkaufen", entity: "sensor.einkaufsliste_backend" };
   }
 
-  getCardSize() { return 4; }
+  // The card grows with the list (1 item vs. a full backlog of ~150 tiles).
+  // A constant size makes the masonry/sections layout under-allocate rows.
+  getCardSize() {
+    const tiles = this.querySelectorAll(".sl-tile").length;
+    const rows = Math.ceil(tiles / 3);
+    return Math.max(1, Math.min(rows, 12));
+  }
 }
 
-customElements.define("shopping-list-card", ShoppingListCard);
+// Guarded registration: a duplicated resource (a stale /local/ copy next to
+// the HACS one, or a double <script> tag) would throw NotSupportedError and
+// abort the rest of the file — including the customCards registration below,
+// which would make the card disappear from the card picker.
+if (!customElements.get("shopping-list-card")) {
+  customElements.define("shopping-list-card", ShoppingListCard);
+}
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "shopping-list-card",
-  name: "Shopping List",
-  description: "Einkaufsliste mit AppDaemon-Backend (auto-Kategorisierung, auto-Dedup)",
-  preview: true
-});
+if (!window.customCards.some(c => c.type === "shopping-list-card")) {
+  window.customCards.push({
+    type: "shopping-list-card",
+    name: "Shopping List",
+    description: "Einkaufsliste mit AppDaemon-Backend (auto-Kategorisierung, auto-Dedup)",
+    preview: true
+  });
+}
