@@ -760,9 +760,13 @@ class EinkaufslisteBackend(hass.Hass):
         its authoritative value internally, and set_state only overwrites the
         state machine entry. The stale value would be restored on the next
         HA restart and would swallow an identically-shaped command.
+
+        AppDaemon expects the service as a single "<domain>/<service>" string;
+        passing domain and service as two positional arguments raises
+        "not enough values to unpack".
         """
         try:
-            self.call_service("input_text", "set_value",
+            self.call_service("input_text/set_value",
                               entity_id=COMMAND_INPUT, value="")
         except Exception as e:
             self.log("failed to clear command input: %s" % e, level="WARNING")
