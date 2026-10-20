@@ -1,29 +1,48 @@
-// Shopping List Card v2.5.0 — AppDaemon backend edition (local SVG icons).
-// v2.5.0: Offline-Fähigkeit — Snapshot-Persistenz (localStorage), optimistische
-// Updates und persistente Sync-Queue: Befehle, die bei schlechtem Netz nicht
-// zustande kommen, werden lokal zwischengespeichert und bei Reconnect
-// nacheinander über den input_text-Kanal nachgesendet.
-// v2.4.1: einheitliche Kachel-Beschriftung — derselbe dunkle Label-Verlauf auf
-// allen Kacheln (vorher schwächerer Verlauf auf completed-Kacheln).
+// Shopping List Card v2.5.6 — AppDaemon backend edition (local SVG icons).
 //
-// Source of truth is no longer a native HA `todo.*` entity but the AppDaemon
+// Source of truth is not a native HA `todo.*` entity but the AppDaemon
 // middleware backend that publishes `sensor.einkaufsliste_backend`. The card
-// fires `einkaufsliste_*` HA events via the WebSocket `fire_event` command and reads the
-// full list from the sensor's `items` attribute. Auto-categorization,
+// fires `einkaufsliste_*` HA events via the WebSocket `fire_event` command and
+// reads the full list from the sensor's `items` attribute. Auto-categorization,
 // auto-dedup and uid-stable removal all happen server-side; the card only
 // renders and emits intents.
 //
-// Config: { type: "custom:shopping-list-card", entity: "sensor.einkaufsliste_backend" }
-// Legacy `todo.*` entities and the old `lists:` array are detected and render
-// a migration warning instead of silently breaking.
+// v2.5.6: security and correctness fixes from a full code review.
+//   - SVG icons are parsed with DOMParser and stripped of script/handlers
+//     (the previous innerHTML path let a crafted SVG run onerror).
+//   - Backend-supplied icons are only accepted as bare filenames, never URLs.
+//   - Commands are compacted ("e":{"e":"add","d":{"s":"Milch"}}) so they fit
+//     into the 255-character input_text limit; long article names are no
+//     longer silently dropped by Home Assistant.
+//   - Fixed the category-collapse toggle (chevron was block scoped and threw
+//     "chevron is not defined" on every click).
+//   - Fixed the search filter losing its tile index after a fast-path render.
+//   - The category is part of the fingerprint, so a catalog reload regroups
+//     the list instead of keeping the stale grouping.
+//   - quantity 0 is no longer rewritten to 1; the edit dialog is removed from
+//     the DOM with the card; the stylesheet is scoped to the host element.
 //
-// v2.4.0 — performance edition: surgical section-level DOM updates instead of
-// full rebuilds, card-level event delegation (11 listeners/tile → ~10 per
-// card), CSS-class tiles (no inline cssText / JS hover), parsed-SVG prototype
-// cache (cloneNode instead of innerHTML reparse), content-visibility for
-// offscreen sections, 150ms trailing debounce for full rebuilds, Cache Storage
-// API for the persistent SVG store (localStorage fallback), and inline MDI
-// SVG paths instead of <ha-icon> for static UI icons.
+// Config:
+//   type:     custom:shopping-list-card
+//   entity:   sensor.einkaufsliste_backend   (required)
+//   title:    "Einkaufen"
+//   list:     "standard"
+//   color:    "#43A047"
+//   icon_map: {}                             per-article icon overrides
+//   mirror:   true                           false = no "Verfügbar" backlog section
+// Legacy `todo.*` entities and the removed `lists:` array are detected and
+// render a migration warning instead of silently breaking.
+//
+// Architecture: surgical section-level DOM updates instead of full rebuilds,
+// card-level event delegation (10 listeners per card, not per tile), tiles whose
+// whole visual state lives in data attributes (no inline cssText, no JS hover),
+// a parsed-SVG prototype cache (cloneNode instead of an innerHTML reparse),
+// content-visibility for offscreen sections, a 150ms trailing debounce for full
+// rebuilds, Cache Storage for the persistent SVG store (localStorage fallback),
+// and inline MDI paths instead of <ha-icon> for static UI icons. The shared
+// autocomplete/icon/category tables live at module scope.
+//
+// Version history lives in git and in the GitHub releases, not here.
 
 // Inline MDI path data (from @mdi/svg 7.4.47) so the card doesn't spin up a
 // <ha-icon> custom element (icon-set lookup + lit template) for each static
@@ -48,10 +67,179 @@ function mdiSvgString(name, size) {
     '" height="' + size + '" style="fill:currentColor;display:block;"><path d="' + d + '"/></svg>';
 }
 
+// ---------------------------------------------------------------------------
+// Shared data tables. Pure, instance-independent literals, hoisted to module
+// scope so they are built once instead of per card instance.
+// ---------------------------------------------------------------------------
+const AUTOCOMPLETE_ITEMS = [...new Set([
+  "Apfel","Bananen","Birne","Kiwi","Orange","Weintrauben","Kirschen","Erdbeeren","Himbeeren",
+  "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
+  "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln","Knoblauch",
+  "Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants","Milch",
+  "Joghurt","Sahne","Butter","Käse","Schafskäse","Ofenkäse","Quark","Frischkäse","Mozzarella","Eier",
+  "Hähnchen","Hackfleisch","Schnitzel","Schinken","Aufschnitt","Rindersteak","Putensteak","Schweinesteak","Fisch","Lachs","Garnelen","Tofu",
+  "Bratwürstchen","Nudeln","Spaghetti","Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig",
+  "Ketchup","Mayonnaise","Senf","Honig","Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser",
+  "Saft","Cola","Bier","Weißwein","Rotwein","Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo",
+  "Duschgel","Seife","Zahnpasta","Waschmittel","Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse",
+  "Mandeln","TK-Gemüse","Müllbeutel","Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel",
+  "Heidelbeeren","Johannisbeeren","Nektarine","Pampelmuse","Preiselbeeren","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat","Dill",
+  "Kürbis","Lauch","Mais","Mangold","Pak Choi","Pastinake","Peperoni","Petersilie","Buttermilch","Griechischer Joghurt",
+  "Kefir","Ricotta","Hähnchenbrust","Hähnchenkeule","Lamm","Linsen","Sekt","Gemüsepfanne","Kuchen","Ravioli",
+  "Tortellini","Waffeln","Wraps","Abwaschbürste","Alufolie","Deo","Frischhaltefolie","Küchentücher","Lebkuchen","Kaviar",
+  "Biobeutel"
+])];
+const ICON_MAP = {
+  // Local SVG filename overrides — the only entries _resolveItemIconFile's
+  // step 4 consumes (it filters values for .svg/.png/.jpg/.jpeg). The legacy
+  // per-item OpenMoji hex map (~380 entries) was dead code: no path ever read
+  // a hex value back out of this table (category icons use _getCategoryIcon's
+  // own hex map instead), so it was removed.
+  wurst:"bratwurst.svg", bratwürstchen:"bratwurst.svg",
+  steak:"steak.svg", steaks:"steak.svg", rindersteak:"steak.svg", rindersteaks:"steak.svg", beefsteak:"steak.svg",
+  putensteak:"putensteak.svg", putensteaks:"putensteak.svg",
+  schweinesteak:"schweinesteak.svg", schweinesteaks:"schweinesteak.svg", schweinskotelett:"schweinesteak.svg",
+  küchenrolle:"papierhandtuch.svg", kuechenrolle:"papierhandtuch.svg",
+};
+const CAT_MAP = [
+  { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","traube","trauben","weintrauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","dill","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder","orangenschalen","salbei","zitronenmelisse","trockenobst"]) },
+  { key: "brot_backwaren", keys: new Set(["brot","brötchen","toast","semmel","baguette","kräuterbaguette","kräuterbaguettes","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","wraps"]) },
+  { key: "milch_eier", keys: new Set(["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta","schafskäse","ofenkäse"]) },
+  { key: "fleisch_fisch", keys: new Set(["fleisch","steak","steaks","rindersteak","rindersteaks","beefsteak","putensteak","putensteaks","schweinesteak","schweinesteaks","schweinskotelett","hähnchen","pute","ente","schinken","speck","wurst","bratwürstchen","aufschnitt","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"]) },
+  { key: "trockenwaren", keys: new Set(["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","olivenöl","sonnenblumenöl","speiseöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","soßenbinder","vanillezucker","worcestersauce","schokolade","keks","chips","nüsse","mandeln","bonbons","bubblegum","gummibärchen","kaugummi","knuspermüsli","lebkuchen","lutscher","marshmallow","nougat","pralinen","salzstangen","studentenfutter","pfefferkörner"]) },
+  { key: "tiefkuehlprodukte", keys: new Set(["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem","gemüsepfanne","knödel","nuggets","paniertes","piroggen","ravioli","reibekuchen","schaschlik","tortellini","tk-gemüse","waffeln"]) },
+  { key: "getraenke", keys: new Set(["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"]) },
+  { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","müllbeutel","mundspülung","nasenspray","papiertüten","parfüm","pflaster","rasierklingen","rasierschaum","räucherstäbchen","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zündhölzer"]) }
+];
+const CATEGORY_NAME_TO_KEY = {
+  "Obst & Gemüse": "obst_gemuese",
+  "Brot & Backwaren": "brot_backwaren",
+  "Milchprodukte & Eier": "milch_eier",
+  "Fleisch & Fisch": "fleisch_fisch",
+  "Trockenwaren": "trockenwaren",
+  "Tiefkühlprodukte": "tiefkuehlprodukte",
+  "Getränke": "getraenke",
+  "Haushalt & Hygiene": "haushalt_hygiene",
+  "Sonstiges": "sonstiges"
+};
+// Animated inline SVG category icons. Embedded directly (not as <img> or
+// <ha-icon>) so the CSS animations actually run. Replace an individual SVG by
+// editing its string; the key names must stay stable.
+const CATEGORY_SVGS = {
+  obst_gemuese: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-swing { animation: sl-cat-swing 2.5s ease-in-out infinite; transform-origin: 12px 5px; }
+      @keyframes sl-cat-swing { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+    </style>
+    <g class="sl-cat-swing">
+      <path d="M12 6c-3 0-5.5 2-5.5 5.5S9 18 12 18s5.5-3 5.5-6.5S15 6 12 6z"/>
+      <path d="M12 6c0-1.5.5-3 1.5-4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+      <path d="M12 6c2-.5 3.5-.5 4.5.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+    </g>
+  </svg>`,
+  brot_backwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-rise { animation: sl-cat-rise 2s ease-in-out infinite; transform-origin: center bottom; }
+      @keyframes sl-cat-rise { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.08); } }
+    </style>
+    <g class="sl-cat-rise">
+      <path d="M5 9c0-3 3-5 7-5s7 2 7 5v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9z"/>
+      <path d="M8 9c0-1 1.5-2 4-2s4 1 4 2" stroke="rgba(255,255,255,0.4)" stroke-width="1" fill="none"/>
+    </g>
+  </svg>`,
+  milch_eier: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-tilt { animation: sl-cat-tilt 3s ease-in-out infinite; transform-origin: center bottom; }
+      @keyframes sl-cat-tilt { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+    </style>
+    <g class="sl-cat-tilt">
+      <path d="M7 5h10l2 4v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9l2-4z"/>
+      <circle cx="12" cy="17" r="2" fill="rgba(255,255,255,0.5)"/>
+    </g>
+  </svg>`,
+  fleisch_fisch: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-meat { animation: sl-cat-pulse 2s ease-in-out infinite; transform-origin: center; }
+      .sl-cat-steam { animation: sl-cat-steam 2s ease-in-out infinite; }
+      @keyframes sl-cat-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+      @keyframes sl-cat-steam { 0%,100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+    </style>
+    <g class="sl-cat-meat">
+      <path d="M7 11c0-3 2.5-6 6-6s6 3 6 6-2.5 6-6 6-6-3-6-6z"/>
+      <path d="M9 14l-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+    </g>
+    <path class="sl-cat-steam" d="M9 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none"/>
+    <path class="sl-cat-steam" d="M15 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none" style="animation-delay:0.5s"/>
+  </svg>`,
+  trockenwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-wiggle { animation: sl-cat-wiggle 2.2s ease-in-out infinite; transform-origin: center bottom; }
+      @keyframes sl-cat-wiggle { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+    </style>
+    <g class="sl-cat-wiggle">
+      <path d="M4 7h16l2 4v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z"/>
+      <path d="M4 7l2-3h12l2 3" stroke="currentColor" stroke-width="1.5" fill="none"/>
+    </g>
+  </svg>`,
+  tiefkuehlprodukte: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-flake { animation: sl-cat-spin 4s linear infinite; transform-origin: center; }
+      .sl-cat-dot { animation: sl-cat-fade 1.8s ease-in-out infinite; }
+      @keyframes sl-cat-spin { to { transform: rotate(360deg); } }
+      @keyframes sl-cat-fade { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+    </style>
+    <g class="sl-cat-flake">
+      <path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none"/>
+    </g>
+    <circle class="sl-cat-dot" cx="8" cy="8" r="1"/>
+    <circle class="sl-cat-dot" cx="16" cy="8" r="1" style="animation-delay:0.4s"/>
+    <circle class="sl-cat-dot" cx="12" cy="16" r="1" style="animation-delay:0.8s"/>
+  </svg>`,
+  getraenke: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-bubble { animation: sl-cat-bubble 1.6s ease-in-out infinite; }
+      @keyframes sl-cat-bubble { 0%,100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-3px); opacity: 1; } }
+    </style>
+    <path d="M7 3h10l1 4v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7l1-4z"/>
+    <circle class="sl-cat-bubble" cx="10" cy="14" r="1"/>
+    <circle class="sl-cat-bubble" cx="14" cy="11" r="1.2" style="animation-delay:0.5s"/>
+    <circle class="sl-cat-bubble" cx="12" cy="17" r="0.8" style="animation-delay:1s"/>
+  </svg>`,
+  haushalt_hygiene: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-scrub { animation: sl-cat-scrub 1.5s ease-in-out infinite; transform-origin: bottom right; }
+      @keyframes sl-cat-scrub { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-10deg); } }
+    </style>
+    <g class="sl-cat-scrub">
+      <path d="M7 4h10v4H7z"/>
+      <path d="M8 8l-1 9h10l-1-9"/>
+      <path d="M10 17h4" stroke="currentColor" stroke-width="2" fill="none"/>
+    </g>
+  </svg>`,
+  sonstiges: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .sl-cat-wag { animation: sl-cat-wag 2s ease-in-out infinite; transform-origin: center bottom; }
+      @keyframes sl-cat-wag { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
+    </style>
+    <g class="sl-cat-wag">
+      <path d="M5 6h2l2 11h8l2-9H7"/>
+      <circle cx="10" cy="19" r="1.5"/>
+      <circle cx="17" cy="19" r="1.5"/>
+    </g>
+  </svg>`
+};
+
 class ShoppingListCard extends HTMLElement {
   constructor() {
     super();
     this._unsub = null;
+    this._unsubEvents = null;
+    // Set while the card is detached; a pending subscription promise checks it
+    // so it can unsubscribe instead of leaking.
+    this._disposed = false;
+    // The edit modal lives in document.body and is tracked here so
+    // disconnectedCallback can remove it.
+    this._modalOverlay = null;
     this._autocompleteItems = null;
     this._iconMap = null;
     this._catMap = null;
@@ -158,17 +346,6 @@ class ShoppingListCard extends HTMLElement {
     this._warmupScheduled = false;
     this._warmupIdleHandle = null;   // requestIdleCallback/setTimeout handle for _scheduleWarmup
     this._warmupStepHandle = null;   // handle for the staggered _warmupSvgCache step loop
-
-    // v2.5.0: Offline support. See _persistSnapshot / _offlineMutate /
-    // _queueCommand / _flushQueue. _offlineMode is true while the backend
-    // sensor is missing and the list is served from the localStorage snapshot.
-    this._offlineMode = false;
-    this._renderedOffline = false;   // offline state of the DOM (banner logic)
-    this._snapSaveTimer = null;      // debounce handle for snapshot persist
-    this._queue = null;              // lazy array of queued command payloads
-    this._flushTimer = null;         // setTimeout handle for queue replay
-    this._flushing = false;          // a replay is in progress
-    this._cmdSeq = 0;                // nonce counter (state dedup on replay)
   }
 
   setConfig(config) {
@@ -178,6 +355,10 @@ class ShoppingListCard extends HTMLElement {
     this._entity = config.entity;
     this._listId = config.list || "standard";
     this._color = config.color || "#43A047";
+    // Opt-out for the "Verfügbar" backlog mirror — the catalog section rendered
+    // under the list. When off it is never built and never kept compatible, which
+    // matters on weak clients (the kiosk tablet) where the mirror adds ~116 tiles.
+    this._mirrorEnabled = config.mirror !== false;
 
     // Legacy detection: old `todo.*` entity or the removed `lists:` array.
     let legacy = null;
@@ -202,130 +383,12 @@ class ShoppingListCard extends HTMLElement {
 
   _initCaches() {
     if (this._cachesReady) return;
-    this._autocompleteItems = [...new Set([
-      "Apfel","Bananen","Birne","Kiwi","Orange","Weintrauben","Kirschen","Erdbeeren","Himbeeren",
-      "Pfirsich","Pflaume","Zitrone","Melone","Ananas","Mango","Avocado","Tomaten","Gurke","Paprika",
-      "Karotten","Zucchini","Aubergine","Brokkoli","Blumenkohl","Spinat","Salat","Kartoffeln","Zwiebeln","Knoblauch",
-      "Pilze","Champignons","Radieschen","Brot","Brötchen","Toast","Baguette","Kräuterbaguettes","Croissants","Milch",
-      "Joghurt","Sahne","Butter","Käse","Schafskäse","Ofenkäse","Quark","Frischkäse","Mozzarella","Eier",
-      "Hähnchen","Hackfleisch","Schnitzel","Schinken","Aufschnitt","Rindersteak","Putensteak","Schweinesteak","Fisch","Lachs","Garnelen","Tofu",
-      "Bratwürstchen","Nudeln","Spaghetti","Reis","Mehl","Zucker","Salz","Pfeffer","Olivenöl","Essig",
-      "Ketchup","Mayonnaise","Senf","Honig","Marmelade","Tiefkühlpizza","Fischstäbchen","Pommes","Eis","Wasser",
-      "Saft","Cola","Bier","Weißwein","Rotwein","Kaffee","Tee","Toilettenpapier","Küchenrolle","Shampoo",
-      "Duschgel","Seife","Zahnpasta","Waschmittel","Weichspüler","Spülmittel","Schokolade","Kekse","Chips","Nüsse",
-      "Mandeln","TK-Gemüse","Müllbeutel","Aprikose","Brombeeren","Clementine","Cranberry","Datteln","Feige","Granatapfel",
-      "Heidelbeeren","Johannisbeeren","Nektarine","Pampelmuse","Preiselbeeren","Blattspinat","Chinakohl","Eisbergsalat","Feldsalat","Dill",
-      "Kürbis","Lauch","Mais","Mangold","Pak Choi","Pastinake","Peperoni","Petersilie","Buttermilch","Griechischer Joghurt",
-      "Kefir","Ricotta","Hähnchenbrust","Hähnchenkeule","Lamm","Linsen","Sekt","Gemüsepfanne","Kuchen","Ravioli",
-      "Tortellini","Waffeln","Wraps","Abwaschbürste","Alufolie","Deo","Frischhaltefolie","Küchentücher","Lebkuchen","Kaviar",
-      "Biobeutel"
-    ])];
+    this._autocompleteItems = AUTOCOMPLETE_ITEMS;
 
-    this._iconMap = {
-      eier:"1F95A", ei:"1F95A", apfel:"1F34E", äpfel:"1F34E", banane:"1F34C", bananen:"1F34C",
-      birne:"1F350", birnen:"1F350", kiwi:"1F95D", orange:"1F34A", orangen:"1F34A",
-      traube:"1F347", trauben:"1F347", weintrauben:"1F347", kirsche:"1F352", kirschen:"1F352",
-      erdbeere:"1F353", erdbeeren:"1F353", himbeere:"1F353", himbeeren:"1F353", holunder:"1F347",
-      heidelbeere:"1FAD0", heidelbeeren:"1FAD0", pfirsich:"1F351", pflaume:"1F351",
-      zitrone:"1F34B", limette:"1F34B", grapefruit:"1F34A", melone:"1F348", ananas:"1F34D",
-      mango:"1F96D", avocado:"1F951", tomate:"1F345", tomaten:"1F345", gurke:"1F952",
-      paprika:"1FAD1", karotte:"1F955", karotten:"1F955", zucchini:"1F955", aubergine:"1F346",
-      brokkoli:"1F966", blumenkohl:"1F966", spinat:"1F96C", blattspinat:"1F96C", salat:"1F96C",
-      kartoffel:"1F954", kartoffeln:"1F954", zwiebel:"1F9C5", zwiebeln:"1F9C5", knoblauch:"1F9C4",
-      lauch:"1F96C", schnittlauch:"1F96C", dill:"1F33F", frühlingszwiebel:"1F9C5", schalotte:"1F9C5",
-      radieschen:"1F955", sellerie:"1F96C", "rote bete":"1F345", rotebete:"1F345", pilz:"1F344",
-      champignon:"1F344", champignons:"1F344", pfifferling:"1F344", steinpilz:"1F344", kräuterseitling:"1F344",
-      austernpilz:"1F344", pilze:"1F344", gemüse:"1F955", obst:"1F353", frucht:"1F353",
-      brot:"1F35E", brötchen:"1F35E", toast:"1F35E", semmel:"1F35E", baguette:"1F35E", "kräuterbaguette":"1F35E", "kräuterbaguettes":"1F35E",
-      ciabatta:"1F35E", croissant:"1F950", croissants:"1F950", schrippe:"1F35E", weckle:"1F35E",
-      laugenbrezel:"1F35E", brezel:"1F35E", milch:"1F95B", joghurt:"1FAD9", sahne:"1F95B",
-      schmand:"1F95B", schlagsahne:"1F95B", butter:"1F9C8", käse:"1F9C0", quark:"1FAD9",
-      frischkäse:"1F9C0", mozzarella:"1F9C0", brie:"1F9C0", gouda:"1F9C0", emmentaler:"1F9C0", ofenkäse:"1F9C0",
-      parmesan:"1F9C0", "cream cheese":"1F9C0", mascarpone:"1F9C0", burrata:"1F9C0",
-      cheddar:"1F9C0", fleisch:"1F969", hähnchen:"1F357", pute:"1F357",
-      ente:"1F357", schinken:"1F953", speck:"1F953", wurst:"bratwurst.svg", bratwürstchen:"bratwurst.svg", salami:"1F32D",
-      mettwurst:"1F32D", aufschnitt:"1F953", steak:"steak.svg", steaks:"steak.svg", rindersteak:"steak.svg", rindersteaks:"steak.svg", beefsteak:"steak.svg",
-      putensteak:"putensteak.svg", putensteaks:"putensteak.svg", schweinesteak:"schweinesteak.svg", schweinesteaks:"schweinesteak.svg", schweinskotelett:"schweinesteak.svg",
-      schnitzel:"1F969", hackfleisch:"1F356", fisch:"1F41F", lachs:"1F41F",
-      thunfisch:"1F41F", forelle:"1F41F", scholle:"1F41F", makrele:"1F41F", garnelen:"1F990",
-      krabben:"1F990", tofu:"1F96C", "tk-gemüse":"2744", seitan:"1F969", vegan:"1F96C", vegetarisch:"1F96C",
-      nudeln:"1F35D", spaghetti:"1F35D", penne:"1F35D", rigatoni:"1F35D", fettuccine:"1F35D",
-      lasagne:"1F35D", reis:"1F35A", couscous:"1F35A", bulgur:"1F35A", mehl:"1F33E",
-      zucker:"1F36C", salz:"1F9C2", pfeffer:"1F336", öl:"1F6E2", olivenöl:"1F6E2",
-      essig:"1F9C2", soße:"1F963", ketchup:"1F345", mayo:"1F9C2", mayonnaise:"1F9C2",
-      senf:"1F336", gewürz:"1F336", gewürze:"1F336", kräuter:"1F33F", vanille:"1F33F",
-      zimt:"1F33F", honig:"1F36F", marmelade:"1F36F", nutella:"1F36F", aufstrich:"1F36F",
-      kapern:"1F952", oliven:"1F95C", essiggurke:"1F952", sauerkraut:"1F96C",
-      peperoni:"1F336", antipasti:"1F952", kaffee:"2615", espresso:"2615", cappuccino:"2615",
-      tee:"1FAD6", bier:"1F37A", wein:"1F377", weißwein:"1F377", rotwein:"1F377",
-      wasser:"1F4A7", getränke:"1F964", cola:"1F964", limonade:"1F964", sprite:"1F964",
-      fanta:"1F964", apfelschorle:"1F964", saft:"1F9C3", orangensaft:"1F9C3", kapseln:"2615",
-      kakao:"2615", tiefkühl:"2744", tiefkühlpizza:"1F355", pizza:"1F355", frikassee:"1F963",
-      fischstäbchen:"1F41F", pommes:"1F35F", eis:"1F366", eiskrem:"1F366",
-      toilettenpapier:"1F9FB", küchenrolle:"papierhandtuch.svg", kuechenrolle:"papierhandtuch.svg", papier:"1F4C4", taschentuch:"1F9FB",
-      waschmittel:"1F9FC", spülmittel:"1FAE7", spüli:"1FAE7", zahnpasta:"1FAE5",
-      zahnbürste:"1FAE5", shampoo:"1F9FC", duschgel:"1F9FC", seife:"1F9FC",
-      deodorant:"1F9F4", rasierer:"1FA92", dusch:"1F6BF", bad:"1F6BF", weichspüler:"1F9F5",
-      reiniger:"1F9F9", tabs:"1F9FC", schokolade:"1F36B", kekse:"1F36A", chips:"1F35F",
-      nüsse:"1F330", mandeln:"1F330", müllbeutel:"1F5D1", aprikose:"1F351",
-      brombeeren:"1F347", clementine:"1F34A", klementine:"1F34A", cranberry:"1F347",
-      datteln:"1F36C", feige:"1F34A", granatapfel:"1F347", johannisbeeren:"1F353",
-      nektarine:"1F351", pampelmuse:"1F34A", preiselbeeren:"1F353", stachelbeeren:"1F353",
-      wassermelone:"1F349", chinakohl:"1F96C", eisbergsalat:"1F96C", feldsalat:"1F96C",
-      kürbis:"1F383", lauch:"1F96C", mais:"1F33D", mangold:"1F96C", "pak choi":"1F96C",
-      pastinake:"1F955", petersilie:"1F33F", porree:"1F96C", rettich:"1F955",
-      rosenkohl:"1F966", rotkohl:"1F966", rucola:"1F96C", spargel:"1F966",
-      süßkartoffel:"1F360", topinambur:"1F954", weißkohl:"1F966", buttermilch:"1F95B",
-      camembert:"1F9C0", "creme fraiche":"1F95B", feta:"1F9C0", schafskäse:"1F9C0",
-      "griechischer joghurt":"1FAD9", kefir:"1F95B", kochkäse:"1F9C0", leerdammer:"1F9C0",
-      milchreis:"1F35A", ricotta:"1F9C0", calamari:"1F991", ente:"1F357",
-      hähnchenbrust:"1F357", hähnchenkeule:"1F357", kalbfleisch:"1F969", kassler:"1F953",
-      lamm:"1F411", leber:"1F969", lunge:"1F969", putenbrust:"1F357",
-      putenschnitzel:"1F357", rinderfilet:"1F969", rinderhack:"1F969",
-      rinderroulade:"1F969", rollmops:"1F41F", sülze:"1F963", zander:"1F41F",
-      backpulver:"1F9C2", balsamico:"1F9C2", brühe:"1F963", gnocchi:"1F35D",
-      haferflocken:"1F33E", kartoffelstärke:"1F33E", kichererbsen:"1F96C",
-      kidneybohnen:"1F96C", linsen:"1F96C", paniermehl:"1F33E", pesto:"1F33F",
-      polenta:"1F35A", rosinen:"1F347", sahnesteif:"1F3FA", sojasoße:"1F963",
-      sonnenblumenöl:"1F6E2", soßenbinder:"1F9C2", vanillezucker:"1F36C",
-      worcestersauce:"1F9C2", energydrink:"1F964", granatapfelsaft:"1F9C3",
-      hugo:"1F377", mineralwasser:"1F4A7", prosecco:"1F377", radler:"1F37A",
-      sekt:"1F37E", smoothie:"1F964", sprudelwasser:"1F4A7", traubensaft:"1F9C3",
-      aufbackbrötchen:"1F35E", blätterteig:"1F35E", gemüsepfanne:"1F966",
-      knödel:"1F35D", kuchen:"1F370", lasagne:"1F35D", maultaschen:"1F35D",
-      nuggets:"1F357", paniertes:"1F357", piroggen:"1F35D", ravioli:"1F35D",
-      reibekuchen:"1F35F", schaschlik:"1F357", tortellini:"1F35D", waffeln:"1F367",
-      wraps:"1F35D", abwaschbürste:"1FAE7", alufolie:"1F4E6", backpapier:"1F4C4",
-      bonbons:"1F36C", deo:"1F9F4", desinfektionsmittel:"1F9F9", drano:"1F9F9",
-      feuchttücher:"1F9FB", frischhaltefolie:"1F4E6", geschirrtabs:"1F9FC",
-      glühbirne:"1F4A1", haargel:"1F9FC", handcreme:"1F9F5", handschuhe:"1F9E4",
-      hustensaft:"1F9EA", insektenspray:"1F9F4", kerze:"1F56F", kerzen:"1F56F",
-      klorollen:"1F9FB", kondome:"1F9F4", körperöl:"1F9F7", küchentücher:"1F9FB",
-      leinöl:"1F6E2", lotion:"1F9F5", lufterfrischer:"1F33F", "make-up":"1F484",
-      mascara:"1F484", medikamente:"1F48A", milchreiniger:"1F9FC", mülltüten:"1F5D1",
-      mundspülung:"1F9F4", nasenspray:"1F9EA", orangenschalen:"1F34A",
-      papiertüten:"1F4E6", parfüm:"1F484", pfefferkörner:"1F336", pflaster:"1F48A",
-      rasierklingen:"1FA92", rasierschaum:"1FAE6", räucherstäbchen:"1F56F",
-      salbei:"1F33F", spülbürste:"1FAE7", staubsaugerbeutel:"1F9F9",
-      streichhölzer:"1F522", taschentücher:"1F9FB", teebaumöl:"1F33F",
-      toilettenreiniger:"1F9F9", zahnbürste:"1FAE5", zitronenmelisse:"1F34B",
-      zündhölzer:"1F522", bubblegum:"1F36C", gummibärchen:"1F36C", kaugummi:"1F36C",
-      knuspermüsli:"1F33E", lebkuchen:"1F36A", lutscher:"1F36D", marshmallow:"1F36C",
-      nougat:"1F36B", pralinen:"1F36B", salzstangen:"1F35F", studentenfutter:"1F330",
-      trockenobst:"1F347", weinbrand:"1F377"
-    };
+    this._iconMap = ICON_MAP;
     this._iconMapEntries = Object.entries(this._iconMap).sort((a, b) => b[0].length - a[0].length);
 
-    this._catMap = [
-      { key: "obst_gemuese", keys: new Set(["apfel","äpfel","banane","bananen","birne","birnen","kiwi","orange","orangen","traube","trauben","weintrauben","kirsche","kirschen","erdbeere","erdbeeren","himbeere","himbeeren","heidelbeere","heidelbeeren","pfirsich","pflaume","zitrone","limette","grapefruit","melone","ananas","mango","obst","frucht","tomate","tomaten","gurke","paprika","karotte","karotten","zucchini","aubergine","brokkoli","blumenkohl","spinat","blattspinat","salat","kartoffel","kartoffeln","zwiebel","zwiebeln","knoblauch","lauch","schnittlauch","dill","frühlingszwiebel","schalotte","radieschen","sellerie","rote bete","rotebete","pilz","champignon","pfifferling","steinpilz","kräuterseitling","austernpilz","pilze","gemüse","avocado","aprikose","brombeeren","clementine","klementine","cranberry","datteln","feige","granatapfel","johannisbeeren","nektarine","pampelmuse","preiselbeeren","stachelbeeren","wassermelone","chinakohl","eisbergsalat","feldsalat","kürbis","mais","mangold","pak choi","pastinake","petersilie","porree","rettich","rosenkohl","rotkohl","rucola","spargel","süßkartoffel","topinambur","weißkohl","holunder","orangenschalen","salbei","zitronenmelisse","trockenobst"]) },
-      { key: "brot_backwaren", keys: new Set(["brot","brötchen","toast","semmel","baguette","kräuterbaguette","kräuterbaguettes","ciabatta","croissant","schrippe","weckle","laugenbrezel","brezel","aufbackbrötchen","blätterteig","kuchen","wraps"]) },
-      { key: "milch_eier", keys: new Set(["milch","joghurt","sahne","schmand","schlagsahne","butter","käse","quark","frischkäse","mozzarella","brie","gouda","emmentaler","parmesan","cream cheese","mascarpone","eier","burrata","cheddar","buttermilch","camembert","creme fraiche","feta","griechischer joghurt","kefir","kochkäse","leerdammer","milchreis","ricotta","schafskäse","ofenkäse"]) },
-      { key: "fleisch_fisch", keys: new Set(["fleisch","steak","steaks","rindersteak","rindersteaks","beefsteak","putensteak","putensteaks","schweinesteak","schweinesteaks","schweinskotelett","hähnchen","pute","ente","schinken","speck","wurst","bratwürstchen","aufschnitt","schnitzel","hackfleisch","salami","mettwurst","fisch","lachs","thunfisch","forelle","garnelen","krabben","scholle","makrele","tofu","seitan","vegan","vegetarisch","calamari","hähnchenbrust","hähnchenkeule","kalbfleisch","kassler","lamm","leber","lunge","putenbrust","putenschnitzel","rinderfilet","rinderhack","rinderroulade","rollmops","sülze","zander"]) },
-      { key: "trockenwaren", keys: new Set(["nudeln","spaghetti","penne","rigatoni","fettuccine","lasagne","reis","couscous","bulgur","mehl","zucker","salz","pfeffer","olivenöl","sonnenblumenöl","speiseöl","essig","soße","ketchup","mayo","mayonnaise","senf","gewürz","gewürze","kräuter","vanille","zimt","honig","marmelade","nutella","aufstrich","kapern","oliven","essiggurke","sauerkraut","peperoni","antipasti","backpulver","balsamico","brühe","gnocchi","haferflocken","kartoffelstärke","kichererbsen","kidneybohnen","linsen","paniermehl","pesto","polenta","rosinen","sahnesteif","sojasoße","soßenbinder","vanillezucker","worcestersauce","schokolade","keks","chips","nüsse","mandeln","bonbons","bubblegum","gummibärchen","kaugummi","knuspermüsli","lebkuchen","lutscher","marshmallow","nougat","pralinen","salzstangen","studentenfutter","pfefferkörner"]) },
-      { key: "tiefkuehlprodukte", keys: new Set(["tiefkühl","tiefkühlpizza","pizza","frikassee","fischstäbchen","pommes","eis","eiskrem","gemüsepfanne","knödel","nuggets","paniertes","piroggen","ravioli","reibekuchen","schaschlik","tortellini","tk-gemüse","waffeln"]) },
-      { key: "getraenke", keys: new Set(["wasser","getränke","cola","saft","bier","wein","weißwein","rotwein","limonade","sprite","fanta","apfelschorle","kaffee","espresso","kapseln","kakao","tee","cappuccino","energydrink","granatapfelsaft","hugo","mineralwasser","prosecco","radler","sekt","smoothie","sprudelwasser","traubensaft"]) },
-      { key: "haushalt_hygiene", keys: new Set(["toilettenpapier","küchenrolle","papier","taschentuch","shampoo","duschgel","seife","zahnpasta","zahnbürste","deodorant","rasierer","dusch","bad","waschmittel","weichspüler","reiniger","spülmittel","tabs","spüli","abwaschbürste","alufolie","backpapier","deo","desinfektionsmittel","drano","feuchttücher","frischhaltefolie","geschirrtabs","glühbirne","haargel","handcreme","handschuhe","hustensaft","insektenspray","kerze","kerzen","klorollen","kondome","körperöl","küchentücher","leinöl","lotion","lufterfrischer","make-up","mascara","medikamente","milchreiniger","mülltüten","müllbeutel","mundspülung","nasenspray","papiertüten","parfüm","pflaster","rasierklingen","rasierschaum","räucherstäbchen","spülbürste","staubsaugerbeutel","streichhölzer","taschentücher","teebaumöl","toilettenreiniger","zündhölzer"]) }
-    ];
+    this._catMap = CAT_MAP;
     this._catLookup = new Map();
     for (const cat of this._catMap) {
       for (const key of cat.keys) {
@@ -358,124 +421,8 @@ class ShoppingListCard extends HTMLElement {
 
     // Reverse map: backend publishes category NAME (e.g. "Obst & Gemüse"),
     // but grouping/icon/color need the canonical key. Fall back to summary scan.
-    this._categoryNameToKey = {
-      "Obst & Gemüse": "obst_gemuese",
-      "Brot & Backwaren": "brot_backwaren",
-      "Milchprodukte & Eier": "milch_eier",
-      "Fleisch & Fisch": "fleisch_fisch",
-      "Trockenwaren": "trockenwaren",
-      "Tiefkühlprodukte": "tiefkuehlprodukte",
-      "Getränke": "getraenke",
-      "Haushalt & Hygiene": "haushalt_hygiene",
-      "Sonstiges": "sonstiges"
-    };
-
-    // Animated inline SVG category icons. Embedded directly so CSS animations
-    // run reliably (img/ha-icon cannot animate). Replace individual SVGs by
-    // editing the strings below; the key names must stay stable.
-    this._categorySvgs = {
-      obst_gemuese: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-swing { animation: sl-cat-swing 2.5s ease-in-out infinite; transform-origin: 12px 5px; }
-          @keyframes sl-cat-swing { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
-        </style>
-        <g class="sl-cat-swing">
-          <path d="M12 6c-3 0-5.5 2-5.5 5.5S9 18 12 18s5.5-3 5.5-6.5S15 6 12 6z"/>
-          <path d="M12 6c0-1.5.5-3 1.5-4" stroke="currentColor" stroke-width="1.5" fill="none"/>
-          <path d="M12 6c2-.5 3.5-.5 4.5.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
-        </g>
-      </svg>`,
-      brot_backwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-rise { animation: sl-cat-rise 2s ease-in-out infinite; transform-origin: center bottom; }
-          @keyframes sl-cat-rise { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.08); } }
-        </style>
-        <g class="sl-cat-rise">
-          <path d="M5 9c0-3 3-5 7-5s7 2 7 5v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9z"/>
-          <path d="M8 9c0-1 1.5-2 4-2s4 1 4 2" stroke="rgba(255,255,255,0.4)" stroke-width="1" fill="none"/>
-        </g>
-      </svg>`,
-      milch_eier: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-tilt { animation: sl-cat-tilt 3s ease-in-out infinite; transform-origin: center bottom; }
-          @keyframes sl-cat-tilt { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
-        </style>
-        <g class="sl-cat-tilt">
-          <path d="M7 5h10l2 4v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9l2-4z"/>
-          <circle cx="12" cy="17" r="2" fill="rgba(255,255,255,0.5)"/>
-        </g>
-      </svg>`,
-      fleisch_fisch: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-meat { animation: sl-cat-pulse 2s ease-in-out infinite; transform-origin: center; }
-          .sl-cat-steam { animation: sl-cat-steam 2s ease-in-out infinite; }
-          @keyframes sl-cat-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-          @keyframes sl-cat-steam { 0%,100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
-        </style>
-        <g class="sl-cat-meat">
-          <path d="M7 11c0-3 2.5-6 6-6s6 3 6 6-2.5 6-6 6-6-3-6-6z"/>
-          <path d="M9 14l-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
-        </g>
-        <path class="sl-cat-steam" d="M9 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none"/>
-        <path class="sl-cat-steam" d="M15 6c0-1 1-2 1-3" stroke="currentColor" stroke-width="1.5" fill="none" style="animation-delay:0.5s"/>
-      </svg>`,
-      trockenwaren: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-wiggle { animation: sl-cat-wiggle 2.2s ease-in-out infinite; transform-origin: center bottom; }
-          @keyframes sl-cat-wiggle { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
-        </style>
-        <g class="sl-cat-wiggle">
-          <path d="M4 7h16l2 4v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z"/>
-          <path d="M4 7l2-3h12l2 3" stroke="currentColor" stroke-width="1.5" fill="none"/>
-        </g>
-      </svg>`,
-      tiefkuehlprodukte: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-flake { animation: sl-cat-spin 4s linear infinite; transform-origin: center; }
-          .sl-cat-dot { animation: sl-cat-fade 1.8s ease-in-out infinite; }
-          @keyframes sl-cat-spin { to { transform: rotate(360deg); } }
-          @keyframes sl-cat-fade { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
-        </style>
-        <g class="sl-cat-flake">
-          <path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none"/>
-        </g>
-        <circle class="sl-cat-dot" cx="8" cy="8" r="1"/>
-        <circle class="sl-cat-dot" cx="16" cy="8" r="1" style="animation-delay:0.4s"/>
-        <circle class="sl-cat-dot" cx="12" cy="16" r="1" style="animation-delay:0.8s"/>
-      </svg>`,
-      getraenke: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-bubble { animation: sl-cat-bubble 1.6s ease-in-out infinite; }
-          @keyframes sl-cat-bubble { 0%,100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-3px); opacity: 1; } }
-        </style>
-        <path d="M7 3h10l1 4v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7l1-4z"/>
-        <circle class="sl-cat-bubble" cx="10" cy="14" r="1"/>
-        <circle class="sl-cat-bubble" cx="14" cy="11" r="1.2" style="animation-delay:0.5s"/>
-        <circle class="sl-cat-bubble" cx="12" cy="17" r="0.8" style="animation-delay:1s"/>
-      </svg>`,
-      haushalt_hygiene: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-scrub { animation: sl-cat-scrub 1.5s ease-in-out infinite; transform-origin: bottom right; }
-          @keyframes sl-cat-scrub { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-10deg); } }
-        </style>
-        <g class="sl-cat-scrub">
-          <path d="M7 4h10v4H7z"/>
-          <path d="M8 8l-1 9h10l-1-9"/>
-          <path d="M10 17h4" stroke="currentColor" stroke-width="2" fill="none"/>
-        </g>
-      </svg>`,
-      sonstiges: `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .sl-cat-wag { animation: sl-cat-wag 2s ease-in-out infinite; transform-origin: center bottom; }
-          @keyframes sl-cat-wag { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
-        </style>
-        <g class="sl-cat-wag">
-          <path d="M5 6h2l2 11h8l2-9H7"/>
-          <circle cx="10" cy="19" r="1.5"/>
-          <circle cx="17" cy="19" r="1.5"/>
-        </g>
-      </svg>`
-    };
+    this._categoryNameToKey = CATEGORY_NAME_TO_KEY;
+    this._categorySvgs = CATEGORY_SVGS;
 
     // Mirror section calls _getItemCategory for every autocomplete article on
     // every full render. Pre-compute the categories once here after the lookup
@@ -517,16 +464,13 @@ class ShoppingListCard extends HTMLElement {
       this._renderPending = false;
       this._renderRaf = null;
       this._loadItems();
-      // Also re-render on offline↔online transitions even when the item list
-      // is byte-identical (e.g. HA restarted, sensor gone, snapshot has the
-      // same items) — the offline banner lives outside the fingerprint.
-      if (this._fingerprint === this._lastFingerprint &&
-          this._renderedOffline === this._offlineMode) return;
-      // The offline banner lives at card level, outside the category sections
-      // a surgical pass touches — an online↔offline transition always needs
-      // the full render so the banner is added or removed.
-      if (this._renderedOffline !== this._offlineMode) {
-        this._scheduleFullRender();
+      if (this._fingerprint === this._lastFingerprint) {
+        // v2.5.5: a full rebuild may already be queued from a prior change; if
+        // the state is back to what's rendered, that rebuild is now obsolete.
+        if (this._fullRenderTimer) {
+          clearTimeout(this._fullRenderTimer);
+          this._fullRenderTimer = null;
+        }
         return;
       }
       if (this._applySurgicalUpdate()) {
@@ -560,64 +504,19 @@ class ShoppingListCard extends HTMLElement {
     // Stash the previous items BEFORE replacing, so _applySurgicalUpdate can
     // diff prev→current and be certain the DOM still reflects _prevItems.
     this._prevItems = this._items;
-    if (!st) {
-      // Backend sensor missing → serve the list from the localStorage snapshot
-      // (offline mode) instead of an empty card. Without a snapshot we still
-      // enter offline mode with an empty list; _render then shows the regular
-      // "sensor missing" hint.
-      const snap = this._readSnapshot();
-      this._items = snap ? snap.filter(i => (i.list || "standard") === this._listId) : [];
-      this._offlineMode = true;
-      this._fingerprint = this._fingerprintOf(this._items);
-      return;
-    }
-    const wasOffline = this._offlineMode;
-    this._offlineMode = false;
+    if (!st) { this._items = []; this._fingerprint = 0; return; }
     const all = Array.isArray(st.attributes?.items) ? st.attributes.items : [];
     this._items = all.filter(i => (i.list || "standard") === this._listId);
     this._fingerprint = this._fingerprintOf(this._items);
-    // Persist the fresh server list (all lists, unfiltered) so a later outage
-    // or a fresh app open without network can render it. Debounced — bursts
-    // of state updates coalesce into one write.
-    this._persistSnapshot(all);
-    // Backend recovered (offline → online): replay queued commands. This
-    // covers the case where the WebSocket stayed up but AppDaemon / the
-    // sensor was down and commands went into the queue.
-    if (wasOffline) this._scheduleFlush(600);
-    else if (this._loadQueue().length) {
-      // Commands queued in a previous session (page closed while offline):
-      // flush them shortly after a healthy start.
-      this._scheduleFlush(1500);
-    }
-  }
-
-  // --- v2.5.0: snapshot persistence (offline rendering) -------------------
-
-  // Debounced persist of the full item list. Stored unfiltered so the offline
-  // path can rebuild the card for any configured listId.
-  _persistSnapshot(items) {
-    if (this._snapSaveTimer != null) clearTimeout(this._snapSaveTimer);
-    this._snapSaveTimer = setTimeout(() => {
-      this._snapSaveTimer = null;
-      try {
-        localStorage.setItem("slc_list_snapshot_v1", JSON.stringify({ t: Date.now(), items: items || [] }));
-      } catch (e) { /* quota / private mode — offline fallback simply unavailable */ }
-    }, 500);
-  }
-
-  _readSnapshot() {
-    try {
-      const raw = localStorage.getItem("slc_list_snapshot_v1");
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed?.items) ? parsed.items : null;
-    } catch (e) { return null; }
   }
 
   _fingerprintOf(items) {
     let fp = 0;
     for (const i of items) {
-      fp = (fp * 31 + this._hashString(i.uid + "|" + i.status + "|" + i.summary + "|" + (i.quantity || 1) + "|" + (i.icon || ""))) >>> 0;
+      // The category is part of the fingerprint: a catalog reload can move an
+      // item to a different category without touching any other field, and
+      // the render pipeline would not notice the regrouping.
+      fp = (fp * 31 + this._hashString(i.uid + "|" + i.status + "|" + i.summary + "|" + (i.quantity ?? 1) + "|" + (i.icon || "") + "|" + (i.category || ""))) >>> 0;
     }
     return fp;
   }
@@ -657,9 +556,11 @@ class ShoppingListCard extends HTMLElement {
     // 1. explicit config override
     const cfg = this.config?.icon_map || {};
     if (cfg[summary] || cfg[lower]) return cfg[summary] || cfg[lower];
-    // 2. backend icon field (treat as filename if it looks like one)
+    // 2. backend icon field (bare filename only — never a URL or path)
     const backendIcon = item?.icon;
-    if (backendIcon && /\.(svg|png|jpg|jpeg)$/i.test(String(backendIcon))) return String(backendIcon);
+    if (backendIcon && typeof backendIcon === "string" && /^[\w.-]+\.(svg|png|jpg|jpeg)$/i.test(backendIcon)) {
+      return backendIcon;
+    }
     // 3. mapping.json
     if (this._itemIconMapping[summary]) return this._itemIconMapping[summary];
     if (this._itemIconMapping[lower]) return this._itemIconMapping[lower];
@@ -676,16 +577,28 @@ class ShoppingListCard extends HTMLElement {
   // The prototype is cached per URL in _svgDomCache; applications clone it via
   // cloneNode(true), which is dramatically cheaper than re-running innerHTML
   // (HTML parser + full DOM build) for every tile on every render.
+  //
+  // The SVG source is fetched from a URL the backend controls, but the card
+  // must not trust it: innerHTML happily parses live event-handler attributes
+  // (<image onerror=...>), and cloning the result into the live DOM would run
+  // them. The content is therefore parsed as image/svg+xml and stripped of
+  // everything executable before it is cached.
   _parseSvgElement(text) {
     if (!text) return null;
     // Flaticon SVGs often start with <?xml + generator comments; strip
-    // everything before the first <svg so innerHTML parses cleanly.
+    // everything before the first <svg so the parser sees a clean document.
     const idx = text.toLowerCase().indexOf("<svg");
     if (idx < 0) return null;
-    const tmp = document.createElement("div");
-    tmp.innerHTML = text.slice(idx);
-    const svg = tmp.querySelector("svg");
+    let svg = null;
+    try {
+      const doc = new DOMParser().parseFromString(text.slice(idx), "image/svg+xml");
+      const root = doc.documentElement;
+      if (root && root.nodeName.toLowerCase() === "svg") svg = root;
+    } catch (e) {
+      return null;
+    }
     if (!svg) return null;
+    this._sanitizeSvg(svg);
     // Force a uniform rendered size regardless of the SVG's own width/height
     // attributes or internal styles. The wrapper guarantees the footprint,
     // the SVG fills it with preserved aspect ratio.
@@ -695,6 +608,32 @@ class ShoppingListCard extends HTMLElement {
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.style.flexShrink = "0";
     return svg;
+  }
+
+  // Remove everything executable from a parsed SVG. Scripting inside an SVG
+  // (script elements, event handlers, javascript: URLs, external references)
+  // must never reach the live DOM.
+  _sanitizeSvg(svg) {
+    const blocked = svg.querySelectorAll("script, foreignObject, iframe, object, embed, use, animate, set, handler");
+    for (const node of blocked) node.remove();
+    const all = svg.querySelectorAll("*");
+    for (const node of all) {
+      for (const attr of Array.from(node.attributes || [])) {
+        const name = (attr.name || "").toLowerCase();
+        const value = attr.value || "";
+        if (name.startsWith("on")) {
+          node.removeAttribute(attr.name);
+        } else if (/^\s*javascript:/i.test(value)) {
+          node.removeAttribute(attr.name);
+        } else if (name === "href" || name === "xlink:href") {
+          // Only same-document references are safe; a remote href can load an
+          // arbitrary document and an svg: one can carry script.
+          if (!/^#/.test(value.trim())) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      }
+    }
   }
 
   // Clone a (possibly null) prototype into a sized wrapper inside container.
@@ -1034,7 +973,10 @@ class ShoppingListCard extends HTMLElement {
   _updateCatVisibility(catWrap, visible) {
     const header = catWrap.querySelector(".sl-header");
     const grid = catWrap.querySelector(".sl-grid");
-    if (header) header.style.display = visible > 0 ? "" : "none";
+    // "flex" instead of "": clearing the inline display falls back to the
+    // stylesheet, which has no rule for .sl-header, so the header's flex
+    // layout (icon/label/count/chevron) collapsed to block layout.
+    if (header) header.style.display = visible > 0 ? "flex" : "none";
     if (grid) {
       if (visible > 0) {
         grid.style.display = grid.dataset.collapsed === "true" ? "none" : "grid";
@@ -1045,7 +987,10 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _filterVisible(listWrap, query) {
-    const q = query?.toLowerCase() || "";
+    // Transliterate both sides: a user typing "kaese" must find "Käse", and
+    // "muh" must find "Milch". The auto-categorization already normalizes
+    // umlauts, so the search has to do the same to stay consistent.
+    const q = this._translit(String(query || "").trim());
     let lastCat = null;
     let visibleInCat = 0;
     for (const entry of this._tileIndex || []) {
@@ -1054,7 +999,7 @@ class ShoppingListCard extends HTMLElement {
         lastCat = entry.cat;
         visibleInCat = 0;
       }
-      const match = !q || entry.summary.includes(q);
+      const match = !q || this._translit(entry.summary).includes(q);
       entry.tile.style.display = match ? "flex" : "none";
       if (match) visibleInCat++;
     }
@@ -1082,23 +1027,18 @@ class ShoppingListCard extends HTMLElement {
     return img;
   }
 
-  _getItemIcon(text) {
-    const t = text.toLowerCase();
-    const map = this.config.icon_map || {};
-    if (map[text] || map[t]) return map[text] || map[t];
-    for (const [key, hex] of this._iconMapEntries) {
-      if (t.includes(key)) return hex;
-    }
-    return "1F6D2";
-  }
-
   _renderItemIcon(container, item, size, lazy = false) {
     const summary = item?.summary || "";
     const override = this.config.icon_map?.[summary] || this.config.icon_map?.[String(summary).toLowerCase()];
     let iconValue = override;
     if (!iconValue) {
       const backendIcon = item?.icon;
-      if (/\.(svg|png|jpg|jpeg)$/i.test(String(backendIcon))) iconValue = backendIcon;
+      // The backend icon is an OpenMoji codepoint or a plain filename, never
+      // a URL. A user-supplied URL would make the card fetch and inline an
+      // attacker-controlled document, so only bare filenames are accepted.
+      if (backendIcon && typeof backendIcon === "string" && /^[\w.-]+\.(svg|png|jpg|jpeg)$/i.test(backendIcon)) {
+        iconValue = backendIcon;
+      }
     }
     if (!iconValue) iconValue = this._resolveItemIconFile(item);
     if (!iconValue || !/\.(svg|png|jpg|jpeg)$/i.test(String(iconValue))) iconValue = "sonstiges.svg";
@@ -1363,41 +1303,32 @@ class ShoppingListCard extends HTMLElement {
   // JSON payload into input_text.einkaufsliste_command via the regular
   // input_text/set_value service, which AppDaemon listens to with listen_state.
   // The backend clears the input after executing the command.
+  //
+  // Home Assistant caps input_text at 255 characters and silently discards
+  // anything longer (it only logs "Invalid value"). The envelope costs ~90
+  // characters, so the payload is compacted: short field names and omitted
+  // default values keep a long article name within the limit.
   _fireEvent(eventType, data) {
-    // The `_n` nonce guarantees a byte-distinct input_text value even when the
-    // same command is repeated (e.g. toggling an item back and forth offline).
-    // HA dedupes unchanged states, so without it a replayed identical command
-    // would never trigger AppDaemon's listen_state. AppDaemon ignores unknown
-    // top-level fields like _n.
-    const payload = JSON.stringify({ event: eventType, data: data || {}, _n: ++this._cmdSeq });
-    if (this._offlineMode || !this._hass) {
-      this._queueCommand(payload);
+    if (!this._hass) {
+      console.warn("Shopping List Card: no HA connection, cannot send", eventType);
+      this._showToast("Fehler: keine HA-Verbindung");
       return;
     }
+    const payload = this._compactPayload(eventType, data);
+    const call = (fn) => {
+      try {
+        fn();
+      } catch (e) {
+        console.warn("Shopping List Card: command send failed", eventType, e);
+        this._showToast("Fehler: " + (e.message || "Befehl fehlgeschlagen"));
+      }
+    };
 
     if (typeof this._hass.callService === "function") {
-      let p = null;
-      try {
-        p = this._hass.callService("input_text", "set_value", {
-          entity_id: "input_text.einkaufsliste_command",
-          value: payload
-        });
-      } catch (e) {
-        // Synchronous throw (validation, suspended connection): queue it.
-        console.warn("Shopping List Card: command send failed, queued", eventType, e);
-        this._queueCommand(payload);
-        return;
-      }
-      // callService returns a Promise that only rejects once a reconnect
-      // attempt fails (ERR_CONNECTION_LOST) — a short outage keeps it pending
-      // while the WS library buffers the message. So a rejection means the
-      // command never reached HA: park it for the next flush.
-      if (p && typeof p.catch === "function") {
-        p.catch(e => {
-          console.warn("Shopping List Card: command send failed, queued", eventType, e);
-          this._queueCommand(payload);
-        });
-      }
+      call(() => this._hass.callService("input_text", "set_value", {
+        entity_id: "input_text.einkaufsliste_command",
+        value: payload
+      }));
       return;
     }
 
@@ -1407,246 +1338,100 @@ class ShoppingListCard extends HTMLElement {
       this._hass.connection.sendMessagePromise({
         type: "fire_event",
         event_type: eventType,
-        event_data: Object.assign({}, data || {}, { _n: this._cmdSeq })
+        event_data: data || {}
       }).catch(e => {
-        console.warn("Shopping List Card: fire_event failed, queued", eventType, e);
-        this._queueCommand(payload);
+        console.warn("Shopping List Card: fire_event failed", eventType, e);
+        this._showToast("Fehler: " + (e.message || "Event fehlgeschlagen"));
       });
       return;
     }
 
-    console.warn("Shopping List Card: no way to send command, queued", eventType);
-    this._queueCommand(payload);
+    console.warn("Shopping List Card: no way to send command", eventType);
+    this._showToast("Fehler: keine HA-Verbindung");
   }
 
-  // --- v2.5.0: persistent sync queue ---------------------------------------
-  // Commands that cannot be delivered (offline / no hass / rejected call)
-  // are stored in localStorage and replayed sequentially over the same
-  // input_text channel once the connection or the backend sensor is back.
-
-  _loadQueue() {
-    if (this._queue) return this._queue;
-    try {
-      const raw = localStorage.getItem("slc_cmd_queue_v1");
-      const parsed = raw ? JSON.parse(raw) : [];
-      this._queue = Array.isArray(parsed) ? parsed : [];
-    } catch (e) { this._queue = []; }
-    return this._queue;
-  }
-
-  _saveQueue() {
-    try {
-      localStorage.setItem("slc_cmd_queue_v1", JSON.stringify(this._queue || []));
-    } catch (e) { /* quota / private mode — queue lives on in RAM */ }
-  }
-
-  _queueCommand(payload) {
-    const q = this._loadQueue();
-    const wasEmpty = q.length === 0;
-    q.push(payload);
-    // Hard cap: drop the oldest commands rather than growing without bound.
-    if (q.length > 100) q.splice(0, q.length - 100);
-    this._saveQueue();
-    // The offline banner shows the pending count — surgical passes only touch
-    // category sections, so keep the banner text in sync from here.
-    this._refreshOfflineBanner();
-    if (wasEmpty) this._showToast("📴 Ohne Verbindung — wird später synchronisiert");
-  }
-
-  // Single source for the offline banner text, shared by _render and the
-  // live refresh when the queue length changes.
-  _offlineBannerText(qn) {
-    return "📴 Offline — Liste aus dem letzten Stand" +
-      (qn ? " · " + qn + " Änderung" + (qn === 1 ? "" : "en") + " warten auf Sync" :
-        " · Änderungen werden automatisch synchronisiert");
-  }
-
-  _refreshOfflineBanner() {
-    const banner = this.querySelector(".sl-offline-banner");
-    if (banner) banner.textContent = this._offlineBannerText(this._loadQueue().length);
-  }
-
-  // Replay trigger. Debounced so a "ready" event right before the sensor
-  // returns doesn't start two interleaved passes (_flushing guards anyway).
-  _scheduleFlush(delay) {
-    if (this._flushTimer != null) return;
-    this._flushTimer = setTimeout(() => {
-      this._flushTimer = null;
-      this._flushQueue();
-    }, delay || 800);
-  }
-
-  _flushQueue() {
-    if (this._flushing || this._offlineMode || !this._hass ||
-        typeof this._hass.callService !== "function") return;
-    const q = this._loadQueue();
-    if (!q.length) return;
-    const payload = q[0];
-    let p = null;
-    try {
-      p = this._hass.callService("input_text", "set_value", {
-        entity_id: "input_text.einkaufsliste_command",
-        value: payload
-      });
-    } catch (e) { p = null; }
-    if (!p || typeof p.then !== "function") {
-      // Runtime without a promise — assume delivered (previously this was
-      // a fire-and-forget with no feedback; retrying risks duplicates).
-      q.shift();
-      this._saveQueue();
-      this._afterFlushStep(q);
-      return;
+  // Compact command payload that fits into the 255-character input_text limit.
+  // Field names are shortened and default values are omitted; the backend
+  // expands them again. The event type itself is shortened to its suffix
+  // ("einkaufsliste_" + suffix).
+  _compactPayload(eventType, data) {
+    const FIELD_MAP = {
+      summary: "s",
+      quantity: "q",
+      list: "l",
+      uid: "u",
+      status: "st",
+      category: "c",
+      icon: "i",
+    };
+    const short = {};
+    for (const [key, value] of Object.entries(data || {})) {
+      const name = FIELD_MAP[key] || key;
+      // Omit values the backend treats as the default.
+      if (value === undefined || value === null) continue;
+      if (key === "quantity" && value === 1) continue;
+      if (key === "list" && value === "standard") continue;
+      short[name] = value;
     }
-    this._flushing = true;
-    p.then(() => {
-      this._flushing = false;
-      q.shift();
-      this._saveQueue();
-      this._afterFlushStep(q);
-    }, () => {
-      this._flushing = false;
-      // Failed head stays queued; retry with spacing until it goes through.
-      // _loadItems flips _offlineMode (sensor gone) → next pass bails out.
-      this._scheduleFlush(5000);
-    });
-  }
-
-  _afterFlushStep(q) {
-    if (q.length) {
-      // Space consecutive commands: AppDaemon parses them one listen_state
-      // at a time, and each set_value must land as a distinct state.
-      this._scheduleFlush(400);
-    } else {
-      this._showToast("📤 Einkaufsliste synchronisiert");
+    const suffix = String(eventType || "").replace(/^einkaufsliste_/, "");
+    let payload = JSON.stringify({ e: suffix, d: short });
+    if (payload.length <= 255) return payload;
+    // Still too long: the article name itself is over the limit. Trim it to
+    // whatever fits and tell the user, instead of letting HA silently drop
+    // the whole command.
+    const limit = 255;
+    const summary = String((data && data.summary) || "");
+    if (summary) {
+      const overhead = payload.length - summary.length;
+      const room = Math.max(0, limit - overhead - 12);
+      if (summary.length > room) {
+        console.warn("Shopping List Card: article name too long, truncating to", room, "chars");
+        this._showToast("Artikelname zu lang — gekürzt auf " + room + " Zeichen");
+        short.s = summary.slice(0, room);
+        payload = JSON.stringify({ e: suffix, d: short });
+      }
     }
-  }
-
-  // Apply a local mutation to the offline snapshot, persist it immediately
-  // (not debounced — offline writes are deliberate user actions) and re-run
-  // the normal load+render pipeline, which picks the snapshot up in offline
-  // mode. fn receives the full (all lists) item array.
-  _offlineMutate(fn) {
-    const snap = this._readSnapshot() || [];
-    try { fn(snap); } catch (e) { /* malformed entry — skip */ }
-    try {
-      localStorage.setItem("slc_list_snapshot_v1", JSON.stringify({ t: Date.now(), items: snap }));
-    } catch (e) { /* quota — in-RAM rendering still works this session */ }
-    this._fetchAndRender();
-  }
-
-  // Commit an optimistically-modified item list through the normal
-  // fingerprint → surgical-update / full-render pipeline. `next` MUST NOT
-  // share item objects with the current DOM state (clone the touched items),
-  // otherwise the prev→cur diff in _applySurgicalUpdate sees no change.
-  _commitOptimistic(next) {
-    this._items = next;
-    this._fingerprint = this._fingerprintOf(next);
-    if (this._applySurgicalUpdate()) {
-      this._lastFingerprint = this._fingerprint;
-      return;
+    if (payload.length > limit) {
+      console.warn("Shopping List Card: payload exceeds input_text limit", payload.length);
+      this._showToast("Fehler: Befehl zu lang für den Übertragungskanal");
     }
-    this._scheduleFullRender();
+    return payload;
   }
 
   _addItem(text) {
     const val = String(text || "").trim();
-    if (!val) return;
-    if (this._offlineMode || !this._hass) {
-      // Local offline add with a temp uid. The queued einkaufsliste_add is
-      // replayed with summary+quantity; the server assigns its own uid and
-      // auto-dedupes. Toggling an offline-added item before sync sends the
-      // temp uid, which the backend ignores — an accepted edge case.
-      this._offlineMutate(items => {
-        const dup = items.find(i => (i.list || "standard") === this._listId &&
-          i.status === "needs_action" &&
-          String(i.summary || "").toLowerCase() === val.toLowerCase());
-        if (!dup) items.push({
-          uid: "off_" + Date.now(), summary: val, quantity: 1,
-          list: this._listId, status: "needs_action", category: "custom"
-        });
-      });
-    }
+    if (!val || !this._hass) return;
     this._fireEvent("einkaufsliste_add", { summary: val, quantity: 1, list: this._listId });
     this._haptic(60);
   }
 
   _toggleItem(item) {
-    if (!item) return;
-    const target = this._items.find(i => i.uid === item.uid) || item;
-    if (this._offlineMode || !this._hass) {
-      this._offlineMutate(items => {
-        const it = items.find(i => i.uid === item.uid);
-        if (it) it.status = it.status === "needs_action" ? "completed" : "needs_action";
-      });
-    } else {
-      // Optimistic flip: the tile changes the instant it is tapped. The
-      // server echo arrives via the normal subscription and confirms or
-      // corrects the state; if it agrees, the fingerprint matches and no
-      // further render happens.
-      const idx = this._items.findIndex(i => i.uid === target.uid);
-      if (idx >= 0) {
-        const next = this._items.slice();
-        next[idx] = Object.assign({}, next[idx], {
-          status: next[idx].status === "needs_action" ? "completed" : "needs_action"
-        });
-        this._commitOptimistic(next);
-      }
-    }
+    if (!this._hass || !item) return;
     this._fireEvent("einkaufsliste_toggle", { uid: item.uid });
-    this._haptic(target.status === "needs_action" ? 60 : 40);
+    this._haptic(item.status === "needs_action" ? 60 : 40);
   }
 
   _removeItem(item) {
-    if (!item) return;
-    if (this._offlineMode || !this._hass) {
-      this._offlineMutate(items => {
-        const idx = items.findIndex(i => i.uid === item.uid);
-        if (idx >= 0) items.splice(idx, 1);
-      });
-    } else {
-      const next = this._items.filter(i => i.uid !== item.uid);
-      this._commitOptimistic(next);
-    }
+    if (!this._hass || !item) return;
     this._fireEvent("einkaufsliste_remove", { uid: item.uid });
     this._haptic(40);
   }
 
   _clearDone() {
-    if (this._offlineMode || !this._hass) {
-      this._offlineMutate(items => {
-        for (let i = items.length - 1; i >= 0; i--) {
-          if (items[i].status !== "needs_action" && (items[i].list || "standard") === this._listId) items.splice(i, 1);
-        }
-      });
-    } else {
-      this._commitOptimistic(this._items.filter(i => i.status === "needs_action"));
-    }
+    if (!this._hass) return;
     this._fireEvent("einkaufsliste_clear_completed", { list: this._listId });
     this._haptic(80);
   }
 
   _updateQuantity(item, delta) {
-    if (!item) return;
-    const q = Math.max(0, (item.quantity || 1) + delta);
-    if (this._offlineMode || !this._hass) {
-      this._offlineMutate(items => {
-        const it = items.find(i => i.uid === item.uid);
-        if (it) it.quantity = q;
-      });
-    } else {
-      const idx = this._items.findIndex(i => i.uid === item.uid);
-      if (idx >= 0) {
-        const next = this._items.slice();
-        next[idx] = Object.assign({}, next[idx], { quantity: q });
-        this._commitOptimistic(next);
-      }
-    }
+    if (!this._hass || !item) return;
+    const q = Math.max(0, (item.quantity ?? 1) + delta);
     this._fireEvent("einkaufsliste_update", { uid: item.uid, quantity: q });
     this._haptic(40);
   }
 
   _subscribeChanges() {
-    if ((this._unsub || this._unsubEvents || this._unsubReady) || !this._hass || !this.isConnected) return;
+    if ((this._unsub || this._unsubEvents) || !this._hass || !this.isConnected) return;
     const entities = [this._entity];
     // Primary: compressed entity subscription (efficient). BUT it may not
     // deliver attribute-only updates for AppDaemon REST-set states — e.g.
@@ -1657,37 +1442,38 @@ class ShoppingListCard extends HTMLElement {
     this._hass.connection.subscribeMessage(
       () => { this._fetchAndRender(); },
       { type: "subscribe_entities", entity_ids: entities }
-    ).then(unsub => { this._unsub = unsub; }).catch(() => { this._unsub = null; });
+    ).then(unsub => {
+      // The card may have been removed while the promise was pending. In that
+      // case the unsubscribe function would be assigned to a dead card and
+      // never called, leaking the WebSocket subscription.
+      if (this._disposed) { unsub(); return; }
+      this._unsub = unsub;
+    }).catch(() => { this._unsub = null; });
     // Secondary: state_changed fires reliably for EVERY set_state, including
     // attribute-only changes. Filtered to our entity. The fingerprint check in
     // _render() collapses duplicate renders when both subscriptions fire.
     this._unsubEvents = this._hass.connection.subscribeEvents(ev => {
       if (ev.data?.entity_id === this._entity) this._fetchAndRender();
     }, "state_changed");
-    // v2.5.0: the Connection (home-assistant-js-websocket) fires "ready" on
-    // every (re)connect. Replay queued offline commands and refresh states —
-    // the frontend's hass.states may be stale from before the outage.
-    if (this._hass.connection && typeof this._hass.connection.addEventListener === "function") {
-      const conn = this._hass.connection;
-      const onReady = () => {
-        this._scheduleFlush(800);
-        this._fetchAndRender();
-      };
-      conn.addEventListener("ready", onReady);
-      this._unsubReady = () => {
-        try { conn.removeEventListener("ready", onReady); } catch (e) { /* already gone */ }
-      };
-    }
   }
 
   connectedCallback() {
+    this._disposed = false;
     if (this._hass) this._subscribeChanges();
   }
   disconnectedCallback() {
+    this._disposed = true;
     if (this._renderRaf != null) {
       cancelAnimationFrame(this._renderRaf);
       this._renderRaf = null;
       this._renderPending = false;
+    }
+    // The edit modal is appended to document.body, not to the card. Left
+    // behind it covers the whole viewport with an opaque overlay and blocks
+    // the entire dashboard.
+    if (this._modalOverlay) {
+      this._modalOverlay.remove();
+      this._modalOverlay = null;
     }
     if (this._unsub) {
       Promise.resolve(this._unsub).then(fn => fn());
@@ -1697,12 +1483,6 @@ class ShoppingListCard extends HTMLElement {
       Promise.resolve(this._unsubEvents).then(fn => fn());
       this._unsubEvents = null;
     }
-    // v2.5.0: release timers/listeners of the offline machinery so a removed
-    // card doesn't fire renders or queue flushes from beyond the grave. The
-    // sync queue itself persists in localStorage on purpose.
-    if (this._unsubReady) { this._unsubReady(); this._unsubReady = null; }
-    if (this._snapSaveTimer != null) { clearTimeout(this._snapSaveTimer); this._snapSaveTimer = null; }
-    if (this._flushTimer != null) { clearTimeout(this._flushTimer); this._flushTimer = null; }
     // Release the lazy-icon IntersectionObserver; observed nodes are dropped
     // by replaceChildren during teardown anyway, but disconnecting avoids a
     // dangling observer if the card is removed without a final render.
@@ -1723,6 +1503,12 @@ class ShoppingListCard extends HTMLElement {
       clearTimeout(this._fullRenderTimer);
       this._fullRenderTimer = null;
     }
+    // The pending SVG-cache write is a multi-MB JSON.stringify on the main
+    // thread; a detached card must not perform it.
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
     this._cancelPress();
     this._touchTile = null;
     this._touchAt = 0;
@@ -1741,24 +1527,23 @@ class ShoppingListCard extends HTMLElement {
     for (const tile of tiles) {
       const item = itemMap.get(tile.dataset.uid);
       if (!item) { tile.remove(); continue; } // stale tile (item deleted in backend)
-      const qty = String(item.quantity || 1);
-      if (tile.dataset.status === item.status && tile.dataset.qty === qty) continue;
-      tile.dataset.status = item.status;
-      tile.dataset.qty = qty;
-
-      // Quantity badge ("Nx") — created/removed; colors come from CSS.
-      let badge = tile.querySelector(".sl-badge");
-      const showBadge = (item.quantity || 1) > 1;
-      if (showBadge) {
-        if (!badge) {
-          badge = document.createElement("div");
-          badge.className = "sl-badge";
-          tile.appendChild(badge);
-        }
-        badge.textContent = (item.quantity || 1) + "x";
-      } else if (badge) {
-        badge.remove();
+      const qty = String(item.quantity ?? 1);
+      // v2.5.5: summary/label are the one tile property _applyTileState does not
+      // manage (only _renderTile sets them), so sync them here if a tile ever
+      // drifts. The upstream fingerprint check hashes summary, so this is
+      // defensive — but a stale label would otherwise survive _lightUpdate.
+      const summary = item.summary.toLowerCase();
+      if (tile.dataset.summary !== summary) {
+        tile.dataset.summary = summary;
+        const label = tile.querySelector(".sl-label");
+        if (label) label.textContent = item.summary;
       }
+      if (tile.dataset.status === item.status && tile.dataset.qty === qty) continue;
+      // v2.5.3: dataset/ARIA/badge rules are shared with _renderTile — see
+      // _applyTileState. The guard above stays correct: aria-checked and the
+      // aria-label derive from status + summary + quantity alone, so an unchanged
+      // status/qty pair means nothing visible or announced changed either.
+      this._applyTileState(tile, item);
     }
 
     // Count headers only in the ACTIVE sections. Mirror/backlog headers show
@@ -1777,14 +1562,16 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _pruneStaleModal() {
-    const modal = document.querySelector(".shopping-list-modal");
-    if (!modal) return;
+    // Only this card's own modal: a document-wide lookup would remove another
+    // card instance's dialog because that instance's uid is not in this list.
+    const modal = this._modalOverlay;
+    if (!modal || !modal.isConnected) return;
     const uid = modal.dataset.itemUid;
     if (!uid) return;
     const cur = this._items.find(i => i.uid === uid);
-    if (!cur) { modal.remove(); return; }
+    if (!cur) { modal.remove(); this._modalOverlay = null; return; }
     const qtyEl = modal.querySelector(".sl-modal-qty");
-    if (qtyEl) qtyEl.textContent = String(cur.quantity || 1);
+    if (qtyEl) qtyEl.textContent = String(cur.quantity ?? 1);
   }
 
   // Static MDI chrome icon as inline SVG (falls back to <ha-icon> for
@@ -1915,6 +1702,11 @@ class ShoppingListCard extends HTMLElement {
     const catColor = this._getCategoryColor(cat);
     const showCatLabels = this.config?.show_category_labels !== false;
     const useBanner = this.config?.category_banner_mode === true;
+    // The chevron is declared before the branch because the collapse toggle
+    // below references it. Declaring it inside the branch made it block
+    // scoped, so every header click threw "chevron is not defined".
+    const chevron = this._mdiEl("chevron-down", 18, "");
+    chevron.classList.add("sl-chevron");
     if (useBanner) {
       // Banner-style category header: animated background image + dark overlay,
       // ensuring count/chevron remain readable. Fixed aspect-ratio via CSS class
@@ -1952,8 +1744,7 @@ class ShoppingListCard extends HTMLElement {
       count.style.cssText = contentStyle + "font-size:12px;color:#fff;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,0.5);";
       count.textContent = catItems.length;
       header.appendChild(count);
-      const chevron = this._mdiEl("chevron-down", 18, contentStyle + "color:#fff;width:18px;height:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));");
-      chevron.classList.add("sl-chevron");
+      chevron.style.cssText = contentStyle + "color:#fff;width:18px;height:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));";
       header.appendChild(chevron);
       catWrap.appendChild(header);
     } else {
@@ -1983,8 +1774,7 @@ class ShoppingListCard extends HTMLElement {
       count.style.cssText = "font-size:12px;color:var(--sl-text-muted);font-weight:400;";
       count.textContent = catItems.length;
       header.appendChild(count);
-      const chevron = this._mdiEl("chevron-down", 18, "color:var(--sl-text-muted);width:18px;height:18px;");
-      chevron.classList.add("sl-chevron");
+      chevron.style.cssText = "color:var(--sl-text-muted);width:18px;height:18px;";
       header.appendChild(chevron);
       catWrap.appendChild(header);
     }
@@ -2078,7 +1868,13 @@ class ShoppingListCard extends HTMLElement {
     return addTile;
   }
 
-  // Shared catalog computation for the mirror/backlog section: every
+  // === Mirror / backlog feature =============================================
+  // The "Verfügbar" catalog section below the list: every autocomplete article
+  // not currently on the list, grouped by category, with a per-category
+  // "Mehr laden". Self-contained — nothing outside this block depends on it
+  // except the two gated call sites (_render and _applySurgicalUpdate), so the
+  // whole feature can be switched off with `mirror: false` in the card config.
+  // Shared catalog computation: every
   // autocomplete text that is NOT on the active list (plus completed extras
   // not in the catalog), grouped by category. Used by the full mirror render
   // AND by the surgical per-category mirror grid rebuild.
@@ -2340,10 +2136,7 @@ class ShoppingListCard extends HTMLElement {
     this._tileIndex = [];
 
     const existingCard = this.querySelector("ha-card");
-    // The offline banner is not part of the fingerprint — a pure online↔offline
-    // transition with an unchanged list must still re-render.
-    if (existingCard && this._fingerprint === this._lastFingerprint &&
-        this._renderedOffline === this._offlineMode) {
+    if (existingCard && this._fingerprint === this._lastFingerprint) {
       let sectionChanged = false;
       const itemMap = new Map();
       for (const item of this._items) itemMap.set(item.uid, item);
@@ -2356,12 +2149,16 @@ class ShoppingListCard extends HTMLElement {
       }
       if (!sectionChanged) {
         this._lightUpdate();
+        // _lightUpdate does not repopulate _tileIndex, and _filterVisible
+        // (the search filter) iterates exactly that index. Without rebuilding
+        // it here, the index stays empty and every later search matches
+        // nothing.
+        this._rebuildTileIndex(existingCard);
         this._pruneStaleModal();
         return;
       }
     }
     this._lastFingerprint = this._fingerprint;
-    this._renderedOffline = this._offlineMode;
 
     const card = document.createElement("ha-card");
     card.style.cssText = "padding:12px;display:block;";
@@ -2386,7 +2183,11 @@ class ShoppingListCard extends HTMLElement {
     card.style.setProperty("--sl-accent", this._color);
     card.style.setProperty("--sl-accent-soft", this._color + "60");
     const style = document.createElement("style");
-    style.textContent = `
+    // The card has no shadow root, so the stylesheet's rules are global to the
+    // whole document. Every selector is therefore prefixed with the host
+    // element, so a .sl-grid/.sl-tile/.sl-badge in another custom card is not
+    // restyled by this card.
+    style.textContent = this._scopeCss(`
       .sl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px;padding:12px;}
       @media (max-width:400px){.sl-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;padding:8px;}}
       @media (max-width:320px){.sl-grid{grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;}}
@@ -2400,6 +2201,14 @@ class ShoppingListCard extends HTMLElement {
       .sl-tile[data-status="completed"]{background:var(--sl-bg);border:2px solid var(--sl-border);opacity:0.55;}
       .sl-tile.sl-ghost{background:var(--sl-bg);border:2px solid var(--sl-border);opacity:0.55;}
       .sl-tile:hover{opacity:0.8;}
+      /* v2.5.2: keyboard focus ring. Tiles are focusable (tabindex 0) and the card
+         previously had NO visible focus style at all. The plain :focus rule keeps
+         the ring in older engines (where the two modern selectors below are
+         dropped as invalid); :focus:not(:focus-visible) then hides it again for
+         mouse/touch taps in engines that support :focus-visible, so only keyboard
+         focus shows the ring. */
+      .sl-tile:focus{outline:3px solid #2196F3;outline-offset:2px;}
+      .sl-tile:focus:not(:focus-visible){outline:none;}
       .sl-icon-wrap{display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;z-index:1;}
       .sl-label-overlay{position:absolute;left:0;right:0;bottom:0;padding:4px 6px;z-index:2;background:linear-gradient(0deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);}
       .sl-label{font-size:10px;font-weight:600;text-align:center;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;text-shadow:0 1px 2px rgba(0,0,0,0.5);}
@@ -2416,7 +2225,7 @@ class ShoppingListCard extends HTMLElement {
       .sl-more-btn{display:flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;background:var(--sl-bg-input);border:1px dashed var(--sl-border);cursor:pointer;transition:all 0.15s;}
       .sl-more-btn:hover{background:var(--sl-hover);border-color:var(--sl-accent);}
       .sl-mirror-wrap{content-visibility:auto;contain-intrinsic-size:auto 600px;}
-    `;
+    `);
     card.appendChild(style);
 
     if (this._legacyWarning) {
@@ -2428,25 +2237,13 @@ class ShoppingListCard extends HTMLElement {
 
     const sensorState = this._hass?.states?.[this._entity];
     if (!sensorState) {
-      if (!this._offlineMode) {
-        // Not (yet) in offline mode — no snapshot was ever loaded. Show the
-        // regular backend-missing hint.
-        const missing = document.createElement("div");
-        missing.style.cssText = "padding:16px;text-align:center;color:var(--sl-text-muted);font-size:14px;line-height:1.5;";
-        missing.textContent = "Sensor „" + (this._entity || "?") + "“ nicht gefunden. Läuft das AppDaemon-Backend? Siehe README (Installation).";
-        card.appendChild(missing);
-        this.replaceChildren(card);
-        this._pruneStaleModal();
-        return;
-      }
-      // Offline mode: render the snapshot with an amber banner. Mutations go
-      // through _offlineMutate + the persistent sync queue.
-      const qn = this._loadQueue().length;
-      const banner = document.createElement("div");
-      banner.className = "sl-offline-banner";
-      banner.style.cssText = "padding:8px 12px;margin-bottom:12px;border-radius:10px;background:rgba(255,167,38,0.12);border:1px solid rgba(255,167,38,0.45);color:#ffb74d;font-size:13px;line-height:1.4;";
-      banner.textContent = this._offlineBannerText(qn);
-      card.appendChild(banner);
+      const missing = document.createElement("div");
+      missing.style.cssText = "padding:16px;text-align:center;color:var(--sl-text-muted);font-size:14px;line-height:1.5;";
+      missing.textContent = "Sensor „" + (this._entity || "?") + "“ nicht gefunden. Läuft das AppDaemon-Backend? Siehe README (Installation).";
+      card.appendChild(missing);
+      this.replaceChildren(card);
+      this._pruneStaleModal();
+      return;
     }
 
     const items = this._items;
@@ -2479,24 +2276,109 @@ class ShoppingListCard extends HTMLElement {
       card.appendChild(this._renderCategory(cat, catItems));
     }
 
-    const mirror = this._renderMirrorSection(items, order);
-    if (mirror) card.appendChild(mirror);
+    if (this._mirrorEnabled) {
+      const mirror = this._renderMirrorSection(items, order);
+      if (mirror) card.appendChild(mirror);
+    }
 
     // v2.4.0: one card-level listener set replaces the per-tile listener suite
     // (click/touch/contextmenu/press). The card element is rebuilt on full
     // renders, so binding here keeps the delegation chain tied to the live DOM.
     this._bindCardEvents(card);
     this.replaceChildren(card);
-    // The freshly built DOM corresponds 1:1 to this._items — publish that
-    // baseline so the next surgical pass (e.g. an optimistic toggle right
-    // after the first render) can verify DOM↔state correspondence instead
-    // of falling back to the debounced full render.
-    this._prevItems = this._items;
     this._pruneStaleModal();
     // Kick off a background warmup of the persistent SVG cache in idle time
     // so the next render and scrolling offscreen tiles hit only the cache.
     // Guarded so repeated renders schedule at most one pending warmup.
     this._scheduleWarmup();
+  }
+
+  // Prefix every class selector in a stylesheet with the host element, so the
+  // rules cannot leak into other cards on the dashboard. At-rules (@media,
+  // @keyframes) are passed through, and @keyframes inner selectors are left
+  // alone — they name animation steps, not elements.
+  _scopeCss(css) {
+    const HOST = "shopping-list-card";
+    let out = "";
+    let i = 0;
+    const len = css.length;
+    while (i < len) {
+      // Find the next selector prelude: everything up to the next '{'.
+      const open = css.indexOf("{", i);
+      if (open === -1) { out += css.slice(i); break; }
+      const prelude = css.slice(i, open);
+      // Find the matching close brace for this block.
+      let depth = 1;
+      let j = open + 1;
+      while (j < len && depth > 0) {
+        if (css[j] === "{") depth++;
+        else if (css[j] === "}") depth--;
+        j++;
+      }
+      const body = css.slice(open + 1, j - 1);
+      const trimmed = prelude.trim();
+      if (trimmed.startsWith("@keyframes") || trimmed.startsWith("@font-face")) {
+        // Keyframe steps name animation phases, not elements — keep as is.
+        out += prelude + "{" + body + "}";
+      } else if (trimmed.startsWith("@")) {
+        // @media / @supports: scope the selectors inside the block.
+        out += prelude + "{" + this._scopeCss(body) + "}";
+      } else if (trimmed.includes(":") && !trimmed.includes(".")) {
+        // A declaration block, not a selector.
+        out += prelude + "{" + body + "}";
+      } else {
+        const scoped = trimmed
+          .split(",")
+          .map(sel => sel.trim())
+          .filter(Boolean)
+          .map(sel => sel.replace(/(^|[\s>+~])(\.[\w-]+)/, (m2, sep, cls) => sep + HOST + " " + cls))
+          .join(", ");
+        out += " " + scoped + "{" + body + "}";
+      }
+      i = j;
+    }
+    return out;
+  }
+
+  // v2.5.2: accessible name for a real tile. The quantity is invisible to a
+  // screen reader otherwise, because role="checkbox" takes its name from
+  // aria-label and ignores the badge's "Nx" text.
+  _tileAriaLabel(item) {
+    const q = item.quantity ?? 1;
+    return q > 1 ? `${item.summary}, ${q} Stück` : item.summary;
+  }
+
+  // v2.5.3: single source of truth for a tile's mutable state. Both render paths
+  // call it — _renderTile when a tile is built, _lightUpdate when an existing
+  // tile's item changed — so the dataset/ARIA/badge rules live in one place
+  // instead of being mirrored in two methods. (The v2.5.2 aria fix had to be
+  // applied twice for exactly that reason.)
+  _applyTileState(tile, item) {
+    tile.dataset.status = item.status;
+    tile.dataset.qty = String(item.quantity ?? 1);
+
+    // v2.5.2: the list is a checkbox list — each entry is one tab stop and the
+    // checked state is exposed via aria-checked. Space/Enter toggle and F2 opens
+    // the edit modal, both via the keydown delegation in _bindCardEvents.
+    tile.setAttribute("role", "checkbox");
+    tile.tabIndex = 0;
+    tile.setAttribute("aria-checked", item.status === "completed" ? "true" : "false");
+    tile.setAttribute("aria-label", this._tileAriaLabel(item));
+    tile.setAttribute("aria-keyshortcuts", "F2");
+
+    // Quantity badge ("Nx") — created, updated or removed as needed. Colors and
+    // placement come from the stylesheet (.sl-badge is position:absolute).
+    let badge = tile.querySelector(".sl-badge");
+    if ((item.quantity ?? 1) > 1) {
+      if (!badge) {
+        badge = document.createElement("div");
+        badge.className = "sl-badge";
+        tile.appendChild(badge);
+      }
+      badge.textContent = (item.quantity ?? 1) + "x";
+    } else if (badge) {
+      badge.remove();
+    }
   }
 
   _renderTile(item, catWrap) {
@@ -2509,8 +2391,6 @@ class ShoppingListCard extends HTMLElement {
     tile.className = "sl-tile";
     tile.dataset.uid = item.uid;
     tile.dataset.summary = item.summary.toLowerCase();
-    tile.dataset.status = item.status;
-    tile.dataset.qty = String(item.quantity || 1);
 
     const iconWrap = document.createElement("div");
     iconWrap.className = "sl-icon-wrap";
@@ -2525,12 +2405,9 @@ class ShoppingListCard extends HTMLElement {
     labelOverlay.appendChild(label);
     tile.appendChild(labelOverlay);
 
-    if ((item.quantity || 1) > 1) {
-      const badge = document.createElement("div");
-      badge.className = "sl-badge";
-      badge.textContent = (item.quantity || 1) + "x";
-      tile.appendChild(badge);
-    }
+    // datasets + ARIA + quantity badge — shared with _lightUpdate's diff pass.
+    // Called last so the badge keeps its slot as the final child.
+    this._applyTileState(tile, item);
 
     if (catWrap) this._tileIndex.push({ tile, cat: catWrap, summary: item.summary.toLowerCase() });
     return tile;
@@ -2556,6 +2433,12 @@ class ShoppingListCard extends HTMLElement {
     // v2.4.0: original-case text for the delegated click handler — it adds the
     // item with original capitalization, like the old per-tile listener did.
     tile.dataset.addText = text;
+
+    // v2.5.2: ghosts are buttons ("add to list"), one tab stop each; Space/Enter
+    // adds the item (keydown delegation in _bindCardEvents).
+    tile.setAttribute("role", "button");
+    tile.tabIndex = 0;
+    tile.setAttribute("aria-label", text + " zur Liste hinzufügen");
 
     const iconWrap = document.createElement("div");
     iconWrap.className = "sl-icon-wrap";
@@ -2667,6 +2550,32 @@ class ShoppingListCard extends HTMLElement {
       this._cancelPress();
       this._fireLongPressTile(tile);
     });
+
+    // v2.5.2: keyboard parity for the now-focusable tiles. Space/Enter performs
+    // the primary action (toggle a real tile, add a ghost); F2 opens the edit
+    // modal, mirroring the contextmenu path above. F2 is deliberate: the
+    // ContextMenu key and Shift+F10 also raise a `contextmenu` event in most
+    // engines, so handling those here would open the modal twice.
+    card.addEventListener("keydown", e => {
+      const tile = e.target.closest(".sl-tile");
+      if (!tile) return;
+      const isGhost = tile.classList.contains("sl-ghost");
+      if (e.key === "F2") {
+        if (isGhost) return;
+        e.preventDefault();
+        this._cancelPress();
+        this._fireLongPressTile(tile);
+        return;
+      }
+      if (e.key !== " " && e.key !== "Enter" && e.key !== "Spacebar") return;
+      e.preventDefault(); // Space must not scroll the page
+      if (isGhost) {
+        this._addItem(tile.dataset.addText || tile.dataset.summary || "");
+      } else {
+        const currentItem = this._items.find(i => i.uid === tile.dataset.uid);
+        if (currentItem) this._toggleItem(currentItem);
+      }
+    });
   }
 
   _startPress(tile, x, y) {
@@ -2721,7 +2630,7 @@ class ShoppingListCard extends HTMLElement {
     const changed = cur.filter(i => {
       const p = prevByUid.get(i.uid);
       return p && (p.status !== i.status || p.summary !== i.summary ||
-        String(p.quantity || 1) !== String(i.quantity || 1) ||
+        String(p.quantity ?? 1) !== String(i.quantity ?? 1) ||
         (p.icon || "") !== (i.icon || ""));
     });
     if (!added.length && !removed.length && !changed.length) {
@@ -2738,17 +2647,25 @@ class ShoppingListCard extends HTMLElement {
     const activeCatsNow = new Set(cur.filter(i => i.status === "needs_action").map(i => this._itemCategoryKey(i)));
     for (const cat of activeCatsNow) if (!activeCatsBefore.has(cat)) return false;
 
+    const mirrorWrap = card.querySelector(".sl-mirror-wrap");
+    // v2.5.5: build the catalog only when the mirror is on — when it's off,
+    // mirrorWrap is always null (see _render) and neither block below reads it,
+    // so the per-update catalog build was pure waste.
+    const catalogNow = this._mirrorEnabled ? this._computeMirrorCatalog(cur) : null;
     // Mirror composition must stay section-compatible: no brand-new mirror
     // category, and the wrap exists exactly when there are available items.
-    const catalogNow = this._computeMirrorCatalog(cur);
-    const mirrorCatsNow = new Set(Object.keys(catalogNow.byCat));
-    const mirrorWrap = card.querySelector(".sl-mirror-wrap");
-    if (!mirrorWrap && mirrorCatsNow.size > 0) return false;
-    if (mirrorWrap && mirrorCatsNow.size === 0) return false;
-    if (mirrorWrap) {
-      const mirrorCatsBefore = new Set();
-      for (const s of card.querySelectorAll('.sl-cat[data-section="mirror"]')) mirrorCatsBefore.add(s.dataset.cat);
-      for (const cat of mirrorCatsNow) if (!mirrorCatsBefore.has(cat)) return false;
+    // Skipped when the mirror is off — nothing to keep compatible, and the check
+    // would otherwise see a non-empty catalog with no wrap and bail to a full
+    // render on every single update.
+    if (this._mirrorEnabled) {
+      const mirrorCatsNow = new Set(Object.keys(catalogNow.byCat));
+      if (!mirrorWrap && mirrorCatsNow.size > 0) return false;
+      if (mirrorWrap && mirrorCatsNow.size === 0) return false;
+      if (mirrorWrap) {
+        const mirrorCatsBefore = new Set();
+        for (const s of card.querySelectorAll('.sl-cat[data-section="mirror"]')) mirrorCatsBefore.add(s.dataset.cat);
+        for (const cat of mirrorCatsNow) if (!mirrorCatsBefore.has(cat)) return false;
+      }
     }
 
     // --- touched categories (prev AND new: a summary edit may move category) ---
@@ -2864,9 +2781,17 @@ class ShoppingListCard extends HTMLElement {
   }
 
   _showEditModal(item, triggerEl) {
-    const existing = document.querySelector(".shopping-list-modal");
-    existing && existing.remove();
-    const close = () => { overlay.remove(); triggerEl && triggerEl.focus(); };
+    // Scope the lookup to this card: a document-wide query would let one card
+    // instance close another instance's dialog.
+    const existing = this._modalOverlay;
+    if (existing) existing.remove();
+    const close = () => {
+      overlay.remove();
+      document.removeEventListener("keydown", onKeyDown, true);
+      this._modalOverlay = null;
+      this._longPressTile = null;
+      triggerEl && triggerEl.focus && triggerEl.focus();
+    };
     const overlay = document.createElement("div");
     overlay.className = "shopping-list-modal";
     overlay.setAttribute("role", "dialog");
@@ -2893,7 +2818,7 @@ class ShoppingListCard extends HTMLElement {
     const qtyValue = document.createElement("div");
     qtyValue.className = "sl-modal-qty";
     qtyValue.style.cssText = "font-size:22px;font-weight:700;color:var(--primary-color, #2e7d32);min-width:40px;text-align:center;";
-    qtyValue.textContent = String(item.quantity || 1);
+    qtyValue.textContent = String(item.quantity ?? 1);
     qtyRow.appendChild(qtyValue);
 
     const minusBtn = document.createElement("button");
@@ -2904,7 +2829,7 @@ class ShoppingListCard extends HTMLElement {
       const cur = this._items.find(i => i.uid === item.uid);
       if (!cur) { close(); return; }
       this._updateQuantity(cur, -1);
-      qtyValue.textContent = String(Math.max(0, (cur.quantity || 1) - 1));
+      qtyValue.textContent = String(Math.max(0, (cur.quantity ?? 1) - 1));
     });
     qtyRow.appendChild(minusBtn);
     box.appendChild(qtyRow);
@@ -2922,7 +2847,7 @@ class ShoppingListCard extends HTMLElement {
         const cur = this._items.find(i => i.uid === item.uid);
         if (!cur) { close(); return; }
         this._updateQuantity(cur, n);
-        qtyValue.textContent = String((cur.quantity || 1) + n);
+        qtyValue.textContent = String((cur.quantity ?? 1) + n);
       });
       quickWrap.appendChild(btn);
     }
@@ -2952,8 +2877,10 @@ class ShoppingListCard extends HTMLElement {
 
     overlay.appendChild(box);
     overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
-    overlay.addEventListener("keydown", e => {
-      if (e.key === "Escape") { close(); return; }
+    // The keydown listener lives on the document: the overlay itself is never
+    // focused, so an overlay-local listener would never receive Escape.
+    const onKeyDown = e => {
+      if (e.key === "Escape") { e.stopPropagation(); close(); return; }
       if (e.key === "Tab") {
         const focusable = box.querySelectorAll("button, [tabindex]:not([tabindex='-1'])");
         if (!focusable.length) return;
@@ -2962,15 +2889,23 @@ class ShoppingListCard extends HTMLElement {
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       }
-    });
+    };
+    document.addEventListener("keydown", onKeyDown, true);
     document.body.appendChild(overlay);
+    // Track the overlay on the instance so disconnectedCallback can remove it.
+    // Left in the DOM it would cover the whole viewport with an opaque
+    // overlay and block the entire dashboard.
+    this._modalOverlay = overlay;
+    // Move focus into the dialog so the Tab trap and Escape work as intended.
+    const firstBtn = box.querySelector("button");
+    if (firstBtn) firstBtn.focus();
   }
 
   static getConfigForm() {
     return {
       schema: [
         { name: "title", required: true, selector: { text: {} } },
-        { name: "entity", selector: { entity: { domain: "sensor" } } }
+        { name: "entity", required: true, selector: { entity: { domain: "sensor" } } }
       ]
     };
   }
@@ -2979,14 +2914,28 @@ class ShoppingListCard extends HTMLElement {
     return { title: "Einkaufen", entity: "sensor.einkaufsliste_backend" };
   }
 
-  getCardSize() { return 4; }
+  // The card grows with the list (1 item vs. a full backlog of ~150 tiles).
+  // A constant size makes the masonry/sections layout under-allocate rows.
+  getCardSize() {
+    const tiles = this.querySelectorAll(".sl-tile").length;
+    const rows = Math.ceil(tiles / 3);
+    return Math.max(1, Math.min(rows, 12));
+  }
 }
 
-customElements.define("shopping-list-card", ShoppingListCard);
+// Guarded registration: a duplicated resource (a stale /local/ copy next to
+// the HACS one, or a double <script> tag) would throw NotSupportedError and
+// abort the rest of the file — including the customCards registration below,
+// which would make the card disappear from the card picker.
+if (!customElements.get("shopping-list-card")) {
+  customElements.define("shopping-list-card", ShoppingListCard);
+}
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "shopping-list-card",
-  name: "Shopping List",
-  description: "Einkaufsliste mit AppDaemon-Backend (auto-Kategorisierung, auto-Dedup)",
-  preview: true
-});
+if (!window.customCards.some(c => c.type === "shopping-list-card")) {
+  window.customCards.push({
+    type: "shopping-list-card",
+    name: "Shopping List",
+    description: "Einkaufsliste mit AppDaemon-Backend (auto-Kategorisierung, auto-Dedup)",
+    preview: true
+  });
+}
