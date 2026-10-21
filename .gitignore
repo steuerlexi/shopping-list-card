@@ -7,6 +7,11 @@
 __pycache__/
 *.pyc
 
+# Tests
+.venv/
+.pytest_cache/
+.playwright/
+
 # Claude Code / editor
 .claude/
 

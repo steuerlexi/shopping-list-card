@@ -386,6 +386,32 @@ If you are moving from the old `todo.einkaufen` / `todo.einkaufsliste` setup:
   also subscribes to `state_changed` events so attribute-only updates (deletes
   that don't change the active count) are picked up. A hard-refresh
   (Ctrl+Shift+R) always forces a clean rebuild.
+- **Checking off an item does nothing (fixed in v2.5.7):** the backend did not
+  clear the `input_text` command channel after a command, so the next command
+  with the same payload produced the same entity value. Home Assistant then
+  fired only `state_reported` and no `state_changed`, so AppDaemon's
+  `listen_state` never ran and the command was silently dropped. The first
+  click worked, the second click on the *same* item did not. Check the
+  AppDaemon log for `failed to clear command input` — if it appears, the
+  deployed `apps/einkaufsliste_backend.py` is older than v2.5.7.
+
+---
+
+## Tests
+
+The card and the backend have an automated test suite. It runs in CI on every
+push and covers the regressions from the code review (silent command loss,
+stored XSS via the icon field, the broken category collapse, the search filter
+losing its tile index).
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r tests/requirements.txt
+.venv/bin/python -m playwright install chromium
+.venv/bin/python -m pytest tests/ -v
+```
+
+See [`tests/README.md`](tests/README.md) for the details.
 
 ---
 

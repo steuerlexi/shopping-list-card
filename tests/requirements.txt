@@ -1,0 +1,8 @@
+# Test-Abhaengigkeiten
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Playwright-Browser-Cache (wird von 'playwright install' befüllt)
+.playwright/
